@@ -1,0 +1,406 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<title>マリオ風ジャンプゲーム</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { background: #000; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; }
+canvas { display: block; border: 2px solid #444; }
+#hint { color: #777; font: 11px/2.2 monospace; text-align: center; }
+</style>
+</head>
+<body>
+<canvas id="c" width="512" height="288"></canvas>
+<div id="hint">← → 移動 | Z / Space ジャンプ | 敵を踏んで倒せ！コインを全部とるとクリア</div>
+<script>
+const cv = document.getElementById('c');
+const ctx = cv.getContext('2d');
+const W = 512, H = 288, T = 16;
+
+// 0=sky 1=ground 2=brick 3=? 4=coin 5=pipe
+const MAP = [
+  [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+  [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+  [0,0,0,0,0,0,0,0,0,3,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,3,0,0,0,0,0],
+  [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+  [0,0,0,0,4,4,4,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,4,4,4,0,0,0,0,0],
+  [0,0,0,2,2,2,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+  [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+  [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,2,2,2,2,0,0,0,0,0,0,0,0,0,0],
+  [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+  [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+  [0,0,0,0,0,0,0,0,0,0,0,0,0,5,5,0,0,0,0,0,5,5,0,0,0,0,0,0,0,0,0,0],
+  [0,0,0,0,0,0,0,0,0,0,0,0,0,5,5,0,0,0,0,0,5,5,0,0,0,0,0,0,0,0,0,0],
+  [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+  [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+  [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+  [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+  [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+  [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+];
+const NR = MAP.length, NC = MAP[0].length;
+
+const coinGone = Array.from({length:NR}, () => new Array(NC).fill(false));
+const qSpent   = Array.from({length:NR}, () => new Array(NC).fill(false));
+
+const K = {};
+document.addEventListener('keydown', e => {
+  K[e.code] = true;
+  if (['Space','ArrowUp','ArrowLeft','ArrowRight','ArrowDown'].includes(e.code)) e.preventDefault();
+});
+document.addEventListener('keyup', e => { K[e.code] = false; });
+
+let camX = 0, score = 0, lives = 3, coinCnt = 0;
+let gs = 'play'; // play | dying | gameover | clear
+let dyingTimer = 0;
+
+function makePlayer() {
+  return { x:2*T, y:9*T, w:12, h:14, vx:0, vy:0, grounded:false, dir:1, frame:0, ft:0 };
+}
+let P = makePlayer();
+
+const ESPAWNS = [[8,12],[15,12],[22,12],[28,12]];
+function makeEnemy(col, gRow) {
+  return { x:col*T, y:gRow*T-14, w:12, h:14, vx:-1, vy:0, grounded:false, alive:true, sqTimer:0, frame:0, ft:0 };
+}
+let enemies = ESPAWNS.map(([c,r]) => makeEnemy(c,r));
+
+const parts = [];
+
+// ── tile helpers ──────────────────────────────────────────
+function tileAt(c, r) {
+  if (c < 0 || c >= NC || r < 0 || r >= NR) return 0;
+  return MAP[r][c];
+}
+function solid(c, r) {
+  const t = tileAt(c, r);
+  return t===1 || t===2 || t===5 || (t===3 && !qSpent[r][c]);
+}
+
+// ── AABB sweep collision ──────────────────────────────────
+function moveEnt(ent, dx, dy, isP) {
+  let hitX = false;
+  // X
+  ent.x += dx;
+  if (dx !== 0) {
+    const cx = dx > 0 ? Math.floor((ent.x + ent.w - 1) / T) : Math.floor(ent.x / T);
+    const r0 = Math.floor((ent.y + 1) / T);
+    const r1 = Math.floor((ent.y + ent.h - 2) / T);
+    for (let r = r0; r <= r1; r++) {
+      if (solid(cx, r)) {
+        ent.x  = dx > 0 ? cx*T - ent.w : (cx+1)*T;
+        ent.vx = 0; hitX = true; break;
+      }
+    }
+  }
+  // Y
+  ent.grounded = false;
+  ent.y += dy;
+  if (dy !== 0) {
+    const ry = dy > 0 ? Math.floor((ent.y + ent.h - 1) / T) : Math.floor(ent.y / T);
+    const c0 = Math.floor((ent.x + 1) / T);
+    const c1 = Math.floor((ent.x + ent.w - 2) / T);
+    for (let c = c0; c <= c1; c++) {
+      if (solid(c, ry)) {
+        if (dy > 0) { ent.y = ry*T - ent.h; ent.grounded = true; }
+        else        { ent.y = (ry+1)*T; if (isP) hitQBlock(c, ry); }
+        ent.vy = 0; break;
+      }
+    }
+  }
+  return hitX;
+}
+
+function hitQBlock(c, r) {
+  const t = MAP[r][c];
+  if (t===3 && !qSpent[r][c]) {
+    qSpent[r][c] = true; score += 100;
+    spawnParts(c*T+8, r*T, '#FFD700', 5);
+  } else if (t===2) {
+    score += 50;
+    spawnParts(c*T+8, r*T, '#C06020', 4);
+  }
+}
+
+function spawnParts(x, y, col, n) {
+  for (let i = 0; i < n; i++)
+    parts.push({ x, y, vx:(Math.random()-.5)*4, vy:-Math.random()*4-2, life:28, col });
+}
+
+function overlap(a, b) {
+  return a.x < b.x+b.w && a.x+a.w > b.x && a.y < b.y+b.h && a.y+a.h > b.y;
+}
+
+// ── update ────────────────────────────────────────────────
+const GRAV=0.45, MAXVY=10, SPEED=2.2, JVY=-8.5;
+
+function updatePlayer() {
+  if (gs === 'dying') {
+    P.vy = Math.min(P.vy + GRAV, MAXVY);
+    P.y += P.vy;
+    return;
+  }
+  const goL = K['ArrowLeft']  || K['KeyA'];
+  const goR = K['ArrowRight'] || K['KeyD'];
+  const jmp = K['Space'] || K['KeyZ'] || K['ArrowUp'] || K['KeyW'];
+
+  P.vx = goR ? SPEED : goL ? -SPEED : 0;
+  if (P.vx > 0) P.dir = 1;
+  if (P.vx < 0) P.dir = -1;
+  if (jmp && P.grounded) { P.vy = JVY; }
+  P.vy = Math.min(P.vy + GRAV, MAXVY);
+  moveEnt(P, P.vx, P.vy, true);
+  if (P.x < 0) { P.x = 0; P.vx = 0; }
+
+  // collect coins
+  const r0=Math.floor(P.y/T), r1=Math.floor((P.y+P.h-1)/T);
+  const c0=Math.floor(P.x/T), c1=Math.floor((P.x+P.w-1)/T);
+  for (let r=r0; r<=r1; r++) for (let c=c0; c<=c1; c++) {
+    if (tileAt(c,r)===4 && !coinGone[r][c]) {
+      coinGone[r][c] = true; coinCnt++; score += 200;
+      spawnParts(c*T+8, r*T+8, '#FFD700', 4);
+    }
+  }
+  if (P.y > H+100) dieP();
+
+  // walk animation
+  if (P.vx !== 0 && P.grounded) {
+    if (++P.ft >= 7) { P.ft=0; P.frame=(P.frame+1)%3; }
+  } else { P.frame = P.grounded ? 0 : 2; P.ft=0; }
+}
+
+function dieP() {
+  if (gs !== 'play') return;
+  gs='dying'; dyingTimer=110; lives--; P.vy=-8; P.vx=0;
+}
+
+function updateEnemies() {
+  for (const e of enemies) {
+    if (e.sqTimer > 0) { e.sqTimer--; continue; }
+    if (!e.alive) continue;
+
+    e.vy = Math.min(e.vy + GRAV, MAXVY);
+    const hitWall = moveEnt(e, e.vx, e.vy, false);
+    if (hitWall) e.vx *= -1;
+
+    // edge reversal only when grounded
+    if (e.grounded) {
+      const fr = Math.floor((e.y + e.h) / T);
+      const lc = Math.floor(e.x / T);
+      const rc = Math.floor((e.x + e.w - 1) / T);
+      if (e.vx < 0 && !solid(lc,   fr)) e.vx =  1;
+      if (e.vx > 0 && !solid(rc+1,  fr)) e.vx = -1;
+    }
+    if (e.x < 0)        { e.x = 0;        e.vx =  1; }
+    if (e.x+e.w > NC*T) { e.x = NC*T-e.w; e.vx = -1; }
+    if (e.y > H+80) { e.alive=false; continue; }
+
+    if (++e.ft >= 10) { e.ft=0; e.frame^=1; }
+
+    if (gs !== 'play') continue;
+    if (overlap(P, e)) {
+      if (P.vy > 0 && (P.y+P.h) < e.y+10) {
+        e.alive=false; e.sqTimer=20; P.vy=-5; score+=100;
+        spawnParts(e.x+6, e.y+6, '#8B4000', 5);
+      } else { dieP(); }
+    }
+  }
+}
+
+function update() {
+  if (gs==='gameover' || gs==='clear') return;
+  updatePlayer();
+  updateEnemies();
+  camX = Math.max(0, Math.min(P.x - W/3, NC*T - W));
+
+  for (let i=parts.length-1; i>=0; i--) {
+    const p=parts[i];
+    p.x+=p.vx; p.y+=p.vy; p.vy+=0.2; p.life--;
+    if (p.life<=0) parts.splice(i,1);
+  }
+  if (gs==='dying') {
+    if (--dyingTimer<=0) { lives>0 ? respawn() : (gs='gameover'); }
+  }
+  if (gs==='play') {
+    let ok=true;
+    outer: for (let r=0;r<NR;r++) for (let c=0;c<NC;c++)
+      if (MAP[r][c]===4 && !coinGone[r][c]) { ok=false; break outer; }
+    if (ok) gs='clear';
+  }
+}
+
+function respawn() {
+  P = makePlayer();
+  enemies = ESPAWNS.map(([c,r]) => makeEnemy(c,r));
+  gs='play'; camX=0;
+}
+function resetGame() {
+  score=0; lives=3; coinCnt=0;
+  for (let r=0;r<NR;r++) { coinGone[r].fill(false); qSpent[r].fill(false); }
+  parts.length=0; respawn();
+}
+document.addEventListener('keydown', e => {
+  if ((e.code==='Enter'||e.code==='KeyR') && gs!=='play' && gs!=='dying') resetGame();
+});
+
+// ── draw ──────────────────────────────────────────────────
+function fillR(x,y,w,h,col) { ctx.fillStyle=col; ctx.fillRect(x,y,w,h); }
+
+function drawTile(c, r) {
+  const t = tileAt(c,r);
+  if (!t) return;
+  const x = c*T - camX, y = r*T;
+  if (x+T<0 || x>=W) return;
+
+  if (t===1) {
+    fillR(x,y,T,T,'#8B4513');
+    fillR(x,y,T,5,'#3A9A2A');
+    fillR(x+2,y+6,5,3,'#6B3410');
+    fillR(x+10,y+11,4,2,'#6B3410');
+  } else if (t===2) {
+    fillR(x,y,T,T,'#C04800');
+    fillR(x,y+7,T,1,'#903500');
+    fillR(x+8,y+8,1,T-8,'#903500');
+    fillR(x,y,1,7,'#903500');
+    fillR(x+1,y+1,7,6,'#D05000');
+    fillR(x+9,y+8,6,7,'#D05000');
+  } else if (t===3) {
+    if (qSpent[r][c]) {
+      fillR(x,y,T,T,'#777'); fillR(x+1,y+1,T-2,T-2,'#999');
+    } else {
+      fillR(x,y,T,T,'#D89000'); fillR(x+1,y+1,T-2,T-2,'#F0B000');
+      ctx.fillStyle='#fff'; ctx.font='bold 11px serif'; ctx.fillText('?',x+5,y+12);
+    }
+  } else if (t===4 && !coinGone[r][c]) {
+    fillR(x+5,y+2,6,12,'#FFD700');
+    fillR(x+3,y+4,10,8,'#FFD700');
+    fillR(x+6,y+3,4,10,'#FFF060');
+  } else if (t===5) {
+    fillR(x,y,T,T,'#007800');
+    fillR(x+3,y,T-6,T,'#00A800');
+    if (tileAt(c,r-1)!==5) {
+      fillR(x-2,y,T+4,6,'#00C000');
+      fillR(x-1,y+2,T+2,2,'#00A000');
+    }
+  }
+}
+
+// Draw player using absolute pixel coords (no ctx.transform tricks)
+function drawPlayer() {
+  if (gs==='dying' && P.y > H) return;
+  const x = Math.round(P.x - camX);
+  const y = Math.round(P.y);
+  const flip = P.dir < 0;
+
+  function px(lx) { return flip ? x + P.w - lx : x + lx; }
+
+  // hat
+  fillR(px(2),y,   9,4,'#E00000');
+  fillR(px(0),y+3,13,3,'#E00000');
+  // face
+  fillR(px(1),y+5,11,5,'#FAC080');
+  // eye
+  fillR(px(flip?2:8),y+6,2,2,'#000');
+  // mustache
+  fillR(px(3),y+8,7,2,'#6B3000');
+  // overalls
+  fillR(px(1),y+10,11,4,'#003FC0');
+  fillR(px(2),y+11,3,2,'#4070E0');
+  fillR(px(7),y+11,3,2,'#4070E0');
+  // legs based on walk frame
+  const f = P.frame;
+  const ll = f===1?-1 : f===2?1 : 0;
+  const rl = f===1? 1 : f===2?-1 : 0;
+  fillR(px(1+ll),y+13,5,3,'#E00000');
+  fillR(px(7-rl),y+13,5,3,'#E00000');
+  // shoes
+  fillR(px(0+ll),y+15,6,2,'#300000');
+  fillR(px(6-rl),y+15,6,2,'#300000');
+}
+
+function drawEnemy(e) {
+  const x = Math.round(e.x - camX);
+  const y = Math.round(e.y);
+  if (x+e.w<0 || x>=W) return;
+
+  // squished (visible during sqTimer)
+  if (!e.alive) {
+    if (e.sqTimer <= 0) return;
+    fillR(x,  y+10,12,5,'#6B3000');
+    fillR(x+2,y+10, 2,3,'#000');
+    fillR(x+8,y+10, 2,3,'#000');
+    return;
+  }
+  // body
+  fillR(x+1,y+4,10,10,'#9B5000');
+  // head
+  fillR(x+2,y,  10,6,'#9B5000');
+  // eyes
+  fillR(x+2,y+1,4,3,'#fff'); fillR(x+6,y+1,4,3,'#fff');
+  fillR(x+3,y+2,2,2,'#000'); fillR(x+7,y+2,2,2,'#000');
+  // brows
+  fillR(x+2,y+1,3,1,'#5A2800'); fillR(x+7,y+1,3,1,'#5A2800');
+  // feet
+  const fo = e.frame ? 2 : 1;
+  fillR(x+fo,    y+11,4,3,'#5A2800');
+  fillR(x+12-fo-4,y+11,4,3,'#5A2800');
+}
+
+function drawCloud(cx, cy) {
+  const x = Math.round(cx - camX*0.15);
+  ctx.fillStyle='#fff';
+  ctx.fillRect(x+4,cy+6,20,8); ctx.fillRect(x+8,cy+2,14,6);
+  ctx.fillRect(x,cy+8,10,6);   ctx.fillRect(x+18,cy+8,10,6);
+}
+
+function drawHUD() {
+  fillR(0,0,W,17,'rgba(0,0,0,0.4)');
+  ctx.fillStyle='#fff'; ctx.font='bold 11px monospace';
+  ctx.fillText('SCORE '+score, 6, 12);
+  ctx.fillText('COIN '+coinCnt, W/2-28, 12);
+  ctx.fillText('LIFE '+lives, W-55, 12);
+}
+
+function drawOverlay(title, sub) {
+  fillR(0,0,W,H,'rgba(0,0,0,0.6)');
+  ctx.textAlign='center';
+  ctx.fillStyle='#FFD700'; ctx.font='bold 24px monospace';
+  ctx.fillText(title, W/2, H/2-14);
+  ctx.fillStyle='#fff'; ctx.font='13px monospace';
+  ctx.fillText(sub, W/2, H/2+10);
+  ctx.fillStyle='#aaa'; ctx.font='11px monospace';
+  ctx.fillText('R / Enter でリスタート', W/2, H/2+28);
+  ctx.textAlign='left';
+}
+
+function draw() {
+  fillR(0,0,W,H,'#5C94FC');
+  drawCloud(40,28); drawCloud(160,18); drawCloud(290,30); drawCloud(430,20);
+
+  for (let r=0; r<NR; r++) for (let c=0; c<NC; c++) drawTile(c,r);
+
+  // particles
+  for (const p of parts) {
+    ctx.globalAlpha = p.life/28;
+    fillR(Math.round(p.x-camX), Math.round(p.y), 4, 4, p.col);
+  }
+  ctx.globalAlpha = 1;
+
+  for (const e of enemies) drawEnemy(e);
+  drawPlayer();
+  drawHUD();
+
+  if (gs==='clear')    drawOverlay('STAGE CLEAR!', 'SCORE '+score+'  COIN '+coinCnt);
+  if (gs==='gameover') drawOverlay('GAME OVER', 'SCORE '+score);
+}
+
+function loop() {
+  update();
+  draw();
+  requestAnimationFrame(loop);
+}
+loop();
+</script>
+</body>
+</html>
