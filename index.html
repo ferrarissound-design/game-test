@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>ポンポンわっか！</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <main id="app">
+      <section id="scene-title" class="scene active" aria-label="タイトル画面">
+        <h1>ポンポンわっか！</h1>
+        <p>わっかをタップしてスコアをのばそう！</p>
+        <div class="buttons">
+          <button id="start-btn" class="primary">スタート</button>
+          <button id="sound-btn" class="secondary" aria-pressed="true">🔊 音ON</button>
+        </div>
+      </section>
+
+      <section id="scene-play" class="scene" aria-label="プレイ画面">
+        <header class="hud">
+          <div id="score">Score: 0</div>
+          <div id="timer">Time: 30</div>
+        </header>
+        <div id="playfield" aria-live="polite"></div>
+        <div id="combo" aria-live="polite"></div>
+      </section>
+
+      <section id="scene-result" class="scene" aria-label="結果画面">
+        <h2>おわり！</h2>
+        <p id="result-score">SCORE: 0</p>
+        <p id="result-best">BEST: 0</p>
+        <button id="retry-btn" class="primary">もういっかい</button>
+      </section>
+    </main>
+
+    <script src="game.js"></script>
+  </body>
+</html>
