@@ -136,7 +136,7 @@ function onTargetHit(event) {
   playBeep();
 
   setTimeout(() => {
-    if (state.scene === 'playing') {
+    if (state.scene === 'play') {
       spawnTargets();
     }
   }, 170);
@@ -201,7 +201,7 @@ function startGame() {
 
   state.gameInterval = setInterval(tick, 1000);
   state.targetInterval = setInterval(() => {
-    if (state.scene === 'playing') {
+    if (state.scene === 'play') {
       spawnTargets();
     }
   }, TARGET_LIFE_MS);
