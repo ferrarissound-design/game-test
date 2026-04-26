@@ -1,0 +1,125 @@
+:root {
+  --bg: #f8fbff;
+  --card: #ffffff;
+  --text: #11315c;
+  --primary: #ff7f50;
+  --accent: #3aa6ff;
+}
+
+* {
+  box-sizing: border-box;
+  touch-action: manipulation;
+}
+
+body {
+  margin: 0;
+  min-height: 100dvh;
+  font-family: "Hiragino Kaku Gothic ProN", "Yu Gothic", sans-serif;
+  color: var(--text);
+  background: radial-gradient(circle at top, #e6f3ff, var(--bg));
+}
+
+#app {
+  min-height: 100dvh;
+  display: grid;
+  place-items: center;
+  padding: 16px;
+}
+
+.scene {
+  display: none;
+  width: min(92vw, 560px);
+  background: var(--card);
+  border-radius: 20px;
+  box-shadow: 0 10px 30px rgba(17, 49, 92, 0.15);
+  padding: 20px;
+  text-align: center;
+}
+
+.scene.active {
+  display: block;
+}
+
+h1,
+h2 {
+  margin-top: 0;
+}
+
+.buttons {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+button {
+  border: 0;
+  border-radius: 14px;
+  min-height: 56px;
+  font-size: 1.1rem;
+  font-weight: 700;
+}
+
+button.primary {
+  background: var(--primary);
+  color: #fff;
+}
+
+button.secondary {
+  background: #d8ecff;
+  color: #13457d;
+}
+
+.hud {
+  display: flex;
+  justify-content: space-between;
+  font-size: 1.2rem;
+  font-weight: 700;
+  margin-bottom: 12px;
+}
+
+#playfield {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 3 / 4;
+  border-radius: 16px;
+  background: linear-gradient(180deg, #f1f8ff, #e6f3ff);
+  overflow: hidden;
+}
+
+.target {
+  position: absolute;
+  border-radius: 50%;
+  border: 10px solid var(--accent);
+  background: #fff;
+  transform: translate(-50%, -50%);
+}
+
+.target::after {
+  content: "";
+  position: absolute;
+  inset: 18%;
+  border-radius: 50%;
+  background: rgba(58, 166, 255, 0.2);
+}
+
+.target.hit {
+  animation: pop 180ms ease-out;
+}
+
+@keyframes pop {
+  from {
+    transform: translate(-50%, -50%) scale(1);
+  }
+  to {
+    transform: translate(-50%, -50%) scale(1.25);
+  }
+}
+
+#combo {
+  min-height: 40px;
+  display: grid;
+  place-items: center;
+  font-size: 1.5rem;
+  font-weight: 800;
+  color: #ff4d7d;
+}
