@@ -3,37 +3,1053 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-    <title>ポンポンわっか！</title>
-    <link rel="stylesheet" href="style.css" />
+    <title>うんち避けランナーDX</title>
+    <style>
+      :root {
+        --sky-top: #8fd6ff;
+        --sky-bottom: #dff5ff;
+        --ground-top: #59c149;
+        --ground-bottom: #3e9c32;
+        --ui-bg: rgba(255, 255, 255, 0.9);
+        --ui-border: #1a4b8a;
+        --button-main: #ff7d2b;
+        --button-sub: #3d90ff;
+      }
+
+      * {
+        box-sizing: border-box;
+        -webkit-tap-highlight-color: transparent;
+        touch-action: manipulation;
+      }
+
+      html,
+      body {
+        margin: 0;
+        width: 100%;
+        height: 100%;
+        overflow: hidden;
+        font-family: "Hiragino Kaku Gothic ProN", "Yu Gothic", "Meiryo", sans-serif;
+        background: linear-gradient(180deg, var(--sky-top), var(--sky-bottom));
+      }
+
+      #app {
+        position: relative;
+        width: 100%;
+        height: 100%;
+      }
+
+      .screen {
+        position: absolute;
+        inset: 0;
+        display: none;
+        align-items: center;
+        justify-content: center;
+        padding: max(16px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-right))
+          max(16px, env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left));
+        z-index: 20;
+      }
+
+      .screen.active {
+        display: flex;
+      }
+
+      .card {
+        width: min(92vw, 560px);
+        background: rgba(255, 255, 255, 0.95);
+        border: 4px solid var(--ui-border);
+        border-radius: 18px;
+        box-shadow: 0 14px 34px rgba(26, 75, 138, 0.28);
+        text-align: center;
+        padding: 20px;
+      }
+
+      h1,
+      h2,
+      p {
+        margin: 0 0 12px;
+      }
+
+      h1 {
+        font-size: clamp(1.7rem, 5vw, 2.6rem);
+        color: #0f417a;
+      }
+
+      .subtitle {
+        font-size: clamp(0.95rem, 2.8vw, 1.2rem);
+      }
+
+      .rule {
+        font-size: 0.95rem;
+        text-align: left;
+        line-height: 1.5;
+        background: #f2f8ff;
+        border-radius: 12px;
+        padding: 10px 12px;
+      }
+
+      .btn-row {
+        display: grid;
+        gap: 10px;
+        margin-top: 14px;
+      }
+
+      button {
+        appearance: none;
+        border: 0;
+        border-radius: 14px;
+        min-height: 56px;
+        width: 100%;
+        font-size: 1.05rem;
+        font-weight: 800;
+        color: #fff;
+        cursor: pointer;
+      }
+
+      button:active {
+        transform: translateY(1px) scale(0.99);
+      }
+
+      #startBtn,
+      #retryBtn {
+        background: linear-gradient(180deg, #ff9854, var(--button-main));
+      }
+
+      #soundBtn {
+        background: linear-gradient(180deg, #69b0ff, var(--button-sub));
+      }
+
+      #game {
+        position: absolute;
+        inset: 0;
+        display: none;
+        overflow: hidden;
+      }
+
+      #game.active {
+        display: block;
+      }
+
+      .hud {
+        position: absolute;
+        left: 10px;
+        right: 10px;
+        top: max(8px, env(safe-area-inset-top));
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: space-between;
+        gap: 8px;
+        z-index: 8;
+      }
+
+      .hud-box {
+        background: var(--ui-bg);
+        border: 3px solid var(--ui-border);
+        border-radius: 12px;
+        padding: 5px 10px;
+        font-weight: 800;
+        color: #113563;
+        font-size: clamp(0.8rem, 2.4vw, 1.1rem);
+      }
+
+      #world {
+        position: absolute;
+        inset: 0;
+      }
+
+      #sky {
+        position: absolute;
+        left: 0;
+        right: 0;
+        top: 0;
+        height: 72%;
+        background: linear-gradient(180deg, #7ed0ff 0%, #d9f3ff 100%);
+      }
+
+      #sun {
+        position: absolute;
+        top: 8%;
+        right: 8%;
+        font-size: min(16vw, 84px);
+        filter: drop-shadow(0 0 8px rgba(255, 208, 92, 0.6));
+        animation: spin 14s linear infinite;
+      }
+
+      @keyframes spin {
+        from {
+          transform: rotate(0deg);
+        }
+        to {
+          transform: rotate(360deg);
+        }
+      }
+
+      .cloud {
+        position: absolute;
+        font-size: clamp(30px, 8vw, 66px);
+        opacity: 0.9;
+        will-change: transform;
+      }
+
+      #ground {
+        position: absolute;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        height: 28%;
+        background: linear-gradient(180deg, var(--ground-top), var(--ground-bottom));
+        border-top: 4px solid #8ce676;
+      }
+
+      .grassPattern {
+        position: absolute;
+        left: -120%;
+        width: 220%;
+        bottom: 0;
+        height: 100%;
+        opacity: 0.22;
+        background-image: repeating-linear-gradient(
+          -36deg,
+          rgba(255, 255, 255, 0.35) 0 12px,
+          rgba(0, 0, 0, 0) 12px 24px
+        );
+        will-change: transform;
+      }
+
+      #entities {
+        position: absolute;
+        inset: 0;
+      }
+
+      #player {
+        position: absolute;
+        left: 14%;
+        font-size: clamp(34px, 8vw, 58px);
+        line-height: 1;
+        transform-origin: center;
+        will-change: transform;
+        z-index: 4;
+        user-select: none;
+      }
+
+      .entity {
+        position: absolute;
+        line-height: 1;
+        user-select: none;
+        transform-origin: center;
+        will-change: transform;
+      }
+
+      .effect {
+        position: absolute;
+        pointer-events: none;
+        font-weight: 900;
+        color: #fff;
+        text-shadow: 0 2px 0 rgba(0, 0, 0, 0.35);
+        animation: floatUp 0.65s ease-out forwards;
+        z-index: 9;
+      }
+
+      @keyframes floatUp {
+        0% {
+          opacity: 0;
+          transform: translateY(10px) scale(0.8);
+        }
+        15% {
+          opacity: 1;
+        }
+        100% {
+          opacity: 0;
+          transform: translateY(-36px) scale(1.05);
+        }
+      }
+
+      #flash {
+        position: absolute;
+        inset: 0;
+        pointer-events: none;
+        opacity: 0;
+        background: rgba(255, 255, 255, 0.42);
+        z-index: 7;
+      }
+
+      #flash.active {
+        animation: flashPulse 240ms ease-out;
+      }
+
+      @keyframes flashPulse {
+        0% {
+          opacity: 0.8;
+        }
+        100% {
+          opacity: 0;
+        }
+      }
+
+      #game.shake {
+        animation: shake 180ms linear;
+      }
+
+      @keyframes shake {
+        0%,
+        100% {
+          transform: translateX(0);
+        }
+        25% {
+          transform: translateX(-7px);
+        }
+        75% {
+          transform: translateX(7px);
+        }
+      }
+
+      #game.over {
+        animation: gameOverFade 420ms ease-out;
+      }
+
+      @keyframes gameOverFade {
+        0% {
+          filter: saturate(1.3);
+        }
+        100% {
+          filter: saturate(0.65);
+        }
+      }
+    </style>
   </head>
   <body>
-    <main id="app">
-      <section id="scene-title" class="scene active" aria-label="タイトル画面">
-        <h1>ポンポンわっか！</h1>
-        <p>わっかをタップしてスコアをのばそう！</p>
-        <div class="buttons">
-          <button id="start-btn" class="primary">スタート</button>
-          <button id="sound-btn" class="secondary" aria-pressed="true">🔊 音ON</button>
+    <div id="app">
+      <section id="startScreen" class="screen active" aria-label="スタート画面">
+        <div class="card">
+          <h1>💩うんち避けランナーDX💨</h1>
+          <p class="subtitle">くだらないけど超たのしい！ ひたすら走って集めて避けろ！</p>
+          <div class="rule">
+            ・タップ / クリック / スペースでジャンプ<br />
+            ・空中でもう一度押すと「ちょい2段ジャンプ」<br />
+            ・🪙コイン:+10 / 🌟無敵 / 🚀爆走 / ❤️一回ガード
+          </div>
+          <p id="startBest">ハイスコア: 0</p>
+          <div class="btn-row">
+            <button id="startBtn">スタート！</button>
+            <button id="soundBtn" aria-pressed="true">🔊 サウンド ON</button>
+          </div>
         </div>
       </section>
 
-      <section id="scene-play" class="scene" aria-label="プレイ画面">
-        <header class="hud">
-          <div id="score">Score: 0</div>
-          <div id="timer">Time: 30</div>
-        </header>
-        <div id="playfield" aria-live="polite"></div>
-        <div id="combo" aria-live="polite"></div>
+      <section id="game" aria-label="ゲーム画面">
+        <div class="hud">
+          <div id="scoreHud" class="hud-box">スコア: 0</div>
+          <div id="bestHud" class="hud-box">ハイスコア: 0</div>
+          <div id="statusHud" class="hud-box">状態: ノーマル</div>
+          <div id="lifeHud" class="hud-box">❤️: なし</div>
+        </div>
+
+        <div id="world">
+          <div id="sky"></div>
+          <div id="sun">☀️</div>
+          <div class="cloud" id="cloud1">☁️</div>
+          <div class="cloud" id="cloud2">☁️</div>
+          <div class="cloud" id="cloud3">☁️</div>
+          <div id="ground">
+            <div class="grassPattern" id="grassA"></div>
+            <div class="grassPattern" id="grassB"></div>
+          </div>
+          <div id="entities">
+            <div id="player" aria-label="プレイヤー">🏃</div>
+          </div>
+          <div id="flash"></div>
+        </div>
       </section>
 
-      <section id="scene-result" class="scene" aria-label="結果画面">
-        <h2>おわり！</h2>
-        <p id="result-score">SCORE: 0</p>
-        <p id="result-best">BEST: 0</p>
-        <button id="retry-btn" class="primary">もういっかい</button>
+      <section id="gameOverScreen" class="screen" aria-label="ゲームオーバー画面">
+        <div class="card">
+          <h2>くっさ〜！ゲームオーバー！🤢</h2>
+          <p id="finalScore">スコア: 0</p>
+          <p id="finalBest">ハイスコア: 0</p>
+          <p id="message">もう一回で神プレイいける！</p>
+          <div class="btn-row">
+            <button id="retryBtn">リトライする！</button>
+          </div>
+        </div>
       </section>
-    </main>
+    </div>
 
-    <script src="game.js"></script>
+    <script>
+      "use strict";
+
+      // ===== ゲームバランス調整用定数 =====
+      const CONFIG = {
+        gravity: 0.0026,
+        jumpVelocity: 0.94,
+        secondJumpVelocity: 0.82,
+        baseSpeed: 0.35,
+        maxSpeed: 0.86,
+        speedGainByScore: 0.00008,
+        easyTimeMs: 10000,
+        surviveScorePerSec: 6,
+        obstacleIntervalMin: 780,
+        obstacleIntervalMax: 1450,
+        itemIntervalMin: 1350,
+        itemIntervalMax: 2600,
+        bananaStunMs: 900,
+        starDurationMs: 5200,
+        rocketDurationMs: 2600,
+        invincibleBlinkSpeed: 0.02,
+        spawnSafeDistance: 180,
+      };
+
+      const ELEMENTS = {
+        app: document.getElementById("app"),
+        startScreen: document.getElementById("startScreen"),
+        game: document.getElementById("game"),
+        gameOverScreen: document.getElementById("gameOverScreen"),
+        startBtn: document.getElementById("startBtn"),
+        retryBtn: document.getElementById("retryBtn"),
+        soundBtn: document.getElementById("soundBtn"),
+        scoreHud: document.getElementById("scoreHud"),
+        bestHud: document.getElementById("bestHud"),
+        statusHud: document.getElementById("statusHud"),
+        lifeHud: document.getElementById("lifeHud"),
+        startBest: document.getElementById("startBest"),
+        finalScore: document.getElementById("finalScore"),
+        finalBest: document.getElementById("finalBest"),
+        message: document.getElementById("message"),
+        player: document.getElementById("player"),
+        entities: document.getElementById("entities"),
+        flash: document.getElementById("flash"),
+        cloud1: document.getElementById("cloud1"),
+        cloud2: document.getElementById("cloud2"),
+        cloud3: document.getElementById("cloud3"),
+        grassA: document.getElementById("grassA"),
+        grassB: document.getElementById("grassB"),
+      };
+
+      const STORAGE_KEY = "unchiRunnerDX_highScore";
+
+      const gameState = {
+        screen: "start",
+        isRunning: false,
+        width: 0,
+        height: 0,
+        groundY: 0,
+        score: 0,
+        highScore: Number(localStorage.getItem(STORAGE_KEY) || 0),
+        elapsedMs: 0,
+        speed: CONFIG.baseSpeed,
+        player: {
+          x: 0,
+          y: 0,
+          vy: 0,
+          width: 44,
+          height: 56,
+          jumpsUsed: 0,
+          hasHeart: false,
+          starUntil: 0,
+          rocketUntil: 0,
+          stunnedUntil: 0,
+        },
+        entities: [],
+        lastObstacleSpawn: 0,
+        lastItemSpawn: 0,
+        nextObstacleDelay: 1200,
+        nextItemDelay: 1800,
+        lastTime: 0,
+        scoreRemainder: 0,
+        canInput: true,
+        soundOn: true,
+      };
+
+      let audioCtx = null;
+
+      function randomRange(min, max) {
+        return Math.random() * (max - min) + min;
+      }
+
+      function chance(probability) {
+        return Math.random() < probability;
+      }
+
+      function nowMs() {
+        return performance.now();
+      }
+
+      function getGroundTop() {
+        return gameState.height * 0.72;
+      }
+
+      function updateLayoutSize() {
+        gameState.width = window.innerWidth;
+        gameState.height = window.innerHeight;
+        gameState.groundY = getGroundTop();
+        gameState.player.x = gameState.width * 0.14;
+        if (!gameState.isRunning) {
+          gameState.player.y = gameState.groundY - gameState.player.height;
+          renderPlayer(0);
+        }
+      }
+
+      function showScreen(screenName) {
+        gameState.screen = screenName;
+        ELEMENTS.startScreen.classList.toggle("active", screenName === "start");
+        ELEMENTS.game.classList.toggle("active", screenName === "game");
+        ELEMENTS.gameOverScreen.classList.toggle("active", screenName === "over");
+      }
+
+      function updateBestLabels() {
+        ELEMENTS.startBest.textContent = `ハイスコア: ${Math.floor(gameState.highScore)}`;
+        ELEMENTS.bestHud.textContent = `ハイスコア: ${Math.floor(gameState.highScore)}`;
+      }
+
+      // ===== Web Audio API 簡易効果音 =====
+      function ensureAudio() {
+        if (!gameState.soundOn) return null;
+        const AC = window.AudioContext || window.webkitAudioContext;
+        if (!AC) return null;
+        if (!audioCtx) audioCtx = new AC();
+        if (audioCtx.state === "suspended") {
+          audioCtx.resume().catch(() => {});
+        }
+        return audioCtx;
+      }
+
+      function playTone(type, frequency, duration, volume, sweepTo) {
+        const ctx = ensureAudio();
+        if (!ctx) return;
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        const start = ctx.currentTime;
+        osc.type = type;
+        osc.frequency.setValueAtTime(frequency, start);
+        if (sweepTo) {
+          osc.frequency.exponentialRampToValueAtTime(Math.max(40, sweepTo), start + duration);
+        }
+        gain.gain.setValueAtTime(volume, start);
+        gain.gain.exponentialRampToValueAtTime(0.0001, start + duration);
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start(start);
+        osc.stop(start + duration);
+      }
+
+      const sounds = {
+        jump() {
+          playTone("square", 380, 0.1, 0.07, 520);
+        },
+        coin() {
+          playTone("triangle", 620, 0.12, 0.06, 980);
+        },
+        item() {
+          playTone("sawtooth", 480, 0.17, 0.06, 740);
+        },
+        damage() {
+          playTone("square", 260, 0.22, 0.08, 120);
+        },
+        gameOver() {
+          playTone("sawtooth", 320, 0.28, 0.08, 80);
+        },
+      };
+
+      function spawnEffect(text, x, y, color) {
+        const effect = document.createElement("div");
+        effect.className = "effect";
+        effect.textContent = text;
+        effect.style.left = `${x}px`;
+        effect.style.top = `${y}px`;
+        effect.style.color = color || "#fff";
+        effect.style.fontSize = `${Math.max(20, gameState.width * 0.04)}px`;
+        ELEMENTS.entities.appendChild(effect);
+        setTimeout(() => effect.remove(), 650);
+      }
+
+      function triggerFlash() {
+        ELEMENTS.flash.classList.remove("active");
+        void ELEMENTS.flash.offsetWidth;
+        ELEMENTS.flash.classList.add("active");
+      }
+
+      function triggerShake() {
+        ELEMENTS.game.classList.remove("shake");
+        void ELEMENTS.game.offsetWidth;
+        ELEMENTS.game.classList.add("shake");
+      }
+
+      function clearEntities() {
+        gameState.entities.forEach((e) => e.node.remove());
+        gameState.entities = [];
+      }
+
+      function createEntity(type, emoji, size, yOffset, pointValue) {
+        const node = document.createElement("div");
+        node.className = "entity";
+        node.textContent = emoji;
+        node.style.fontSize = `${size}px`;
+        ELEMENTS.entities.appendChild(node);
+
+        return {
+          type,
+          emoji,
+          node,
+          x: gameState.width + size,
+          y: gameState.groundY - yOffset - size,
+          width: size * 0.88,
+          height: size * 0.88,
+          pointValue: pointValue || 0,
+        };
+      }
+
+      function canSpawnAtLane(yOffset, size) {
+        const newY = gameState.groundY - yOffset - size;
+        for (let i = gameState.entities.length - 1; i >= 0; i--) {
+          const e = gameState.entities[i];
+          const closeX = e.x > gameState.width - CONFIG.spawnSafeDistance;
+          const closeY = Math.abs(e.y - newY) < 54;
+          if (closeX && closeY) return false;
+        }
+        return true;
+      }
+
+      function spawnObstacle() {
+        const elapsed = gameState.elapsedMs;
+        const easy = elapsed < CONFIG.easyTimeMs;
+        const roll = Math.random();
+
+        let type = "poop";
+        let emoji = "💩";
+        if (!easy && roll > 0.72) {
+          type = "rock";
+          emoji = "🪨";
+        } else if (!easy && roll > 0.47) {
+          type = "banana";
+          emoji = "🍌";
+        }
+
+        let size = 34;
+        if (type === "rock") size = 38;
+        if (type === "banana") size = 30;
+
+        const lanes = [0, 46];
+        const lane = chance(0.82) ? lanes[0] : lanes[1];
+        if (!canSpawnAtLane(lane, size)) return;
+
+        gameState.entities.push(createEntity(type, emoji, size, lane, 0));
+      }
+
+      function spawnItem() {
+        const roll = Math.random();
+        let type = "coin";
+        let emoji = "🪙";
+        let size = 30;
+        let value = 10;
+
+        if (roll > 0.82) {
+          type = "heart";
+          emoji = "❤️";
+          size = 31;
+          value = 0;
+        } else if (roll > 0.62) {
+          type = "star";
+          emoji = "🌟";
+          size = 34;
+          value = 20;
+        } else if (roll > 0.48) {
+          type = "rocket";
+          emoji = "🚀";
+          size = 34;
+          value = 30;
+        }
+
+        const yOffset = chance(0.58) ? 56 : 118;
+        if (!canSpawnAtLane(yOffset, size)) return;
+        gameState.entities.push(createEntity(type, emoji, size, yOffset, value));
+      }
+
+      function getObstacleInterval() {
+        const hardRate = Math.min(1, Math.max(0, (gameState.score - 40) / 420));
+        const min = CONFIG.obstacleIntervalMin - hardRate * 210;
+        const max = CONFIG.obstacleIntervalMax - hardRate * 280;
+        if (gameState.elapsedMs < CONFIG.easyTimeMs) {
+          return randomRange(max + 280, max + 520);
+        }
+        return randomRange(min, max);
+      }
+
+      function getItemInterval() {
+        return randomRange(CONFIG.itemIntervalMin, CONFIG.itemIntervalMax);
+      }
+
+      function addScore(points, x, y, text, color) {
+        gameState.score += points;
+        if (gameState.score > gameState.highScore) {
+          gameState.highScore = gameState.score;
+        }
+        if (text) spawnEffect(text, x, y, color);
+      }
+
+      function isInvincible() {
+        return gameState.player.starUntil > gameState.elapsedMs;
+      }
+
+      function isRocketMode() {
+        return gameState.player.rocketUntil > gameState.elapsedMs;
+      }
+
+      function playerRect() {
+        const p = gameState.player;
+        return {
+          x: p.x + p.width * 0.12,
+          y: p.y + p.height * 0.2,
+          w: p.width * 0.72,
+          h: p.height * 0.72,
+        };
+      }
+
+      function entityRect(e) {
+        return {
+          x: e.x + e.width * 0.16,
+          y: e.y + e.height * 0.2,
+          w: e.width * 0.68,
+          h: e.height * 0.68,
+        };
+      }
+
+      function isHit(a, b) {
+        return a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
+      }
+
+      function handleObstacleCollision(entity) {
+        if (isInvincible() || isRocketMode()) {
+          addScore(6, entity.x, entity.y, "無敵！", "#ffd84e");
+          entity.node.remove();
+          return "remove";
+        }
+
+        if (entity.type === "banana") {
+          gameState.player.stunnedUntil = gameState.elapsedMs + CONFIG.bananaStunMs;
+          sounds.damage();
+          triggerShake();
+          spawnEffect("ツルッ！", gameState.player.x + 12, gameState.player.y - 8, "#fff176");
+          entity.node.remove();
+          return "remove";
+        }
+
+        if (gameState.player.hasHeart) {
+          gameState.player.hasHeart = false;
+          sounds.damage();
+          triggerShake();
+          spawnEffect("❤️ガード！", gameState.player.x + 10, gameState.player.y - 12, "#ff8bc1");
+          entity.node.remove();
+          return "remove";
+        }
+
+        gameOver();
+        return "end";
+      }
+
+      function handleItemCollision(entity) {
+        if (entity.type === "coin") {
+          addScore(10, entity.x, entity.y, "+10", "#ffe45b");
+          sounds.coin();
+        } else if (entity.type === "star") {
+          gameState.player.starUntil = gameState.elapsedMs + CONFIG.starDurationMs;
+          addScore(20, entity.x, entity.y, "キラキラ無敵！", "#fff59d");
+          sounds.item();
+          triggerFlash();
+        } else if (entity.type === "rocket") {
+          gameState.player.rocketUntil = gameState.elapsedMs + CONFIG.rocketDurationMs;
+          addScore(30, entity.x, entity.y, "ロケット爆走！", "#b8ffef");
+          sounds.item();
+          triggerFlash();
+        } else if (entity.type === "heart") {
+          gameState.player.hasHeart = true;
+          addScore(5, entity.x, entity.y, "1UPガード！", "#ffb1d2");
+          sounds.item();
+        }
+        entity.node.remove();
+        return "remove";
+      }
+
+      function renderPlayer(timeMs) {
+        const p = gameState.player;
+        const runBob = Math.sin(timeMs * 0.023) * 2.6;
+        const blink = Math.sin(timeMs * CONFIG.invincibleBlinkSpeed);
+        const inv = isInvincible();
+        const rocket = isRocketMode();
+
+        let scale = 1;
+        if (rocket) scale = 1.15;
+        else if (inv) scale = 1.05;
+
+        const rotate = p.vy * 0.032;
+        const y = p.y + runBob;
+        ELEMENTS.player.style.left = `${p.x}px`;
+        ELEMENTS.player.style.top = `${y}px`;
+        ELEMENTS.player.style.transform = `translate3d(0,0,0) scale(${scale}) rotate(${rotate}deg)`;
+        ELEMENTS.player.style.filter = rocket
+          ? `drop-shadow(0 0 14px rgba(130,255,250,0.9)) hue-rotate(${timeMs * 0.18}deg)`
+          : inv
+            ? `drop-shadow(0 0 12px rgba(255,238,90,0.95)) brightness(${1 + (blink + 1) * 0.15})`
+            : "none";
+      }
+
+      function renderWorld(timeMs) {
+        const speedFactor = (gameState.speed / CONFIG.baseSpeed) * (isRocketMode() ? 1.8 : 1);
+        const cloudBase = [0.06, 0.1, 0.14];
+        [ELEMENTS.cloud1, ELEMENTS.cloud2, ELEMENTS.cloud3].forEach((cloud, i) => {
+          const x = (timeMs * cloudBase[i] * speedFactor) % (gameState.width + 220);
+          const y = [14, 24, 9][i] + Math.sin(timeMs * 0.001 + i * 1.4) * 2;
+          cloud.style.transform = `translate(${gameState.width - x - 110}px, ${y}vh)`;
+        });
+
+        const gMove = (timeMs * 0.2 * speedFactor) % gameState.width;
+        ELEMENTS.grassA.style.transform = `translateX(${gMove}px)`;
+        ELEMENTS.grassB.style.transform = `translateX(${gMove - gameState.width}px)`;
+      }
+
+      function updateHud() {
+        ELEMENTS.scoreHud.textContent = `スコア: ${Math.floor(gameState.score)}`;
+        ELEMENTS.bestHud.textContent = `ハイスコア: ${Math.floor(gameState.highScore)}`;
+        ELEMENTS.lifeHud.textContent = gameState.player.hasHeart ? "❤️: あり" : "❤️: なし";
+
+        if (isRocketMode()) {
+          ELEMENTS.statusHud.textContent = "状態: 🚀 爆走モード";
+        } else if (isInvincible()) {
+          ELEMENTS.statusHud.textContent = "状態: 🌟 無敵";
+        } else if (gameState.player.stunnedUntil > gameState.elapsedMs) {
+          ELEMENTS.statusHud.textContent = "状態: 🍌 すべってる！";
+        } else {
+          ELEMENTS.statusHud.textContent = "状態: ノーマル";
+        }
+      }
+
+      function jumpAction() {
+        if (!gameState.isRunning || !gameState.canInput) return;
+        if (gameState.player.stunnedUntil > gameState.elapsedMs) return;
+
+        const p = gameState.player;
+        const onGround = p.y >= gameState.groundY - p.height - 0.01;
+
+        if (onGround) {
+          p.vy = -CONFIG.jumpVelocity;
+          p.jumpsUsed = 1;
+          sounds.jump();
+          spawnEffect("ピョン!", p.x + 10, p.y, "#dff7ff");
+          return;
+        }
+
+        if (p.jumpsUsed < 2) {
+          p.vy = -CONFIG.secondJumpVelocity;
+          p.jumpsUsed = 2;
+          sounds.jump();
+          spawnEffect("もう1回!", p.x + 16, p.y - 10, "#b8f7ff");
+        }
+      }
+
+      function requestAction(event) {
+        if (event.type === "keydown") {
+          if (event.code !== "Space") return;
+          event.preventDefault();
+        }
+        jumpAction();
+      }
+
+      function gameOver() {
+        if (!gameState.isRunning) return;
+        gameState.isRunning = false;
+        ELEMENTS.game.classList.remove("shake");
+        ELEMENTS.game.classList.add("over");
+        sounds.gameOver();
+
+        if (gameState.score > Number(localStorage.getItem(STORAGE_KEY) || 0)) {
+          localStorage.setItem(STORAGE_KEY, String(Math.floor(gameState.score)));
+        }
+
+        ELEMENTS.finalScore.textContent = `スコア: ${Math.floor(gameState.score)}`;
+        ELEMENTS.finalBest.textContent = `ハイスコア: ${Math.floor(gameState.highScore)}`;
+
+        const msg =
+          gameState.score < 80
+            ? "まだまだ！ 次はうんちを華麗によけよう！"
+            : gameState.score < 180
+              ? "いい走り！ もうちょいで伝説ランナー！"
+              : "神ラン！ キミ、うんち避けマスターだ！";
+        ELEMENTS.message.textContent = msg;
+
+        updateBestLabels();
+        showScreen("over");
+      }
+
+      function startGame() {
+        clearEntities();
+        ELEMENTS.game.classList.remove("over", "shake");
+
+        const p = gameState.player;
+        p.width = Math.max(40, gameState.width * 0.065);
+        p.height = p.width * 1.25;
+        p.x = gameState.width * 0.14;
+        p.y = gameState.groundY - p.height;
+        p.vy = 0;
+        p.jumpsUsed = 0;
+        p.hasHeart = false;
+        p.starUntil = 0;
+        p.rocketUntil = 0;
+        p.stunnedUntil = 0;
+
+        gameState.score = 0;
+        gameState.elapsedMs = 0;
+        gameState.speed = CONFIG.baseSpeed;
+        gameState.lastObstacleSpawn = 0;
+        gameState.lastItemSpawn = 0;
+        gameState.nextObstacleDelay = 900;
+        gameState.nextItemDelay = 1450;
+        gameState.lastTime = nowMs();
+        gameState.scoreRemainder = 0;
+        gameState.canInput = true;
+        gameState.isRunning = true;
+
+        updateHud();
+        showScreen("game");
+        loop(gameState.lastTime);
+      }
+
+      function updateGame(deltaMs, timeMs) {
+        gameState.elapsedMs += deltaMs;
+
+        const rocket = isRocketMode();
+        const targetSpeed = Math.min(
+          CONFIG.maxSpeed,
+          CONFIG.baseSpeed + gameState.score * CONFIG.speedGainByScore
+        );
+        gameState.speed += (targetSpeed - gameState.speed) * 0.06;
+
+        // 生存スコア
+        const surviveRate = CONFIG.surviveScorePerSec * (rocket ? 2.4 : 1);
+        gameState.scoreRemainder += (deltaMs / 1000) * surviveRate;
+        if (gameState.scoreRemainder >= 1) {
+          const gain = Math.floor(gameState.scoreRemainder);
+          gameState.score += gain;
+          gameState.scoreRemainder -= gain;
+        }
+
+        // 障害物・アイテム生成
+        if (gameState.elapsedMs - gameState.lastObstacleSpawn > gameState.nextObstacleDelay) {
+          spawnObstacle();
+          gameState.lastObstacleSpawn = gameState.elapsedMs;
+          gameState.nextObstacleDelay = getObstacleInterval();
+        }
+
+        if (gameState.elapsedMs - gameState.lastItemSpawn > gameState.nextItemDelay) {
+          spawnItem();
+          gameState.lastItemSpawn = gameState.elapsedMs;
+          gameState.nextItemDelay = getItemInterval();
+        }
+
+        // プレイヤー物理
+        const p = gameState.player;
+        p.vy += CONFIG.gravity * deltaMs;
+        p.y += p.vy * deltaMs;
+
+        const floorY = gameState.groundY - p.height;
+        if (p.y >= floorY) {
+          p.y = floorY;
+          p.vy = 0;
+          p.jumpsUsed = 0;
+        }
+
+        // エンティティ移動・衝突
+        const moveSpeed = gameState.speed * (rocket ? 1.7 : 1);
+        const pRect = playerRect();
+
+        for (let i = gameState.entities.length - 1; i >= 0; i--) {
+          const e = gameState.entities[i];
+          e.x -= moveSpeed * deltaMs;
+          e.node.style.left = `${e.x}px`;
+          e.node.style.top = `${e.y}px`;
+
+          if (rocket && e.type === "coin") {
+            e.node.style.filter = "drop-shadow(0 0 8px rgba(255,230,80,0.9))";
+          }
+
+          if (e.x < -90) {
+            e.node.remove();
+            gameState.entities.splice(i, 1);
+            continue;
+          }
+
+          const hit = isHit(pRect, entityRect(e));
+          if (!hit) continue;
+
+          if (e.type === "coin" || e.type === "star" || e.type === "rocket" || e.type === "heart") {
+            const result = handleItemCollision(e);
+            if (result === "remove") gameState.entities.splice(i, 1);
+          } else {
+            const result = handleObstacleCollision(e);
+            if (result === "end") return;
+            if (result === "remove") gameState.entities.splice(i, 1);
+          }
+        }
+
+        if (gameState.score > gameState.highScore) {
+          gameState.highScore = gameState.score;
+        }
+
+        renderPlayer(timeMs);
+        renderWorld(timeMs);
+        updateHud();
+      }
+
+      function loop(timeMs) {
+        if (!gameState.isRunning) return;
+        const delta = Math.min(33, timeMs - gameState.lastTime || 16.67);
+        gameState.lastTime = timeMs;
+
+        updateGame(delta, timeMs);
+        if (gameState.isRunning) {
+          requestAnimationFrame(loop);
+        }
+      }
+
+      function toggleSound() {
+        gameState.soundOn = !gameState.soundOn;
+        ELEMENTS.soundBtn.textContent = gameState.soundOn ? "🔊 サウンド ON" : "🔇 サウンド OFF";
+        ELEMENTS.soundBtn.setAttribute("aria-pressed", String(gameState.soundOn));
+      }
+
+      function setupInputs() {
+        window.addEventListener("resize", updateLayoutSize, { passive: true });
+        document.addEventListener("keydown", requestAction);
+        document.addEventListener("pointerdown", (e) => {
+          if (gameState.screen !== "game") return;
+          if (e.target.closest("button")) return;
+          requestAction({ type: "pointer" });
+        });
+
+        ELEMENTS.startBtn.addEventListener("click", () => {
+          ensureAudio();
+          updateLayoutSize();
+          startGame();
+        });
+
+        ELEMENTS.retryBtn.addEventListener("click", () => {
+          ensureAudio();
+          updateLayoutSize();
+          startGame();
+        });
+
+        ELEMENTS.soundBtn.addEventListener("click", () => {
+          ensureAudio();
+          toggleSound();
+        });
+      }
+
+      function init() {
+        updateLayoutSize();
+        updateBestLabels();
+        showScreen("start");
+        setupInputs();
+        renderWorld(0);
+        renderPlayer(0);
+      }
+
+      init();
+    </script>
   </body>
 </html>
