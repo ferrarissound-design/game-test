@@ -3,37 +3,139 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-    <title>ポンポンわっか！</title>
-    <link rel="stylesheet" href="style.css" />
+    <title>ゲームセレクト | game-test</title>
+    <style>
+      :root {
+        --bg-top: #85d8ff;
+        --bg-bottom: #f5fcff;
+        --card: rgba(255, 255, 255, 0.95);
+        --text: #11315c;
+        --accent1: #ff7f50;
+        --accent2: #3aa6ff;
+      }
+
+      * {
+        box-sizing: border-box;
+        touch-action: manipulation;
+      }
+
+      html,
+      body {
+        margin: 0;
+        width: 100%;
+        min-height: 100%;
+        font-family: "Hiragino Kaku Gothic ProN", "Yu Gothic", sans-serif;
+        color: var(--text);
+        background: linear-gradient(180deg, var(--bg-top), var(--bg-bottom));
+      }
+
+      body {
+        display: grid;
+        place-items: center;
+        padding: max(16px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-right))
+          max(16px, env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left));
+      }
+
+      .panel {
+        width: min(92vw, 700px);
+        background: var(--card);
+        border-radius: 20px;
+        padding: 20px;
+        border: 4px solid #1a4b8a;
+        box-shadow: 0 14px 28px rgba(17, 49, 92, 0.2);
+      }
+
+      h1 {
+        margin: 0 0 8px;
+        font-size: clamp(1.6rem, 5vw, 2.4rem);
+      }
+
+      .lead {
+        margin: 0 0 18px;
+        font-size: clamp(0.95rem, 2.6vw, 1.15rem);
+      }
+
+      .games {
+        display: grid;
+        gap: 14px;
+      }
+
+      .game-card {
+        display: block;
+        text-decoration: none;
+        color: inherit;
+        background: #f4f9ff;
+        border: 3px solid #8fb8e8;
+        border-radius: 14px;
+        padding: 14px;
+      }
+
+      .game-card:active {
+        transform: scale(0.99);
+      }
+
+      .game-title {
+        margin: 0 0 6px;
+        font-size: clamp(1.15rem, 3.6vw, 1.5rem);
+        font-weight: 800;
+      }
+
+      .game-desc {
+        margin: 0;
+        line-height: 1.5;
+        font-size: clamp(0.9rem, 2.5vw, 1rem);
+      }
+
+      .tag {
+        display: inline-block;
+        font-size: 0.76rem;
+        font-weight: 700;
+        border-radius: 999px;
+        padding: 4px 8px;
+        margin-bottom: 8px;
+        color: #fff;
+      }
+
+      .tag.today {
+        background: var(--accent1);
+      }
+
+      .tag.yesterday {
+        background: var(--accent2);
+      }
+
+      .notes {
+        margin-top: 14px;
+        font-size: 0.88rem;
+        opacity: 0.9;
+      }
+    </style>
   </head>
   <body>
-    <main id="app">
-      <section id="scene-title" class="scene active" aria-label="タイトル画面">
-        <h1>ポンポンわっか！</h1>
-        <p>わっかをタップしてスコアをのばそう！</p>
-        <div class="buttons">
-          <button id="start-btn" class="primary">スタート</button>
-          <button id="sound-btn" class="secondary" aria-pressed="true">🔊 音ON</button>
-        </div>
+    <main class="panel">
+      <h1>🎮 ゲームセレクト</h1>
+      <p class="lead">遊びたいゲームをえらぼう！スマホ・タブレット・PC対応。</p>
+
+      <section class="games" aria-label="ゲーム一覧">
+        <a class="game-card" href="unchi-runner.html">
+          <span class="tag today">今日のゲーム</span>
+          <h2 class="game-title">💩 うんち避けランナーDX</h2>
+          <p class="game-desc">
+            横スクロールで走り続けるランナー。ジャンプ・2段ジャンプで障害物を避けつつ、
+            コインやアイテムを集めてハイスコアを狙おう！
+          </p>
+        </a>
+
+        <a class="game-card" href="yesterday-game.html">
+          <span class="tag yesterday">昨日のゲーム</span>
+          <h2 class="game-title">⭕ ポンポンわっか！</h2>
+          <p class="game-desc">
+            画面に出るわっかをタップしてスコアを伸ばす反射神経ゲーム。短時間でサクッと遊べる！
+          </p>
+        </a>
       </section>
 
-      <section id="scene-play" class="scene" aria-label="プレイ画面">
-        <header class="hud">
-          <div id="score">Score: 0</div>
-          <div id="timer">Time: 30</div>
-        </header>
-        <div id="playfield" aria-live="polite"></div>
-        <div id="combo" aria-live="polite"></div>
-      </section>
-
-      <section id="scene-result" class="scene" aria-label="結果画面">
-        <h2>おわり！</h2>
-        <p id="result-score">SCORE: 0</p>
-        <p id="result-best">BEST: 0</p>
-        <button id="retry-btn" class="primary">もういっかい</button>
-      </section>
+      <p class="notes">URL: <code>/</code>（この画面） / <code>/unchi-runner.html</code> / <code>/yesterday-game.html</code></p>
     </main>
-
-    <script src="game.js"></script>
   </body>
 </html>
