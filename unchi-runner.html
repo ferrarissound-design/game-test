@@ -229,6 +229,20 @@
         will-change: transform;
         z-index: 4;
         user-select: none;
+        display: inline-flex;
+        align-items: center;
+        gap: 2px;
+      }
+
+      #playerBody {
+        display: inline-block;
+      }
+
+      #playerDir {
+        display: inline-block;
+        font-size: 0.58em;
+        transform: translateY(-0.2em);
+        filter: drop-shadow(0 1px 0 rgba(0, 0, 0, 0.25));
       }
 
       .entity {
@@ -354,7 +368,9 @@
             <div class="grassPattern" id="grassB"></div>
           </div>
           <div id="entities">
-            <div id="player" aria-label="プレイヤー">🧒</div>
+            <div id="player" aria-label="プレイヤー">
+              <span id="playerBody">🧒</span><span id="playerDir" aria-hidden="true">➡️</span>
+            </div>
           </div>
           <div id="flash"></div>
         </div>
@@ -414,6 +430,7 @@
         finalBest: document.getElementById("finalBest"),
         message: document.getElementById("message"),
         player: document.getElementById("player"),
+        playerBody: document.getElementById("playerBody"),
         entities: document.getElementById("entities"),
         flash: document.getElementById("flash"),
         cloud1: document.getElementById("cloud1"),
@@ -770,6 +787,7 @@
       function renderPlayer(timeMs) {
         const p = gameState.player;
         const runBob = Math.sin(timeMs * 0.023) * 2.6;
+        const dashForward = Math.abs(Math.sin(timeMs * 0.027)) * 3.2;
         const blink = Math.sin(timeMs * CONFIG.invincibleBlinkSpeed);
         const inv = isInvincible();
         const rocket = isRocketMode();
@@ -780,7 +798,7 @@
 
         const rotate = p.vy * 0.032;
         const y = p.y + runBob;
-        ELEMENTS.player.style.left = `${p.x}px`;
+        ELEMENTS.player.style.left = `${p.x + dashForward}px`;
         ELEMENTS.player.style.top = `${y}px`;
         ELEMENTS.player.style.transform = `translate3d(0,0,0) scale(${scale}) rotate(${rotate}deg)`;
         ELEMENTS.player.style.filter = rocket
@@ -788,6 +806,7 @@
           : inv
             ? `drop-shadow(0 0 12px rgba(255,238,90,0.95)) brightness(${1 + (blink + 1) * 0.15})`
             : "none";
+        ELEMENTS.playerBody.textContent = rocket ? "🏃" : "🧒";
       }
 
       function renderWorld(timeMs) {
