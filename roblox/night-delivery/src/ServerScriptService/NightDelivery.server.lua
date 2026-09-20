@@ -1,18 +1,50 @@
--- Night Delivery prototype
--- Put this Script in ServerScriptService if you are not using Rojo.
--- It creates a small night town, a depot, five delivery houses,
--- and the core loop: accept job -> deliver -> earn coins -> repeat.
+-- Night Delivery v2
+-- ServerScriptService/NightDelivery.server.lua
+-- Self-contained prototype: generates the town, runs delivery jobs,
+-- saves progression, and provides a simple "bike mode" speed boost.
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Lighting = game:GetService("Lighting")
-
-local ROUND_TIME = 60
-local BASE_REWARD = 50
-local TIME_BONUS_PER_SECOND = 2
+local DataStoreService = game:GetService("DataStoreService")
 
 local REMOTE_NAME = "NightDeliveryEvent"
 local WORLD_NAME = "NightDeliveryWorld"
+local DATASTORE_NAME = "NightDeliveryPlayerData_v2"
+
+local BASE_WALK_SPEED = 20
+local BIKE_BONUS_SPEED = 10
+local SPEED_PER_LEVEL = 2
+local MAX_SPEED_LEVEL = 5
+
+local DELIVERY_STORE = DataStoreService:GetDataStore(DATASTORE_NAME)
+
+local JOB_TYPES = {
+	{
+		id = "standard",
+		name = "通常便",
+		weight = 60,
+		timeLimit = 60,
+		baseReward = 50,
+		timeBonusPerSecond = 2,
+	},
+	{
+		id = "express",
+		name = "速達便",
+		weight = 25,
+		timeLimit = 35,
+		baseReward = 90,
+		timeBonusPerSecond = 3,
+	},
+	{
+		id = "long",
+		name = "遠距離便",
+		weight = 15,
+		timeLimit = 90,
+		baseReward = 120,
+		timeBonusPerSecond = 1,
+	},
+}
 
 local deliveryEvent = ReplicatedStorage:FindFirstChild(REMOTE_NAME)
 if not deliveryEvent then
@@ -35,6 +67,8 @@ housesFolder.Name = "Houses"
 housesFolder.Parent = world
 
 local playerJobs = {}
+local playerLastHouse = {}
+local playerStreak = {}
 
 local function makePart(name, size, position, color, parent, material)
 	local part = Instance.new("Part")
@@ -50,27 +84,44 @@ local function makePart(name, size, position, color, parent, material)
 	return part
 end
 
-local function setupLighting()
-	Lighting.ClockTime = 22.2
-	Lighting.Brightness = 1.4
-	Lighting.Ambient = Color3.fromRGB(70, 76, 100)
-	Lighting.OutdoorAmbient = Color3.fromRGB(45, 50, 72)
-	Lighting.FogColor = Color3.fromRGB(35, 40, 58)
-	Lighting.FogEnd = 650
+local function makeSurfaceText(part, text, face)
+	local gui = Instance.new("SurfaceGui")
+	gui.Face = face or Enum.NormalId.Front
+	gui.Parent = part
 
-	if not Lighting:FindFirstChild("NightDeliveryAtmosphere") then
-		local atmosphere = Instance.new("Atmosphere")
+	local label = Instance.new("TextLabel")
+	label.Size = UDim2.fromScale(1, 1)
+	label.BackgroundTransparency = 1
+	label.Text = text
+	label.TextScaled = true
+	label.TextColor3 = Color3.fromRGB(245, 250, 255)
+	label.Font = Enum.Font.GothamBold
+	label.Parent = gui
+	return label
+end
+
+local function setupLighting()
+	Lighting.ClockTime = 22.35
+	Lighting.Brightness = 1.35
+	Lighting.Ambient = Color3.fromRGB(67, 72, 96)
+	Lighting.OutdoorAmbient = Color3.fromRGB(42, 47, 68)
+	Lighting.FogColor = Color3.fromRGB(34, 39, 57)
+	Lighting.FogEnd = 700
+
+	local atmosphere = Lighting:FindFirstChild("NightDeliveryAtmosphere")
+	if not atmosphere then
+		atmosphere = Instance.new("Atmosphere")
 		atmosphere.Name = "NightDeliveryAtmosphere"
-		atmosphere.Density = 0.22
-		atmosphere.Haze = 1.2
-		atmosphere.Color = Color3.fromRGB(150, 165, 210)
-		atmosphere.Decay = Color3.fromRGB(75, 80, 110)
 		atmosphere.Parent = Lighting
 	end
+	atmosphere.Density = 0.2
+	atmosphere.Haze = 1.1
+	atmosphere.Color = Color3.fromRGB(145, 159, 205)
+	atmosphere.Decay = Color3.fromRGB(73, 78, 110)
 end
 
 local function createStreetLight(position)
-	local pole = makePart(
+	makePart(
 		"StreetLightPole",
 		Vector3.new(0.6, 10, 0.6),
 		position + Vector3.new(0, 5, 0),
@@ -93,14 +144,12 @@ local function createStreetLight(position)
 	light.Range = 24
 	light.Color = Color3.fromRGB(255, 229, 174)
 	light.Parent = lamp
-
-	return pole, lamp
 end
 
-local function createHouse(id, position, bodyColor)
+local function createHouse(id, displayName, position, bodyColor)
 	local model = Instance.new("Model")
 	model.Name = id
-	model:SetAttribute("HouseId", id)
+	model:SetAttribute("DisplayName", displayName)
 	model.Parent = housesFolder
 
 	local body = makePart(
@@ -111,7 +160,7 @@ local function createHouse(id, position, bodyColor)
 		model
 	)
 
-	local roof = makePart(
+	makePart(
 		"Roof",
 		Vector3.new(20, 2, 18),
 		position + Vector3.new(0, 13, 0),
@@ -120,7 +169,7 @@ local function createHouse(id, position, bodyColor)
 		Enum.Material.Slate
 	)
 
-	local door = makePart(
+	makePart(
 		"Door",
 		Vector3.new(4, 7, 0.6),
 		position + Vector3.new(0, 3.5, -8.3),
@@ -140,9 +189,9 @@ local function createHouse(id, position, bodyColor)
 	local prompt = Instance.new("ProximityPrompt")
 	prompt.Name = "DeliverPrompt"
 	prompt.ActionText = "配達する"
-	prompt.ObjectText = id
+	prompt.ObjectText = displayName
 	prompt.KeyboardKeyCode = Enum.KeyCode.E
-	prompt.HoldDuration = 0.25
+	prompt.HoldDuration = 0.2
 	prompt.MaxActivationDistance = 10
 	prompt.RequiresLineOfSight = false
 	prompt.Parent = porch
@@ -151,6 +200,7 @@ local function createHouse(id, position, bodyColor)
 		Vector3.new(-5, 7, -8.35),
 		Vector3.new(5, 7, -8.35),
 	}
+
 	for index, offset in ipairs(windowOffsets) do
 		local window = makePart(
 			"Window" .. index,
@@ -160,8 +210,9 @@ local function createHouse(id, position, bodyColor)
 			model,
 			Enum.Material.Neon
 		)
+
 		local light = Instance.new("PointLight")
-		light.Brightness = 0.55
+		light.Brightness = 0.5
 		light.Range = 11
 		light.Color = Color3.fromRGB(255, 222, 160)
 		light.Parent = window
@@ -176,32 +227,41 @@ local function createWorld()
 
 	makePart(
 		"Ground",
-		Vector3.new(280, 1, 220),
+		Vector3.new(320, 1, 260),
 		Vector3.new(0, -0.5, 10),
-		Color3.fromRGB(48, 62, 58),
+		Color3.fromRGB(47, 61, 57),
 		world,
 		Enum.Material.Grass
 	)
 
 	makePart(
 		"MainRoad",
-		Vector3.new(34, 0.3, 220),
+		Vector3.new(34, 0.3, 260),
 		Vector3.new(0, 0.15, 10),
 		Color3.fromRGB(45, 47, 52),
 		world,
-		Enum.Material.Asphalt
+		Enum.Material.Pavement
 	)
 
 	makePart(
 		"CrossRoad",
-		Vector3.new(280, 0.3, 28),
+		Vector3.new(320, 0.3, 28),
 		Vector3.new(0, 0.17, 20),
 		Color3.fromRGB(45, 47, 52),
 		world,
-		Enum.Material.Asphalt
+		Enum.Material.Pavement
 	)
 
-	for z = -80, 100, 30 do
+	makePart(
+		"NorthRoad",
+		Vector3.new(240, 0.3, 24),
+		Vector3.new(0, 0.17, 95),
+		Color3.fromRGB(45, 47, 52),
+		world,
+		Enum.Material.Pavement
+	)
+
+	for z = -100, 120, 30 do
 		createStreetLight(Vector3.new(-21, 0, z))
 		createStreetLight(Vector3.new(21, 0, z))
 	end
@@ -212,8 +272,8 @@ local function createWorld()
 
 	makePart(
 		"DepotBuilding",
-		Vector3.new(24, 10, 18),
-		Vector3.new(-72, 5, -55),
+		Vector3.new(26, 10, 20),
+		Vector3.new(-82, 5, -70),
 		Color3.fromRGB(52, 77, 93),
 		depot
 	)
@@ -221,7 +281,7 @@ local function createWorld()
 	local depotPad = makePart(
 		"JobCounter",
 		Vector3.new(9, 1, 7),
-		Vector3.new(-72, 0.5, -68),
+		Vector3.new(-82, 0.5, -84),
 		Color3.fromRGB(240, 186, 86),
 		depot,
 		Enum.Material.Neon
@@ -232,93 +292,251 @@ local function createWorld()
 	depotPrompt.ActionText = "配達を受ける"
 	depotPrompt.ObjectText = "夜間配達所"
 	depotPrompt.KeyboardKeyCode = Enum.KeyCode.E
-	depotPrompt.HoldDuration = 0.35
+	depotPrompt.HoldDuration = 0.25
 	depotPrompt.MaxActivationDistance = 12
 	depotPrompt.RequiresLineOfSight = false
 	depotPrompt.Parent = depotPad
 
 	local sign = makePart(
 		"DepotSign",
-		Vector3.new(12, 3, 0.6),
-		Vector3.new(-72, 9, -64),
+		Vector3.new(14, 3, 0.6),
+		Vector3.new(-82, 9, -79),
 		Color3.fromRGB(102, 184, 225),
 		depot,
 		Enum.Material.Neon
 	)
+	makeSurfaceText(sign, "NIGHT DELIVERY")
 
-	local signGui = Instance.new("SurfaceGui")
-	signGui.Face = Enum.NormalId.Front
-	signGui.Parent = sign
-	local signText = Instance.new("TextLabel")
-	signText.Size = UDim2.fromScale(1, 1)
-	signText.BackgroundTransparency = 1
-	signText.Text = "NIGHT DELIVERY"
-	signText.TextScaled = true
-	signText.TextColor3 = Color3.fromRGB(245, 250, 255)
-	signText.Font = Enum.Font.GothamBold
-	signText.Parent = signGui
+	local spawn = Instance.new("SpawnLocation")
+	spawn.Name = "DeliverySpawn"
+	spawn.Size = Vector3.new(8, 1, 8)
+	spawn.Position = Vector3.new(-58, 0.5, -72)
+	spawn.Anchored = true
+	spawn.Neutral = true
+	spawn.Transparency = 0.25
+	spawn.Color = Color3.fromRGB(97, 145, 181)
+	spawn.Parent = world
+
+	local bikePad = makePart(
+		"BikeStand",
+		Vector3.new(8, 0.7, 6),
+		Vector3.new(-58, 0.35, -88),
+		Color3.fromRGB(76, 168, 188),
+		depot,
+		Enum.Material.Neon
+	)
+	local bikePrompt = Instance.new("ProximityPrompt")
+	bikePrompt.Name = "BikeModePrompt"
+	bikePrompt.ActionText = "自転車モード切替"
+	bikePrompt.ObjectText = "配達自転車"
+	bikePrompt.KeyboardKeyCode = Enum.KeyCode.B
+	bikePrompt.HoldDuration = 0.2
+	bikePrompt.MaxActivationDistance = 12
+	bikePrompt.RequiresLineOfSight = false
+	bikePrompt.Parent = bikePad
+
+	local shopPad = makePart(
+		"SpeedShop",
+		Vector3.new(8, 0.7, 6),
+		Vector3.new(-70, 0.35, -88),
+		Color3.fromRGB(147, 108, 208),
+		depot,
+		Enum.Material.Neon
+	)
+	local shopPrompt = Instance.new("ProximityPrompt")
+	shopPrompt.Name = "SpeedUpgradePrompt"
+	shopPrompt.ActionText = "速度を強化"
+	shopPrompt.ObjectText = "自転車ショップ"
+	shopPrompt.KeyboardKeyCode = Enum.KeyCode.U
+	shopPrompt.HoldDuration = 0.2
+	shopPrompt.MaxActivationDistance = 12
+	shopPrompt.RequiresLineOfSight = false
+	shopPrompt.Parent = shopPad
 
 	local houseDefinitions = {
-		{name = "Blue House", position = Vector3.new(-70, 0, 48), color = Color3.fromRGB(74, 111, 154)},
-		{name = "Red House", position = Vector3.new(70, 0, 60), color = Color3.fromRGB(146, 76, 72)},
-		{name = "Green House", position = Vector3.new(-74, 0, 96), color = Color3.fromRGB(77, 124, 94)},
-		{name = "Yellow House", position = Vector3.new(74, 0, -8), color = Color3.fromRGB(151, 127, 69)},
-		{name = "Purple House", position = Vector3.new(72, 0, -68), color = Color3.fromRGB(111, 81, 137)},
+		{name = "BlueHouse", displayName = "青い家", position = Vector3.new(-72, 0, 46), color = Color3.fromRGB(74, 111, 154)},
+		{name = "RedHouse", displayName = "赤い家", position = Vector3.new(72, 0, 60), color = Color3.fromRGB(146, 76, 72)},
+		{name = "GreenHouse", displayName = "緑の家", position = Vector3.new(-78, 0, 102), color = Color3.fromRGB(77, 124, 94)},
+		{name = "YellowHouse", displayName = "黄色い家", position = Vector3.new(76, 0, -8), color = Color3.fromRGB(151, 127, 69)},
+		{name = "PurpleHouse", displayName = "紫の家", position = Vector3.new(78, 0, -72), color = Color3.fromRGB(111, 81, 137)},
+		{name = "WhiteHouse", displayName = "白い家", position = Vector3.new(-112, 0, 96), color = Color3.fromRGB(180, 184, 190)},
+		{name = "OrangeHouse", displayName = "橙の家", position = Vector3.new(118, 0, 96), color = Color3.fromRGB(173, 107, 65)},
+		{name = "MintHouse", displayName = "ミントの家", position = Vector3.new(112, 0, 24), color = Color3.fromRGB(93, 151, 145)},
 	}
 
 	local prompts = {}
-
 	for _, definition in ipairs(houseDefinitions) do
-		local _, prompt = createHouse(definition.name, definition.position, definition.color)
+		local _, prompt = createHouse(definition.name, definition.displayName, definition.position, definition.color)
 		table.insert(prompts, {
 			houseName = definition.name,
+			displayName = definition.displayName,
 			prompt = prompt,
 		})
 	end
 
-	return depotPrompt, prompts
+	return depotPrompt, bikePrompt, shopPrompt, prompts
 end
 
-local function getCoins(player)
+local function sendStatus(player, action, payload)
+	deliveryEvent:FireClient(player, action, payload or {})
+end
+
+local function getStats(player)
 	local leaderstats = player:FindFirstChild("leaderstats")
 	if not leaderstats then
 		return nil
 	end
-	return leaderstats:FindFirstChild("Coins")
+
+	return {
+		coins = leaderstats:FindFirstChild("Coins"),
+		deliveries = leaderstats:FindFirstChild("Deliveries"),
+	}
 end
 
-local function sendStatus(player, action, payload)
-	deliveryEvent:FireClient(player, action, payload)
+local function getSpeedUpgradeCost(level)
+	return 150 + (level * 125)
+end
+
+local function applyMovementSpeed(player)
+	local character = player.Character
+	if not character then
+		return
+	end
+
+	local humanoid = character:FindFirstChildOfClass("Humanoid")
+	if not humanoid then
+		return
+	end
+
+	local speedLevel = player:GetAttribute("SpeedLevel") or 0
+	local bikeActive = player:GetAttribute("BikeActive") == true
+	local targetSpeed = BASE_WALK_SPEED + (speedLevel * SPEED_PER_LEVEL)
+
+	if bikeActive then
+		targetSpeed += BIKE_BONUS_SPEED
+	end
+
+	humanoid.WalkSpeed = targetSpeed
+end
+
+local function clearParcelVisual(player)
+	local character = player.Character
+	if not character then
+		return
+	end
+
+	local old = character:FindFirstChild("DeliveryParcel")
+	if old then
+		old:Destroy()
+	end
+end
+
+local function addParcelVisual(player, jobTypeId)
+	local character = player.Character
+	if not character then
+		return
+	end
+
+	clearParcelVisual(player)
+
+	local root = character:FindFirstChild("HumanoidRootPart")
+	if not root then
+		return
+	end
+
+	local parcel = Instance.new("Part")
+	parcel.Name = "DeliveryParcel"
+	parcel.Size = Vector3.new(2.2, 1.7, 1.3)
+	parcel.Color = jobTypeId == "express"
+		and Color3.fromRGB(255, 178, 72)
+		or Color3.fromRGB(176, 132, 82)
+	parcel.Material = Enum.Material.SmoothPlastic
+	parcel.CanCollide = false
+	parcel.CanQuery = false
+	parcel.Massless = true
+	parcel.CFrame = root.CFrame * CFrame.new(0, 0.5, 1.35)
+	parcel.Parent = character
+
+	local weld = Instance.new("WeldConstraint")
+	weld.Part0 = root
+	weld.Part1 = parcel
+	weld.Parent = parcel
+end
+
+local function chooseJobType()
+	local totalWeight = 0
+	for _, jobType in ipairs(JOB_TYPES) do
+		totalWeight += jobType.weight
+	end
+
+	local roll = math.random() * totalWeight
+	local cursor = 0
+
+	for _, jobType in ipairs(JOB_TYPES) do
+		cursor += jobType.weight
+		if roll <= cursor then
+			return jobType
+		end
+	end
+
+	return JOB_TYPES[1]
+end
+
+local function findJobType(id)
+	for _, jobType in ipairs(JOB_TYPES) do
+		if jobType.id == id then
+			return jobType
+		end
+	end
+	return JOB_TYPES[1]
 end
 
 local function assignJob(player)
+	if playerJobs[player] then
+		sendStatus(player, "Message", {
+			text = "すでに配達中だよ。今の荷物を先に届けよう。",
+		})
+		return
+	end
+
 	local houses = housesFolder:GetChildren()
 	if #houses == 0 then
 		return
 	end
 
-	local current = playerJobs[player]
 	local candidates = {}
+	local lastHouse = playerLastHouse[player]
 
 	for _, house in ipairs(houses) do
-		if not current or house.Name ~= current.houseName or #houses == 1 then
+		if house.Name ~= lastHouse or #houses == 1 then
 			table.insert(candidates, house)
 		end
 	end
 
 	local target = candidates[math.random(1, #candidates)]
-	local expiresAt = workspace:GetServerTimeNow() + ROUND_TIME
+	local jobType = chooseJobType()
+	local now = workspace:GetServerTimeNow()
+	local expiresAt = now + jobType.timeLimit
 
 	playerJobs[player] = {
 		houseName = target.Name,
+		displayName = target:GetAttribute("DisplayName") or target.Name,
+		jobTypeId = jobType.id,
 		expiresAt = expiresAt,
-		startedAt = workspace:GetServerTimeNow(),
+		startedAt = now,
 	}
+
+	playerLastHouse[player] = target.Name
+	addParcelVisual(player, jobType.id)
 
 	sendStatus(player, "JobAssigned", {
 		houseName = target.Name,
+		displayName = target:GetAttribute("DisplayName") or target.Name,
+		jobTypeId = jobType.id,
+		jobTypeName = jobType.name,
 		expiresAt = expiresAt,
-		roundTime = ROUND_TIME,
+		timeLimit = jobType.timeLimit,
+		baseReward = jobType.baseReward,
 	})
 end
 
@@ -333,41 +551,137 @@ local function completeDelivery(player, houseName)
 
 	if job.houseName ~= houseName then
 		sendStatus(player, "Message", {
-			text = "ここじゃない。配達先を確認しよう。",
+			text = "ここじゃない。黄色く光っている配達先を確認しよう。",
 		})
 		return
 	end
 
+	local jobType = findJobType(job.jobTypeId)
 	local now = workspace:GetServerTimeNow()
 	local remaining = math.max(0, math.floor(job.expiresAt - now))
-	local reward = BASE_REWARD + (remaining * TIME_BONUS_PER_SECOND)
 
-	local coins = getCoins(player)
-	if coins then
-		coins.Value += reward
+	if remaining > 0 then
+		playerStreak[player] = (playerStreak[player] or 0) + 1
+	else
+		playerStreak[player] = 0
+	end
+
+	local streak = playerStreak[player] or 0
+	local streakBonus = math.min(streak, 5) * 10
+	local reward = jobType.baseReward + (remaining * jobType.timeBonusPerSecond) + streakBonus
+
+	local stats = getStats(player)
+	if stats and stats.coins and stats.deliveries then
+		stats.coins.Value += reward
+		stats.deliveries.Value += 1
 	end
 
 	playerJobs[player] = nil
+	clearParcelVisual(player)
 
 	sendStatus(player, "Delivered", {
 		houseName = houseName,
+		displayName = job.displayName,
 		reward = reward,
 		timeRemaining = remaining,
+		streak = streak,
+		streakBonus = streakBonus,
 	})
 end
 
-local depotPrompt, housePrompts = createWorld()
+local function toggleBike(player)
+	local active = not (player:GetAttribute("BikeActive") == true)
+	player:SetAttribute("BikeActive", active)
+	applyMovementSpeed(player)
 
-depotPrompt.Triggered:Connect(function(player)
-	if playerJobs[player] then
+	sendStatus(player, "BikeMode", {
+		active = active,
+		speedLevel = player:GetAttribute("SpeedLevel") or 0,
+	})
+end
+
+local function tryUpgradeSpeed(player)
+	local level = player:GetAttribute("SpeedLevel") or 0
+	if level >= MAX_SPEED_LEVEL then
 		sendStatus(player, "Message", {
-			text = "すでに配達中だよ。今の荷物を先に届けよう。",
+			text = "速度強化は最大レベルだよ。",
 		})
 		return
 	end
 
-	assignJob(player)
-end)
+	local stats = getStats(player)
+	if not stats or not stats.coins then
+		return
+	end
+
+	local cost = getSpeedUpgradeCost(level)
+	if stats.coins.Value < cost then
+		sendStatus(player, "Message", {
+			text = string.format("速度強化には %d Coins 必要。", cost),
+		})
+		return
+	end
+
+	stats.coins.Value -= cost
+	level += 1
+	player:SetAttribute("SpeedLevel", level)
+	applyMovementSpeed(player)
+
+	local nextCost = level < MAX_SPEED_LEVEL and getSpeedUpgradeCost(level) or 0
+	sendStatus(player, "SpeedUpgraded", {
+		level = level,
+		nextCost = nextCost,
+	})
+end
+
+local function loadData(player)
+	local defaultData = {
+		coins = 0,
+		deliveries = 0,
+		speedLevel = 0,
+	}
+
+	local success, data = pcall(function()
+		return DELIVERY_STORE:GetAsync("player_" .. player.UserId)
+	end)
+
+	if success and type(data) == "table" then
+		defaultData.coins = tonumber(data.coins) or 0
+		defaultData.deliveries = tonumber(data.deliveries) or 0
+		defaultData.speedLevel = math.clamp(tonumber(data.speedLevel) or 0, 0, MAX_SPEED_LEVEL)
+	elseif not success then
+		warn("Night Delivery: DataStore load failed for", player.Name, data)
+	end
+
+	return defaultData
+end
+
+local function saveData(player)
+	local stats = getStats(player)
+	if not stats or not stats.coins or not stats.deliveries then
+		return
+	end
+
+	local payload = {
+		coins = stats.coins.Value,
+		deliveries = stats.deliveries.Value,
+		speedLevel = player:GetAttribute("SpeedLevel") or 0,
+	}
+
+	local success, err = pcall(function()
+		DELIVERY_STORE:SetAsync("player_" .. player.UserId, payload)
+	end)
+
+	if not success then
+		warn("Night Delivery: DataStore save failed for", player.Name, err)
+	end
+end
+
+local depotPrompt, bikePrompt, shopPrompt, housePrompts = createWorld()
+
+depotPrompt.Triggered:Connect(assignJob)
+bikePrompt.Triggered:Connect(toggleBike)
+shopPrompt.Triggered:Connect(tryUpgradeSpeed)
 
 for _, entry in ipairs(housePrompts) do
 	entry.prompt.Triggered:Connect(function(player)
@@ -375,24 +689,62 @@ for _, entry in ipairs(housePrompts) do
 	end)
 end
 
-Players.PlayerAdded:Connect(function(player)
+local function setupPlayer(player)
+	local data = loadData(player)
+
 	local leaderstats = Instance.new("Folder")
 	leaderstats.Name = "leaderstats"
 	leaderstats.Parent = player
 
 	local coins = Instance.new("IntValue")
 	coins.Name = "Coins"
-	coins.Value = 0
+	coins.Value = data.coins
 	coins.Parent = leaderstats
+
+	local deliveries = Instance.new("IntValue")
+	deliveries.Name = "Deliveries"
+	deliveries.Value = data.deliveries
+	deliveries.Parent = leaderstats
+
+	player:SetAttribute("SpeedLevel", data.speedLevel)
+	player:SetAttribute("BikeActive", false)
+	playerStreak[player] = 0
 
 	player.CharacterAdded:Connect(function(character)
 		local humanoid = character:WaitForChild("Humanoid", 10)
 		if humanoid then
-			humanoid.WalkSpeed = 20
+			task.wait(0.2)
+			applyMovementSpeed(player)
+		end
+
+		task.wait(0.2)
+		if playerJobs[player] then
+			addParcelVisual(player, playerJobs[player].jobTypeId)
 		end
 	end)
-end)
+
+	sendStatus(player, "Welcome", {
+		speedLevel = data.speedLevel,
+		nextUpgradeCost = data.speedLevel < MAX_SPEED_LEVEL and getSpeedUpgradeCost(data.speedLevel) or 0,
+	})
+end
+
+Players.PlayerAdded:Connect(setupPlayer)
+
+for _, player in ipairs(Players:GetPlayers()) do
+	task.spawn(setupPlayer, player)
+end
 
 Players.PlayerRemoving:Connect(function(player)
+	saveData(player)
 	playerJobs[player] = nil
+	playerLastHouse[player] = nil
+	playerStreak[player] = nil
+end)
+
+game:BindToClose(function()
+	for _, player in ipairs(Players:GetPlayers()) do
+		saveData(player)
+	end
+	task.wait(1)
 end)

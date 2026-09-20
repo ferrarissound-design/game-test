@@ -1,6 +1,5 @@
--- Night Delivery client
--- Put this LocalScript in StarterPlayer > StarterPlayerScripts
--- if you are not using Rojo.
+-- Night Delivery v2
+-- StarterPlayer/StarterPlayerScripts/NightDelivery.client.lua
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -11,9 +10,12 @@ local player = Players.LocalPlayer
 local deliveryEvent = ReplicatedStorage:WaitForChild("NightDeliveryEvent")
 
 local currentHouseName = nil
+local currentDisplayName = nil
+local currentJobTypeName = nil
 local expiresAt = nil
 local currentHighlight = nil
 local currentBillboard = nil
+local bikeActive = false
 
 local gui = Instance.new("ScreenGui")
 gui.Name = "NightDeliveryUI"
@@ -23,12 +25,17 @@ gui.Parent = player:WaitForChild("PlayerGui")
 
 local panel = Instance.new("Frame")
 panel.Name = "DeliveryPanel"
-panel.Size = UDim2.fromOffset(330, 112)
-panel.Position = UDim2.new(0.5, -165, 0, 22)
+panel.Size = UDim2.fromOffset(360, 154)
+panel.Position = UDim2.new(0.5, -180, 0, 18)
 panel.BackgroundColor3 = Color3.fromRGB(22, 27, 38)
-panel.BackgroundTransparency = 0.08
+panel.BackgroundTransparency = 0.06
 panel.BorderSizePixel = 0
 panel.Parent = gui
+
+local sizeConstraint = Instance.new("UISizeConstraint")
+sizeConstraint.MinSize = Vector2.new(300, 154)
+sizeConstraint.MaxSize = Vector2.new(380, 154)
+sizeConstraint.Parent = panel
 
 local corner = Instance.new("UICorner")
 corner.CornerRadius = UDim.new(0, 14)
@@ -42,7 +49,7 @@ stroke.Parent = panel
 
 local title = Instance.new("TextLabel")
 title.Size = UDim2.new(1, -24, 0, 28)
-title.Position = UDim2.fromOffset(12, 10)
+title.Position = UDim2.fromOffset(12, 8)
 title.BackgroundTransparency = 1
 title.Text = "🌙 静かな夜間配達"
 title.TextColor3 = Color3.fromRGB(232, 241, 255)
@@ -52,8 +59,8 @@ title.TextXAlignment = Enum.TextXAlignment.Left
 title.Parent = panel
 
 local targetLabel = Instance.new("TextLabel")
-targetLabel.Size = UDim2.new(1, -24, 0, 28)
-targetLabel.Position = UDim2.fromOffset(12, 42)
+targetLabel.Size = UDim2.new(1, -24, 0, 25)
+targetLabel.Position = UDim2.fromOffset(12, 39)
 targetLabel.BackgroundTransparency = 1
 targetLabel.Text = "配達所で荷物を受け取ろう"
 targetLabel.TextColor3 = Color3.fromRGB(210, 219, 232)
@@ -62,19 +69,41 @@ targetLabel.TextSize = 17
 targetLabel.TextXAlignment = Enum.TextXAlignment.Left
 targetLabel.Parent = panel
 
+local jobLabel = Instance.new("TextLabel")
+jobLabel.Size = UDim2.new(1, -24, 0, 22)
+jobLabel.Position = UDim2.fromOffset(12, 66)
+jobLabel.BackgroundTransparency = 1
+jobLabel.Text = "通常便 / 速達便 / 遠距離便"
+jobLabel.TextColor3 = Color3.fromRGB(157, 190, 225)
+jobLabel.Font = Enum.Font.GothamMedium
+jobLabel.TextSize = 15
+jobLabel.TextXAlignment = Enum.TextXAlignment.Left
+jobLabel.Parent = panel
+
 local timerLabel = Instance.new("TextLabel")
-timerLabel.Size = UDim2.new(1, -24, 0, 24)
-timerLabel.Position = UDim2.fromOffset(12, 76)
+timerLabel.Size = UDim2.new(1, -24, 0, 22)
+timerLabel.Position = UDim2.fromOffset(12, 90)
 timerLabel.BackgroundTransparency = 1
 timerLabel.Text = ""
 timerLabel.TextColor3 = Color3.fromRGB(255, 219, 138)
 timerLabel.Font = Enum.Font.GothamMedium
-timerLabel.TextSize = 16
+timerLabel.TextSize = 15
 timerLabel.TextXAlignment = Enum.TextXAlignment.Left
 timerLabel.Parent = panel
 
+local statsLabel = Instance.new("TextLabel")
+statsLabel.Size = UDim2.new(1, -24, 0, 23)
+statsLabel.Position = UDim2.fromOffset(12, 117)
+statsLabel.BackgroundTransparency = 1
+statsLabel.Text = "Coins 0  •  配達 0  •  🚲 OFF"
+statsLabel.TextColor3 = Color3.fromRGB(190, 206, 220)
+statsLabel.Font = Enum.Font.Gotham
+statsLabel.TextSize = 14
+statsLabel.TextXAlignment = Enum.TextXAlignment.Left
+statsLabel.Parent = panel
+
 local toast = Instance.new("TextLabel")
-toast.Size = UDim2.fromOffset(360, 54)
+toast.Size = UDim2.fromOffset(360, 58)
 toast.Position = UDim2.new(0.5, -180, 1, -92)
 toast.BackgroundColor3 = Color3.fromRGB(20, 24, 32)
 toast.BackgroundTransparency = 1
@@ -90,6 +119,23 @@ local toastCorner = Instance.new("UICorner")
 toastCorner.CornerRadius = UDim.new(0, 12)
 toastCorner.Parent = toast
 
+local guide = Instance.new("TextLabel")
+guide.Size = UDim2.fromOffset(330, 46)
+guide.Position = UDim2.new(0.5, -165, 1, -148)
+guide.BackgroundColor3 = Color3.fromRGB(28, 34, 44)
+guide.BackgroundTransparency = 0.18
+guide.TextColor3 = Color3.fromRGB(215, 226, 238)
+guide.Font = Enum.Font.Gotham
+guide.TextSize = 14
+guide.TextWrapped = true
+guide.Text = "配達所: 受注 / 青い床: 自転車 / 紫の床: 速度強化"
+guide.BorderSizePixel = 0
+guide.Parent = gui
+
+local guideCorner = Instance.new("UICorner")
+guideCorner.CornerRadius = UDim.new(0, 10)
+guideCorner.Parent = guide
+
 local function showToast(text)
 	toast.Text = text
 	TweenService:Create(toast, TweenInfo.new(0.18), {
@@ -97,7 +143,7 @@ local function showToast(text)
 		TextTransparency = 0,
 	}):Play()
 
-	task.delay(2.5, function()
+	task.delay(2.7, function()
 		TweenService:Create(toast, TweenInfo.new(0.25), {
 			BackgroundTransparency = 1,
 			TextTransparency = 1,
@@ -153,7 +199,7 @@ local function setWaypoint(houseName)
 
 	local billboard = Instance.new("BillboardGui")
 	billboard.Name = "LocalDeliveryMarker"
-	billboard.Size = UDim2.fromOffset(170, 46)
+	billboard.Size = UDim2.fromOffset(185, 48)
 	billboard.StudsOffset = Vector3.new(0, 10, 0)
 	billboard.AlwaysOnTop = true
 	billboard.Adornee = body
@@ -163,32 +209,93 @@ local function setWaypoint(houseName)
 	local label = Instance.new("TextLabel")
 	label.Size = UDim2.fromScale(1, 1)
 	label.BackgroundColor3 = Color3.fromRGB(28, 32, 40)
-	label.BackgroundTransparency = 0.12
-	label.Text = "📦 配達先"
+	label.BackgroundTransparency = 0.1
+	label.Text = "📦 " .. (currentDisplayName or "配達先")
 	label.TextColor3 = Color3.fromRGB(255, 236, 170)
 	label.TextScaled = true
 	label.Font = Enum.Font.GothamBold
 	label.Parent = billboard
 
-	local corner = Instance.new("UICorner")
-	corner.CornerRadius = UDim.new(0, 10)
-	corner.Parent = label
+	local labelCorner = Instance.new("UICorner")
+	labelCorner.CornerRadius = UDim.new(0, 10)
+	labelCorner.Parent = label
 end
+
+local function updateStats()
+	local leaderstats = player:FindFirstChild("leaderstats")
+	local coins = leaderstats and leaderstats:FindFirstChild("Coins")
+	local deliveries = leaderstats and leaderstats:FindFirstChild("Deliveries")
+
+	local coinText = coins and coins.Value or 0
+	local deliveryText = deliveries and deliveries.Value or 0
+	local bikeText = bikeActive and "🚲 ON" or "🚲 OFF"
+
+	statsLabel.Text = string.format("Coins %d  •  配達 %d  •  %s", coinText, deliveryText, bikeText)
+end
+
+local function connectStats()
+	local leaderstats = player:WaitForChild("leaderstats", 10)
+	if not leaderstats then
+		return
+	end
+
+	local coins = leaderstats:WaitForChild("Coins", 5)
+	local deliveries = leaderstats:WaitForChild("Deliveries", 5)
+
+	if coins then
+		coins:GetPropertyChangedSignal("Value"):Connect(updateStats)
+	end
+	if deliveries then
+		deliveries:GetPropertyChangedSignal("Value"):Connect(updateStats)
+	end
+
+	updateStats()
+end
+
+task.spawn(connectStats)
 
 deliveryEvent.OnClientEvent:Connect(function(action, payload)
 	if action == "JobAssigned" then
 		currentHouseName = payload.houseName
+		currentDisplayName = payload.displayName
+		currentJobTypeName = payload.jobTypeName
 		expiresAt = payload.expiresAt
-		targetLabel.Text = "配達先: " .. currentHouseName
+
+		targetLabel.Text = "配達先: " .. (currentDisplayName or currentHouseName)
+		jobLabel.Text = string.format("%s  •  基本報酬 %d", currentJobTypeName or "配達", payload.baseReward or 0)
+
 		setWaypoint(currentHouseName)
 		showToast("荷物を受け取った。黄色く光る家へ届けよう。")
 	elseif action == "Delivered" then
-		showToast(string.format("配達完了！ +%d Coins", payload.reward))
+		local bonusText = ""
+		if (payload.streakBonus or 0) > 0 then
+			bonusText = string.format("  連続ボーナス +%d", payload.streakBonus)
+		end
+		showToast(string.format("配達完了！ +%d Coins%s", payload.reward or 0, bonusText))
+
 		currentHouseName = nil
+		currentDisplayName = nil
+		currentJobTypeName = nil
 		expiresAt = nil
+
 		targetLabel.Text = "配達所で次の荷物を受け取ろう"
+		jobLabel.Text = "通常便 / 速達便 / 遠距離便"
 		timerLabel.Text = ""
 		clearWaypoint()
+	elseif action == "BikeMode" then
+		bikeActive = payload.active == true
+		updateStats()
+		if bikeActive then
+			showToast("🚲 自転車モードON。移動速度アップ！")
+		else
+			showToast("自転車モードOFF。")
+		end
+	elseif action == "SpeedUpgraded" then
+		showToast(string.format("速度Lv.%d に強化！", payload.level or 0))
+	elseif action == "Welcome" then
+		if (payload.speedLevel or 0) > 0 then
+			showToast(string.format("おかえり！ 速度Lv.%d", payload.speedLevel))
+		end
 	elseif action == "Message" then
 		showToast(payload.text or "")
 	end
@@ -200,7 +307,7 @@ RunService.RenderStepped:Connect(function()
 		timerLabel.Text = string.format("残り %d秒  •  早いほどボーナス", remaining)
 
 		if remaining <= 0 then
-			timerLabel.Text = "時間切れでも配達OK  •  基本報酬のみ"
+			timerLabel.Text = "時間切れ  •  基本報酬で配達可能"
 		end
 	end
 end)
