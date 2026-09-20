@@ -240,7 +240,7 @@ local function createWorld()
 		Vector3.new(0, 0.15, 10),
 		Color3.fromRGB(45, 47, 52),
 		world,
-		Enum.Material.Asphalt
+		Enum.Material.Pavement
 	)
 
 	makePart(
@@ -249,7 +249,7 @@ local function createWorld()
 		Vector3.new(0, 0.17, 20),
 		Color3.fromRGB(45, 47, 52),
 		world,
-		Enum.Material.Asphalt
+		Enum.Material.Pavement
 	)
 
 	makePart(
@@ -258,7 +258,7 @@ local function createWorld()
 		Vector3.new(0, 0.17, 95),
 		Color3.fromRGB(45, 47, 52),
 		world,
-		Enum.Material.Asphalt
+		Enum.Material.Pavement
 	)
 
 	for z = -100, 120, 30 do
