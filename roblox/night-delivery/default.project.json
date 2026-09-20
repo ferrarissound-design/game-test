@@ -1,0 +1,21 @@
+{
+  "name": "NightDeliveryPrototype",
+  "tree": {
+    "$className": "DataModel",
+    "ServerScriptService": {
+      "$className": "ServerScriptService",
+      "NightDelivery": {
+        "$path": "src/ServerScriptService/NightDelivery.server.lua"
+      }
+    },
+    "StarterPlayer": {
+      "$className": "StarterPlayer",
+      "StarterPlayerScripts": {
+        "$className": "StarterPlayerScripts",
+        "NightDeliveryClient": {
+          "$path": "src/StarterPlayer/StarterPlayerScripts/NightDelivery.client.lua"
+        }
+      }
+    }
+  }
+}
