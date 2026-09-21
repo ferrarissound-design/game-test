@@ -1,4 +1,4 @@
--- Night Delivery v2
+-- Night Delivery v3
 -- StarterPlayer/StarterPlayerScripts/NightDelivery.client.lua
 
 local Players = game:GetService("Players")
@@ -9,9 +9,14 @@ local TweenService = game:GetService("TweenService")
 local player = Players.LocalPlayer
 local deliveryEvent = ReplicatedStorage:WaitForChild("NightDeliveryEvent")
 
+local RIVERSIDE_UNLOCK_DELIVERIES = 5
+local SPECIAL_JOB_UNLOCK_DELIVERIES = 8
+
 local currentHouseName = nil
 local currentDisplayName = nil
+local currentDistrictName = nil
 local currentJobTypeName = nil
+local currentJobTypeId = nil
 local expiresAt = nil
 local currentHighlight = nil
 local currentBillboard = nil
@@ -25,7 +30,7 @@ gui.Parent = player:WaitForChild("PlayerGui")
 
 local panel = Instance.new("Frame")
 panel.Name = "DeliveryPanel"
-panel.Size = UDim2.fromOffset(360, 154)
+panel.Size = UDim2.fromOffset(360, 176)
 panel.Position = UDim2.new(0.5, -180, 0, 18)
 panel.BackgroundColor3 = Color3.fromRGB(22, 27, 38)
 panel.BackgroundTransparency = 0.06
@@ -33,8 +38,8 @@ panel.BorderSizePixel = 0
 panel.Parent = gui
 
 local sizeConstraint = Instance.new("UISizeConstraint")
-sizeConstraint.MinSize = Vector2.new(300, 154)
-sizeConstraint.MaxSize = Vector2.new(380, 154)
+sizeConstraint.MinSize = Vector2.new(300, 176)
+sizeConstraint.MaxSize = Vector2.new(380, 176)
 sizeConstraint.Parent = panel
 
 local corner = Instance.new("UICorner")
@@ -102,6 +107,17 @@ statsLabel.TextSize = 14
 statsLabel.TextXAlignment = Enum.TextXAlignment.Left
 statsLabel.Parent = panel
 
+local progressLabel = Instance.new("TextLabel")
+progressLabel.Size = UDim2.new(1, -24, 0, 22)
+progressLabel.Position = UDim2.fromOffset(12, 143)
+progressLabel.BackgroundTransparency = 1
+progressLabel.Text = "川沿い地区まであと5件"
+progressLabel.TextColor3 = Color3.fromRGB(145, 207, 184)
+progressLabel.Font = Enum.Font.GothamMedium
+progressLabel.TextSize = 14
+progressLabel.TextXAlignment = Enum.TextXAlignment.Left
+progressLabel.Parent = panel
+
 local toast = Instance.new("TextLabel")
 toast.Size = UDim2.fromOffset(360, 58)
 toast.Position = UDim2.new(0.5, -180, 1, -92)
@@ -136,7 +152,12 @@ local guideCorner = Instance.new("UICorner")
 guideCorner.CornerRadius = UDim.new(0, 10)
 guideCorner.Parent = guide
 
+local toastSerial = 0
+
 local function showToast(text)
+	toastSerial += 1
+	local serial = toastSerial
+
 	toast.Text = text
 	TweenService:Create(toast, TweenInfo.new(0.18), {
 		BackgroundTransparency = 0.14,
@@ -144,6 +165,10 @@ local function showToast(text)
 	}):Play()
 
 	task.delay(2.7, function()
+		if serial ~= toastSerial then
+			return
+		end
+
 		TweenService:Create(toast, TweenInfo.new(0.25), {
 			BackgroundTransparency = 1,
 			TextTransparency = 1,
@@ -231,6 +256,19 @@ local function updateStats()
 	local bikeText = bikeActive and "🚲 ON" or "🚲 OFF"
 
 	statsLabel.Text = string.format("Coins %d  •  配達 %d  •  %s", coinText, deliveryText, bikeText)
+
+	if deliveryText < RIVERSIDE_UNLOCK_DELIVERIES then
+		local remaining = RIVERSIDE_UNLOCK_DELIVERIES - deliveryText
+		progressLabel.Text = string.format("🌉 川沿い地区まであと%d件", remaining)
+		progressLabel.TextColor3 = Color3.fromRGB(145, 207, 184)
+	elseif deliveryText < SPECIAL_JOB_UNLOCK_DELIVERIES then
+		local remaining = SPECIAL_JOB_UNLOCK_DELIVERIES - deliveryText
+		progressLabel.Text = string.format("🌉 川沿い地区 解放済み  •  特別便まであと%d件", remaining)
+		progressLabel.TextColor3 = Color3.fromRGB(151, 201, 230)
+	else
+		progressLabel.Text = "🌉 川沿い地区 解放済み  •  🟣 深夜特別便 解放済み"
+		progressLabel.TextColor3 = Color3.fromRGB(197, 157, 238)
+	end
 end
 
 local function connectStats()
@@ -258,14 +296,27 @@ deliveryEvent.OnClientEvent:Connect(function(action, payload)
 	if action == "JobAssigned" then
 		currentHouseName = payload.houseName
 		currentDisplayName = payload.displayName
+		currentDistrictName = payload.districtName
 		currentJobTypeName = payload.jobTypeName
+		currentJobTypeId = payload.jobTypeId
 		expiresAt = payload.expiresAt
 
-		targetLabel.Text = "配達先: " .. (currentDisplayName or currentHouseName)
+		targetLabel.Text = string.format(
+			"配達先: %s  •  %s",
+			currentDisplayName or currentHouseName,
+			currentDistrictName or "住宅街"
+		)
 		jobLabel.Text = string.format("%s  •  基本報酬 %d", currentJobTypeName or "配達", payload.baseReward or 0)
+		jobLabel.TextColor3 = currentJobTypeId == "special"
+			and Color3.fromRGB(214, 156, 255)
+			or Color3.fromRGB(157, 190, 225)
 
 		setWaypoint(currentHouseName)
-		showToast("荷物を受け取った。黄色く光る家へ届けよう。")
+		if currentJobTypeId == "special" then
+			showToast("🟣 深夜特別便！ 高報酬のレア依頼だ。")
+		else
+			showToast("荷物を受け取った。黄色く光る家へ届けよう。")
+		end
 	elseif action == "Delivered" then
 		local bonusText = ""
 		if (payload.streakBonus or 0) > 0 then
@@ -275,11 +326,14 @@ deliveryEvent.OnClientEvent:Connect(function(action, payload)
 
 		currentHouseName = nil
 		currentDisplayName = nil
+		currentDistrictName = nil
 		currentJobTypeName = nil
+		currentJobTypeId = nil
 		expiresAt = nil
 
 		targetLabel.Text = "配達所で次の荷物を受け取ろう"
-		jobLabel.Text = "通常便 / 速達便 / 遠距離便"
+		jobLabel.Text = "通常便 / 速達便 / 遠距離便 / 深夜特別便"
+		jobLabel.TextColor3 = Color3.fromRGB(157, 190, 225)
 		timerLabel.Text = ""
 		clearWaypoint()
 	elseif action == "BikeMode" then
@@ -292,10 +346,17 @@ deliveryEvent.OnClientEvent:Connect(function(action, payload)
 		end
 	elseif action == "SpeedUpgraded" then
 		showToast(string.format("速度Lv.%d に強化！", payload.level or 0))
+	elseif action == "DistrictUnlocked" then
+		showToast("🌉 川沿い地区が解放！ 新しい配達先が増えた。")
+		updateStats()
+	elseif action == "SpecialJobsUnlocked" then
+		showToast("🟣 深夜特別便が解放！ まれに高報酬の依頼が出る。")
+		updateStats()
 	elseif action == "Welcome" then
 		if (payload.speedLevel or 0) > 0 then
 			showToast(string.format("おかえり！ 速度Lv.%d", payload.speedLevel))
 		end
+		updateStats()
 	elseif action == "Message" then
 		showToast(payload.text or "")
 	end
