@@ -88,7 +88,7 @@ jobLabel.BackgroundTransparency = 1
 jobLabel.Text = "通常便 / 速達便 / 遠距離便"
 jobLabel.TextColor3 = Color3.fromRGB(157, 190, 225)
 jobLabel.Font = Enum.Font.GothamMedium
-jobLabel.TextSize = 15
+jobLabel.TextSize = 13
 jobLabel.TextXAlignment = Enum.TextXAlignment.Left
 jobLabel.Parent = panel
 
@@ -471,9 +471,11 @@ deliveryEvent.OnClientEvent:Connect(function(action, payload)
 
 		targetLabel.Text = "配達先: " .. (currentDisplayName or currentHouseName)
 		jobLabel.Text = string.format(
-			"%s  •  %s  •  基本報酬 %d",
+			"%s  •  %s  •  %s x%.2f  •  基本 %d",
 			currentDistrictName or "住宅街",
 			currentJobTypeName or "配達",
+			currentWeatherName,
+			currentWeatherMultiplier,
 			payload.baseReward or 0
 		)
 		jobLabel.TextColor3 = currentJobTypeId == "special"
