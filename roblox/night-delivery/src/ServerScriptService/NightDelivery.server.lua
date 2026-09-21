@@ -1,7 +1,7 @@
--- Night Delivery v3
+-- Night Delivery v4
 -- ServerScriptService/NightDelivery.server.lua
--- Self-contained prototype: generates the town, runs delivery jobs,
--- saves progression, unlocks a second district, and adds rare veteran jobs.
+-- Code-complete prototype: generated town, progression, dynamic weather,
+-- co-op bonuses, cosmetics, shop flow, rare jobs, and persistent upgrades.
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -18,10 +18,39 @@ local SPEED_PER_LEVEL = 2
 local MAX_SPEED_LEVEL = 5
 local RIVERSIDE_UNLOCK_DELIVERIES = 5
 local SPECIAL_JOB_UNLOCK_DELIVERIES = 8
+local WAREHOUSE_UNLOCK_DELIVERIES = 15
+local SHIFT_TARGET = 5
+local SHIFT_REWARD = 300
+local COOP_RANGE = 36
+local COOP_BONUS_PER_HELPER = 0.15
+local MAX_COOP_HELPERS = 2
+local HELPER_REWARD = 25
+local WEATHER_CHANGE_SECONDS = 150
 
 local DISTRICT_NAMES = {
 	central = "住宅街",
 	riverside = "川沿い地区",
+	warehouse = "倉庫街",
+}
+
+local WEATHER_TYPES = {
+	{id = "clear", name = "晴れ", rewardMultiplier = 1.0},
+	{id = "rain", name = "雨", rewardMultiplier = 1.25},
+	{id = "fog", name = "濃霧", rewardMultiplier = 1.15},
+}
+
+local BAG_STYLES = {
+	{name = "クラシック", cost = 0, color = Color3.fromRGB(176, 132, 82)},
+	{name = "ブルー", cost = 500, color = Color3.fromRGB(74, 141, 214)},
+	{name = "ネオン", cost = 1200, color = Color3.fromRGB(68, 235, 193)},
+	{name = "ゴールド", cost = 2500, color = Color3.fromRGB(236, 194, 74)},
+}
+
+local BIKE_STYLES = {
+	{name = "スチール", cost = 0, color = Color3.fromRGB(94, 126, 142)},
+	{name = "レッド", cost = 700, color = Color3.fromRGB(200, 76, 72)},
+	{name = "ネオン", cost = 1500, color = Color3.fromRGB(83, 213, 232)},
+	{name = "ゴールド", cost = 3000, color = Color3.fromRGB(228, 184, 67)},
 }
 
 local DELIVERY_STORE = DataStoreService:GetDataStore(DATASTORE_NAME)
@@ -88,6 +117,9 @@ housesFolder.Parent = world
 local playerJobs = {}
 local playerLastHouse = {}
 local playerStreak = {}
+local playerShiftProgress = {}
+local currentWeather = WEATHER_TYPES[1]
+local shopPadRef = nil
 
 local function makePart(name, size, position, color, parent, material)
 	local part = Instance.new("Part")
@@ -248,8 +280,8 @@ local function createWorld()
 
 	makePart(
 		"Ground",
-		Vector3.new(420, 1, 380),
-		Vector3.new(0, -0.5, 35),
+		Vector3.new(460, 1, 410),
+		Vector3.new(0, -0.5, 20),
 		Color3.fromRGB(47, 61, 57),
 		world,
 		Enum.Material.Grass
@@ -304,6 +336,19 @@ local function createWorld()
 
 	for x = -165, 165, 55 do
 		createStreetLight(Vector3.new(x, 0, 123))
+	end
+
+	makePart(
+		"WarehouseRoad",
+		Vector3.new(360, 0.3, 24),
+		Vector3.new(0, 0.17, -125),
+		Color3.fromRGB(42, 44, 49),
+		world,
+		Enum.Material.Pavement
+	)
+
+	for x = -165, 165, 55 do
+		createStreetLight(Vector3.new(x, 0, -113))
 	end
 
 	for z = -100, 120, 30 do
@@ -381,7 +426,7 @@ local function createWorld()
 	bikePrompt.Parent = bikePad
 
 	local shopPad = makePart(
-		"SpeedShop",
+		"UpgradeShop",
 		Vector3.new(8, 0.7, 6),
 		Vector3.new(-70, 0.35, -88),
 		Color3.fromRGB(147, 108, 208),
@@ -389,9 +434,9 @@ local function createWorld()
 		Enum.Material.Neon
 	)
 	local shopPrompt = Instance.new("ProximityPrompt")
-	shopPrompt.Name = "SpeedUpgradePrompt"
-	shopPrompt.ActionText = "速度を強化"
-	shopPrompt.ObjectText = "自転車ショップ"
+	shopPrompt.Name = "UpgradeShopPrompt"
+	shopPrompt.ActionText = "ショップを開く"
+	shopPrompt.ObjectText = "夜間配達ショップ"
 	shopPrompt.KeyboardKeyCode = Enum.KeyCode.U
 	shopPrompt.HoldDuration = 0.2
 	shopPrompt.MaxActivationDistance = 12
@@ -411,6 +456,10 @@ local function createWorld()
 		{name = "RiverPinkHouse", displayName = "川辺の桃色の家", districtId = "riverside", position = Vector3.new(-82, 0, 157), color = Color3.fromRGB(158, 101, 119)},
 		{name = "RiverTealHouse", displayName = "川辺の青緑の家", districtId = "riverside", position = Vector3.new(82, 0, 157), color = Color3.fromRGB(72, 132, 133)},
 		{name = "RiverCreamHouse", displayName = "川辺のクリームの家", districtId = "riverside", position = Vector3.new(150, 0, 157), color = Color3.fromRGB(181, 161, 119)},
+		{name = "Warehouse01", displayName = "第1倉庫", districtId = "warehouse", position = Vector3.new(-150, 0, -145), color = Color3.fromRGB(92, 101, 112)},
+		{name = "Warehouse02", displayName = "第2倉庫", districtId = "warehouse", position = Vector3.new(-78, 0, -145), color = Color3.fromRGB(110, 91, 81)},
+		{name = "Warehouse03", displayName = "第3倉庫", districtId = "warehouse", position = Vector3.new(78, 0, -145), color = Color3.fromRGB(82, 105, 99)},
+		{name = "Warehouse04", displayName = "第4倉庫", districtId = "warehouse", position = Vector3.new(150, 0, -145), color = Color3.fromRGB(105, 91, 118)},
 	}
 
 	local prompts = {}
@@ -423,6 +472,7 @@ local function createWorld()
 		})
 	end
 
+	shopPadRef = shopPad
 	return depotPrompt, bikePrompt, shopPrompt, prompts
 end
 
@@ -444,6 +494,39 @@ end
 
 local function getSpeedUpgradeCost(level)
 	return 150 + (level * 125)
+end
+
+local function getRankName(deliveries)
+	if deliveries >= 30 then
+		return "夜のエース"
+	elseif deliveries >= 15 then
+		return "ベテラン配達員"
+	elseif deliveries >= 5 then
+		return "配達員"
+	end
+	return "新人"
+end
+
+local function getStyle(styleTable, level)
+	local index = math.clamp((level or 0) + 1, 1, #styleTable)
+	return styleTable[index], index - 1
+end
+
+local function getNextStyle(styleTable, level)
+	local nextIndex = (level or 0) + 2
+	if nextIndex > #styleTable then
+		return nil
+	end
+	return styleTable[nextIndex], nextIndex - 1
+end
+
+local function isNearPart(player, part, range)
+	if not part then
+		return false
+	end
+	local character = player.Character
+	local root = character and character:FindFirstChild("HumanoidRootPart")
+	return root ~= nil and (root.Position - part.Position).Magnitude <= range
 end
 
 local function applyMovementSpeed(player)
@@ -480,6 +563,61 @@ local function clearParcelVisual(player)
 	end
 end
 
+local function clearBikeVisual(player)
+	local character = player.Character
+	if not character then
+		return
+	end
+	local old = character:FindFirstChild("DeliveryBikeVisual")
+	if old then
+		old:Destroy()
+	end
+end
+
+local function addBikeVisual(player)
+	clearBikeVisual(player)
+	if player:GetAttribute("BikeActive") ~= true then
+		return
+	end
+
+	local character = player.Character
+	local root = character and character:FindFirstChild("HumanoidRootPart")
+	if not root then
+		return
+	end
+
+	local style = getStyle(BIKE_STYLES, player:GetAttribute("BikeStyleLevel") or 0)
+	local model = Instance.new("Model")
+	model.Name = "DeliveryBikeVisual"
+	model.Parent = character
+
+	local function bikePart(name, size, offset, color, shape)
+		local part = Instance.new("Part")
+		part.Name = name
+		part.Size = size
+		part.Color = color
+		part.Material = Enum.Material.Metal
+		part.CanCollide = false
+		part.CanQuery = false
+		part.Massless = true
+		if shape then
+			part.Shape = shape
+		end
+		part.CFrame = root.CFrame * offset
+		part.Parent = model
+
+		local weld = Instance.new("WeldConstraint")
+		weld.Part0 = root
+		weld.Part1 = part
+		weld.Parent = part
+		return part
+	end
+
+	bikePart("Frame", Vector3.new(0.25, 1.4, 3.2), CFrame.new(0, -1.9, 0.7), style.color)
+	bikePart("WheelFront", Vector3.new(0.35, 2.3, 2.3), CFrame.new(0, -2.0, -1.0) * CFrame.Angles(0, 0, math.rad(90)), Color3.fromRGB(40, 42, 46), Enum.PartType.Cylinder)
+	bikePart("WheelBack", Vector3.new(0.35, 2.3, 2.3), CFrame.new(0, -2.0, 2.3) * CFrame.Angles(0, 0, math.rad(90)), Color3.fromRGB(40, 42, 46), Enum.PartType.Cylinder)
+end
+
 local function addParcelVisual(player, jobTypeId)
 	local character = player.Character
 	if not character then
@@ -497,6 +635,8 @@ local function addParcelVisual(player, jobTypeId)
 	parcel.Name = "DeliveryParcel"
 	parcel.Size = Vector3.new(2.2, 1.7, 1.3)
 
+	local bagStyle = getStyle(BAG_STYLES, player:GetAttribute("BagStyleLevel") or 0)
+
 	if jobTypeId == "special" then
 		parcel.Color = Color3.fromRGB(186, 112, 255)
 		parcel.Material = Enum.Material.Neon
@@ -507,7 +647,7 @@ local function addParcelVisual(player, jobTypeId)
 		parcel.Color = Color3.fromRGB(91, 151, 204)
 		parcel.Material = Enum.Material.SmoothPlastic
 	else
-		parcel.Color = Color3.fromRGB(176, 132, 82)
+		parcel.Color = bagStyle.color
 		parcel.Material = Enum.Material.SmoothPlastic
 	end
 
@@ -535,6 +675,8 @@ local function isHouseUnlocked(player, house)
 	local districtId = house:GetAttribute("DistrictId") or "central"
 	if districtId == "riverside" then
 		return getPlayerDeliveries(player) >= RIVERSIDE_UNLOCK_DELIVERIES
+	elseif districtId == "warehouse" then
+		return getPlayerDeliveries(player) >= WAREHOUSE_UNLOCK_DELIVERIES
 	end
 	return true
 end
@@ -603,6 +745,7 @@ local function assignJob(player)
 	local jobType = chooseJobType(player)
 	local districtId = target:GetAttribute("DistrictId") or "central"
 	local districtName = target:GetAttribute("DistrictName") or DISTRICT_NAMES[districtId] or districtId
+	local weather = currentWeather
 	local now = workspace:GetServerTimeNow()
 	local expiresAt = now + jobType.timeLimit
 
@@ -612,6 +755,9 @@ local function assignJob(player)
 		districtId = districtId,
 		districtName = districtName,
 		jobTypeId = jobType.id,
+		weatherId = weather.id,
+		weatherName = weather.name,
+		weatherMultiplier = weather.rewardMultiplier,
 		expiresAt = expiresAt,
 		startedAt = now,
 	}
@@ -626,6 +772,9 @@ local function assignJob(player)
 		districtName = districtName,
 		jobTypeId = jobType.id,
 		jobTypeName = jobType.name,
+		weatherId = weather.id,
+		weatherName = weather.name,
+		weatherMultiplier = weather.rewardMultiplier,
 		expiresAt = expiresAt,
 		timeLimit = jobType.timeLimit,
 		baseReward = jobType.baseReward,
@@ -660,7 +809,47 @@ local function completeDelivery(player, houseName)
 
 	local streak = playerStreak[player] or 0
 	local streakBonus = math.min(streak, 5) * 10
-	local reward = jobType.baseReward + (remaining * jobType.timeBonusPerSecond) + streakBonus
+	local rawReward = jobType.baseReward + (remaining * jobType.timeBonusPerSecond) + streakBonus
+	local weatherMultiplier = job.weatherMultiplier or 1
+	local weatherBonus = math.max(0, math.floor(rawReward * (weatherMultiplier - 1)))
+	local reward = math.floor(rawReward * weatherMultiplier)
+
+	local targetHouse = housesFolder:FindFirstChild(houseName)
+	local targetPart = targetHouse and targetHouse:FindFirstChild("DeliveryPoint")
+	local helperCount = 0
+
+	if targetPart then
+		for _, otherPlayer in ipairs(Players:GetPlayers()) do
+			if otherPlayer ~= player and isNearPart(otherPlayer, targetPart, COOP_RANGE) then
+				helperCount += 1
+				local otherStats = getStats(otherPlayer)
+				if otherStats and otherStats.coins then
+					otherStats.coins.Value += HELPER_REWARD
+					sendStatus(otherPlayer, "AssistReward", {
+						reward = HELPER_REWARD,
+						playerName = player.DisplayName,
+					})
+				end
+				if helperCount >= MAX_COOP_HELPERS then
+					break
+				end
+			end
+		end
+	end
+
+	local coopBonus = math.floor(reward * (COOP_BONUS_PER_HELPER * helperCount))
+	reward += coopBonus
+
+	local shiftBonus = 0
+	if remaining > 0 then
+		playerShiftProgress[player] = (playerShiftProgress[player] or 0) + 1
+		if playerShiftProgress[player] >= SHIFT_TARGET then
+			playerShiftProgress[player] = 0
+			shiftBonus = SHIFT_REWARD
+			reward += shiftBonus
+			player:SetAttribute("ShiftWins", (player:GetAttribute("ShiftWins") or 0) + 1)
+		end
+	end
 
 	local stats = getStats(player)
 	local deliveriesAfter = nil
@@ -672,6 +861,7 @@ local function completeDelivery(player, houseName)
 
 	local districtUnlocked = deliveriesAfter == RIVERSIDE_UNLOCK_DELIVERIES
 	local specialJobsUnlocked = deliveriesAfter == SPECIAL_JOB_UNLOCK_DELIVERIES
+	local warehouseUnlocked = deliveriesAfter == WAREHOUSE_UNLOCK_DELIVERIES
 
 	playerJobs[player] = nil
 	clearParcelVisual(player)
@@ -683,8 +873,17 @@ local function completeDelivery(player, houseName)
 		timeRemaining = remaining,
 		streak = streak,
 		streakBonus = streakBonus,
+		weatherName = job.weatherName or "晴れ",
+		weatherBonus = weatherBonus,
+		coopBonus = coopBonus,
+		helperCount = helperCount,
+		shiftBonus = shiftBonus,
+		shiftProgress = playerShiftProgress[player] or 0,
+		shiftTarget = SHIFT_TARGET,
+		rankName = getRankName(deliveriesAfter or 0),
 		districtUnlocked = districtUnlocked,
 		specialJobsUnlocked = specialJobsUnlocked,
+		warehouseUnlocked = warehouseUnlocked,
 	})
 end
 
@@ -692,6 +891,7 @@ local function toggleBike(player)
 	local active = not (player:GetAttribute("BikeActive") == true)
 	player:SetAttribute("BikeActive", active)
 	applyMovementSpeed(player)
+	addBikeVisual(player)
 
 	sendStatus(player, "BikeMode", {
 		active = active,
@@ -738,6 +938,9 @@ local function loadData(player)
 		coins = 0,
 		deliveries = 0,
 		speedLevel = 0,
+		bagStyleLevel = 0,
+		bikeStyleLevel = 0,
+		shiftWins = 0,
 	}
 
 	local success, data = pcall(function()
@@ -748,6 +951,9 @@ local function loadData(player)
 		defaultData.coins = tonumber(data.coins) or 0
 		defaultData.deliveries = tonumber(data.deliveries) or 0
 		defaultData.speedLevel = math.clamp(tonumber(data.speedLevel) or 0, 0, MAX_SPEED_LEVEL)
+		defaultData.bagStyleLevel = math.clamp(tonumber(data.bagStyleLevel) or 0, 0, #BAG_STYLES - 1)
+		defaultData.bikeStyleLevel = math.clamp(tonumber(data.bikeStyleLevel) or 0, 0, #BIKE_STYLES - 1)
+		defaultData.shiftWins = math.max(0, tonumber(data.shiftWins) or 0)
 	elseif not success then
 		warn("Night Delivery: DataStore load failed for", player.Name, data)
 	end
@@ -765,10 +971,15 @@ local function saveData(player)
 		coins = stats.coins.Value,
 		deliveries = stats.deliveries.Value,
 		speedLevel = player:GetAttribute("SpeedLevel") or 0,
+		bagStyleLevel = player:GetAttribute("BagStyleLevel") or 0,
+		bikeStyleLevel = player:GetAttribute("BikeStyleLevel") or 0,
+		shiftWins = player:GetAttribute("ShiftWins") or 0,
 	}
 
 	local success, err = pcall(function()
-		DELIVERY_STORE:SetAsync("player_" .. player.UserId, payload)
+		DELIVERY_STORE:UpdateAsync("player_" .. player.UserId, function()
+			return payload
+		end)
 	end)
 
 	if not success then
@@ -776,11 +987,159 @@ local function saveData(player)
 	end
 end
 
+local function sendShopState(player)
+	local stats = getStats(player)
+	if not stats or not stats.coins then
+		return
+	end
+
+	local speedLevel = player:GetAttribute("SpeedLevel") or 0
+	local bagLevel = player:GetAttribute("BagStyleLevel") or 0
+	local bikeStyleLevel = player:GetAttribute("BikeStyleLevel") or 0
+	local bagStyle = getStyle(BAG_STYLES, bagLevel)
+	local bikeStyle = getStyle(BIKE_STYLES, bikeStyleLevel)
+	local nextBag = getNextStyle(BAG_STYLES, bagLevel)
+	local nextBike = getNextStyle(BIKE_STYLES, bikeStyleLevel)
+
+	sendStatus(player, "ShopState", {
+		coins = stats.coins.Value,
+		speedLevel = speedLevel,
+		speedCost = speedLevel < MAX_SPEED_LEVEL and getSpeedUpgradeCost(speedLevel) or 0,
+		bagStyleName = bagStyle.name,
+		bagNextName = nextBag and nextBag.name or nil,
+		bagCost = nextBag and nextBag.cost or 0,
+		bikeStyleName = bikeStyle.name,
+		bikeNextName = nextBike and nextBike.name or nil,
+		bikeCost = nextBike and nextBike.cost or 0,
+	})
+end
+
+local function openShop(player)
+	if not isNearPart(player, shopPadRef, 16) then
+		return
+	end
+	sendShopState(player)
+	sendStatus(player, "ShopOpened", {})
+end
+
+local function buyNextStyle(player, kind)
+	if not isNearPart(player, shopPadRef, 18) then
+		return
+	end
+
+	local stats = getStats(player)
+	if not stats or not stats.coins then
+		return
+	end
+
+	local styleTable = kind == "bag" and BAG_STYLES or BIKE_STYLES
+	local attributeName = kind == "bag" and "BagStyleLevel" or "BikeStyleLevel"
+	local level = player:GetAttribute(attributeName) or 0
+	local nextStyle, nextLevel = getNextStyle(styleTable, level)
+
+	if not nextStyle then
+		sendStatus(player, "Message", {text = "このコスメは最大まで解放済み。"})
+		return
+	end
+
+	if stats.coins.Value < nextStyle.cost then
+		sendStatus(player, "Message", {text = string.format("%d Coins 必要。", nextStyle.cost)})
+		return
+	end
+
+	stats.coins.Value -= nextStyle.cost
+	player:SetAttribute(attributeName, nextLevel)
+
+	if kind == "bag" and playerJobs[player] then
+		addParcelVisual(player, playerJobs[player].jobTypeId)
+	elseif kind == "bike" then
+		addBikeVisual(player)
+	end
+
+	sendStatus(player, "CosmeticPurchased", {
+		kind = kind,
+		name = nextStyle.name,
+	})
+	sendShopState(player)
+end
+
+local function applyWeather(weather)
+	currentWeather = weather
+	local atmosphere = Lighting:FindFirstChild("NightDeliveryAtmosphere")
+
+	if weather.id == "rain" then
+		Lighting.Brightness = 1.0
+		Lighting.FogEnd = 480
+		Lighting.FogColor = Color3.fromRGB(48, 58, 72)
+		if atmosphere then
+			atmosphere.Density = 0.32
+			atmosphere.Haze = 1.8
+		end
+	elseif weather.id == "fog" then
+		Lighting.Brightness = 1.15
+		Lighting.FogEnd = 280
+		Lighting.FogColor = Color3.fromRGB(80, 88, 102)
+		if atmosphere then
+			atmosphere.Density = 0.48
+			atmosphere.Haze = 2.4
+		end
+	else
+		Lighting.Brightness = 1.35
+		Lighting.FogEnd = 700
+		Lighting.FogColor = Color3.fromRGB(34, 39, 57)
+		if atmosphere then
+			atmosphere.Density = 0.2
+			atmosphere.Haze = 1.1
+		end
+	end
+
+	deliveryEvent:FireAllClients("WeatherChanged", {
+		weatherId = weather.id,
+		weatherName = weather.name,
+		rewardMultiplier = weather.rewardMultiplier,
+	})
+end
+
+local function startWeatherLoop()
+	task.spawn(function()
+		while true do
+			task.wait(WEATHER_CHANGE_SECONDS)
+			local candidates = {}
+			for _, weather in ipairs(WEATHER_TYPES) do
+				if weather.id ~= currentWeather.id then
+					table.insert(candidates, weather)
+				end
+			end
+			applyWeather(candidates[math.random(1, #candidates)])
+		end
+	end)
+end
+
 local depotPrompt, bikePrompt, shopPrompt, housePrompts = createWorld()
 
 depotPrompt.Triggered:Connect(assignJob)
 bikePrompt.Triggered:Connect(toggleBike)
-shopPrompt.Triggered:Connect(tryUpgradeSpeed)
+shopPrompt.Triggered:Connect(openShop)
+
+deliveryEvent.OnServerEvent:Connect(function(player, action)
+	if action == "BuySpeed" then
+		if isNearPart(player, shopPadRef, 18) then
+			tryUpgradeSpeed(player)
+			sendShopState(player)
+		end
+	elseif action == "BuyBagStyle" then
+		buyNextStyle(player, "bag")
+	elseif action == "BuyBikeStyle" then
+		buyNextStyle(player, "bike")
+	elseif action == "RequestShopState" then
+		if isNearPart(player, shopPadRef, 18) then
+			sendShopState(player)
+		end
+	end
+end)
+
+applyWeather(currentWeather)
+startWeatherLoop()
 
 for _, entry in ipairs(housePrompts) do
 	entry.prompt.Triggered:Connect(function(player)
@@ -807,13 +1166,18 @@ local function setupPlayer(player)
 
 	player:SetAttribute("SpeedLevel", data.speedLevel)
 	player:SetAttribute("BikeActive", false)
+	player:SetAttribute("BagStyleLevel", data.bagStyleLevel)
+	player:SetAttribute("BikeStyleLevel", data.bikeStyleLevel)
+	player:SetAttribute("ShiftWins", data.shiftWins)
 	playerStreak[player] = 0
+	playerShiftProgress[player] = 0
 
 	player.CharacterAdded:Connect(function(character)
 		local humanoid = character:WaitForChild("Humanoid", 10)
 		if humanoid then
 			task.wait(0.2)
 			applyMovementSpeed(player)
+			addBikeVisual(player)
 		end
 
 		task.wait(0.2)
@@ -825,10 +1189,18 @@ local function setupPlayer(player)
 	sendStatus(player, "Welcome", {
 		speedLevel = data.speedLevel,
 		deliveries = data.deliveries,
+		rankName = getRankName(data.deliveries),
+		shiftProgress = 0,
+		shiftTarget = SHIFT_TARGET,
+		shiftWins = data.shiftWins,
+		weatherName = currentWeather.name,
+		weatherMultiplier = currentWeather.rewardMultiplier,
 		riversideUnlockAt = RIVERSIDE_UNLOCK_DELIVERIES,
 		specialJobUnlockAt = SPECIAL_JOB_UNLOCK_DELIVERIES,
+		warehouseUnlockAt = WAREHOUSE_UNLOCK_DELIVERIES,
 		riversideUnlocked = data.deliveries >= RIVERSIDE_UNLOCK_DELIVERIES,
 		specialJobsUnlocked = data.deliveries >= SPECIAL_JOB_UNLOCK_DELIVERIES,
+		warehouseUnlocked = data.deliveries >= WAREHOUSE_UNLOCK_DELIVERIES,
 		nextUpgradeCost = data.speedLevel < MAX_SPEED_LEVEL and getSpeedUpgradeCost(data.speedLevel) or 0,
 	})
 end
@@ -844,6 +1216,7 @@ Players.PlayerRemoving:Connect(function(player)
 	playerJobs[player] = nil
 	playerLastHouse[player] = nil
 	playerStreak[player] = nil
+	playerShiftProgress[player] = nil
 end)
 
 game:BindToClose(function()
