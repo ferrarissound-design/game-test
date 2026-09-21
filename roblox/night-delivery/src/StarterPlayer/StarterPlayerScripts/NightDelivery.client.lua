@@ -1,4 +1,4 @@
--- Night Delivery v3
+-- Night Delivery v4
 -- StarterPlayer/StarterPlayerScripts/NightDelivery.client.lua
 
 local Players = game:GetService("Players")
@@ -11,12 +11,18 @@ local deliveryEvent = ReplicatedStorage:WaitForChild("NightDeliveryEvent")
 
 local RIVERSIDE_UNLOCK_DELIVERIES = 5
 local SPECIAL_JOB_UNLOCK_DELIVERIES = 8
+local WAREHOUSE_UNLOCK_DELIVERIES = 15
 
 local currentHouseName = nil
 local currentDisplayName = nil
 local currentDistrictName = nil
 local currentJobTypeName = nil
 local currentJobTypeId = nil
+local currentWeatherName = "晴れ"
+local currentWeatherMultiplier = 1
+local currentRankName = "新人"
+local shiftProgress = 0
+local shiftTarget = 5
 local expiresAt = nil
 local currentHighlight = nil
 local currentBillboard = nil
@@ -30,7 +36,7 @@ gui.Parent = player:WaitForChild("PlayerGui")
 
 local panel = Instance.new("Frame")
 panel.Name = "DeliveryPanel"
-panel.Size = UDim2.fromOffset(360, 176)
+panel.Size = UDim2.fromOffset(380, 222)
 panel.Position = UDim2.new(0.5, -180, 0, 18)
 panel.BackgroundColor3 = Color3.fromRGB(22, 27, 38)
 panel.BackgroundTransparency = 0.06
@@ -38,8 +44,8 @@ panel.BorderSizePixel = 0
 panel.Parent = gui
 
 local sizeConstraint = Instance.new("UISizeConstraint")
-sizeConstraint.MinSize = Vector2.new(300, 176)
-sizeConstraint.MaxSize = Vector2.new(380, 176)
+sizeConstraint.MinSize = Vector2.new(320, 222)
+sizeConstraint.MaxSize = Vector2.new(400, 222)
 sizeConstraint.Parent = panel
 
 local corner = Instance.new("UICorner")
@@ -118,6 +124,28 @@ progressLabel.TextSize = 14
 progressLabel.TextXAlignment = Enum.TextXAlignment.Left
 progressLabel.Parent = panel
 
+local weatherLabel = Instance.new("TextLabel")
+weatherLabel.Size = UDim2.new(1, -24, 0, 22)
+weatherLabel.Position = UDim2.fromOffset(12, 166)
+weatherLabel.BackgroundTransparency = 1
+weatherLabel.Text = "☀ 晴れ  •  報酬 x1.00"
+weatherLabel.TextColor3 = Color3.fromRGB(191, 210, 228)
+weatherLabel.Font = Enum.Font.GothamMedium
+weatherLabel.TextSize = 14
+weatherLabel.TextXAlignment = Enum.TextXAlignment.Left
+weatherLabel.Parent = panel
+
+local shiftLabel = Instance.new("TextLabel")
+shiftLabel.Size = UDim2.new(1, -24, 0, 22)
+shiftLabel.Position = UDim2.fromOffset(12, 189)
+shiftLabel.BackgroundTransparency = 1
+shiftLabel.Text = "新人  •  夜勤 0/5"
+shiftLabel.TextColor3 = Color3.fromRGB(225, 205, 154)
+shiftLabel.Font = Enum.Font.GothamMedium
+shiftLabel.TextSize = 14
+shiftLabel.TextXAlignment = Enum.TextXAlignment.Left
+shiftLabel.Parent = panel
+
 local toast = Instance.new("TextLabel")
 toast.Size = UDim2.fromOffset(360, 58)
 toast.Position = UDim2.new(0.5, -180, 1, -92)
@@ -144,13 +172,105 @@ guide.TextColor3 = Color3.fromRGB(215, 226, 238)
 guide.Font = Enum.Font.Gotham
 guide.TextSize = 14
 guide.TextWrapped = true
-guide.Text = "配達所: 受注 / 青い床: 自転車 / 紫の床: 速度強化"
+guide.Text = "配達所: 受注 / 青: 自転車 / 紫: ショップ"
 guide.BorderSizePixel = 0
 guide.Parent = gui
 
 local guideCorner = Instance.new("UICorner")
 guideCorner.CornerRadius = UDim.new(0, 10)
 guideCorner.Parent = guide
+
+
+local shopFrame = Instance.new("Frame")
+shopFrame.Name = "ShopPanel"
+shopFrame.Size = UDim2.fromOffset(340, 260)
+shopFrame.Position = UDim2.new(0.5, -170, 0.5, -130)
+shopFrame.BackgroundColor3 = Color3.fromRGB(22, 27, 38)
+shopFrame.BackgroundTransparency = 0.03
+shopFrame.BorderSizePixel = 0
+shopFrame.Visible = false
+shopFrame.Parent = gui
+
+local shopCorner = Instance.new("UICorner")
+shopCorner.CornerRadius = UDim.new(0, 14)
+shopCorner.Parent = shopFrame
+
+local shopStroke = Instance.new("UIStroke")
+shopStroke.Color = Color3.fromRGB(160, 122, 210)
+shopStroke.Transparency = 0.2
+shopStroke.Thickness = 1.5
+shopStroke.Parent = shopFrame
+
+local shopTitle = Instance.new("TextLabel")
+shopTitle.Size = UDim2.new(1, -48, 0, 38)
+shopTitle.Position = UDim2.fromOffset(16, 8)
+shopTitle.BackgroundTransparency = 1
+shopTitle.Text = "🌙 夜間配達ショップ"
+shopTitle.TextColor3 = Color3.fromRGB(241, 235, 255)
+shopTitle.Font = Enum.Font.GothamBold
+shopTitle.TextSize = 20
+shopTitle.TextXAlignment = Enum.TextXAlignment.Left
+shopTitle.Parent = shopFrame
+
+local closeButton = Instance.new("TextButton")
+closeButton.Size = UDim2.fromOffset(36, 36)
+closeButton.Position = UDim2.new(1, -44, 0, 8)
+closeButton.BackgroundColor3 = Color3.fromRGB(57, 61, 74)
+closeButton.Text = "×"
+closeButton.TextColor3 = Color3.fromRGB(245, 245, 250)
+closeButton.Font = Enum.Font.GothamBold
+closeButton.TextSize = 24
+closeButton.Parent = shopFrame
+local closeCorner = Instance.new("UICorner")
+closeCorner.CornerRadius = UDim.new(0, 8)
+closeCorner.Parent = closeButton
+
+local shopCoins = Instance.new("TextLabel")
+shopCoins.Size = UDim2.new(1, -32, 0, 26)
+shopCoins.Position = UDim2.fromOffset(16, 48)
+shopCoins.BackgroundTransparency = 1
+shopCoins.Text = "Coins 0"
+shopCoins.TextColor3 = Color3.fromRGB(255, 219, 138)
+shopCoins.Font = Enum.Font.GothamMedium
+shopCoins.TextSize = 16
+shopCoins.TextXAlignment = Enum.TextXAlignment.Left
+shopCoins.Parent = shopFrame
+
+local function makeShopButton(y)
+	local button = Instance.new("TextButton")
+	button.Size = UDim2.new(1, -32, 0, 48)
+	button.Position = UDim2.fromOffset(16, y)
+	button.BackgroundColor3 = Color3.fromRGB(47, 54, 70)
+	button.TextColor3 = Color3.fromRGB(238, 242, 250)
+	button.Font = Enum.Font.GothamMedium
+	button.TextSize = 15
+	button.TextWrapped = true
+	button.Parent = shopFrame
+	local c = Instance.new("UICorner")
+	c.CornerRadius = UDim.new(0, 10)
+	c.Parent = button
+	return button
+end
+
+local speedButton = makeShopButton(80)
+local bagButton = makeShopButton(136)
+local bikeStyleButton = makeShopButton(192)
+
+closeButton.Activated:Connect(function()
+	shopFrame.Visible = false
+end)
+
+speedButton.Activated:Connect(function()
+	deliveryEvent:FireServer("BuySpeed")
+end)
+
+bagButton.Activated:Connect(function()
+	deliveryEvent:FireServer("BuyBagStyle")
+end)
+
+bikeStyleButton.Activated:Connect(function()
+	deliveryEvent:FireServer("BuyBikeStyle")
+end)
 
 local toastSerial = 0
 
@@ -256,6 +376,12 @@ local function updateStats()
 	local bikeText = bikeActive and "🚲 ON" or "🚲 OFF"
 
 	statsLabel.Text = string.format("Coins %d  •  配達 %d  •  %s", coinText, deliveryText, bikeText)
+	shiftLabel.Text = string.format("%s  •  夜勤 %d/%d", currentRankName, shiftProgress, shiftTarget)
+	weatherLabel.Text = string.format("%s %s  •  報酬 x%.2f",
+		currentWeatherName == "雨" and "🌧" or (currentWeatherName == "濃霧" and "🌫" or "☀"),
+		currentWeatherName,
+		currentWeatherMultiplier
+	)
 
 	if deliveryText < RIVERSIDE_UNLOCK_DELIVERIES then
 		local remaining = RIVERSIDE_UNLOCK_DELIVERIES - deliveryText
@@ -265,9 +391,13 @@ local function updateStats()
 		local remaining = SPECIAL_JOB_UNLOCK_DELIVERIES - deliveryText
 		progressLabel.Text = string.format("🌉 川沿い地区 解放済み  •  特別便まであと%d件", remaining)
 		progressLabel.TextColor3 = Color3.fromRGB(151, 201, 230)
-	else
-		progressLabel.Text = "🌉 川沿い地区 解放済み  •  🟣 深夜特別便 解放済み"
+	elseif deliveryText < WAREHOUSE_UNLOCK_DELIVERIES then
+		local remaining = WAREHOUSE_UNLOCK_DELIVERIES - deliveryText
+		progressLabel.Text = string.format("🟣 特別便 解放済み  •  倉庫街まであと%d件", remaining)
 		progressLabel.TextColor3 = Color3.fromRGB(197, 157, 238)
+	else
+		progressLabel.Text = "🌉 川沿い / 🟣 特別便 / 🏭 倉庫街 すべて解放済み"
+		progressLabel.TextColor3 = Color3.fromRGB(221, 190, 116)
 	end
 end
 
@@ -299,6 +429,8 @@ deliveryEvent.OnClientEvent:Connect(function(action, payload)
 		currentDistrictName = payload.districtName
 		currentJobTypeName = payload.jobTypeName
 		currentJobTypeId = payload.jobTypeId
+		currentWeatherName = payload.weatherName or currentWeatherName
+		currentWeatherMultiplier = payload.weatherMultiplier or currentWeatherMultiplier
 		expiresAt = payload.expiresAt
 
 		targetLabel.Text = "配達先: " .. (currentDisplayName or currentHouseName)
@@ -329,9 +461,25 @@ deliveryEvent.OnClientEvent:Connect(function(action, payload)
 			unlockText = "  🌉 川沿い地区 解放！"
 		elseif payload.specialJobsUnlocked then
 			unlockText = "  🟣 深夜特別便 解放！"
+		elseif payload.warehouseUnlocked then
+			unlockText = "  🏭 倉庫街 解放！"
 		end
 
-		showToast(string.format("配達完了！ +%d Coins%s%s", payload.reward or 0, bonusText, unlockText))
+		local extraText = ""
+		if (payload.weatherBonus or 0) > 0 then
+			extraText ..= string.format("  天候+%d", payload.weatherBonus)
+		end
+		if (payload.coopBonus or 0) > 0 then
+			extraText ..= string.format("  協力+%d", payload.coopBonus)
+		end
+		if (payload.shiftBonus or 0) > 0 then
+			extraText ..= string.format("  夜勤+%d", payload.shiftBonus)
+		end
+
+		shiftProgress = payload.shiftProgress or shiftProgress
+		shiftTarget = payload.shiftTarget or shiftTarget
+		currentRankName = payload.rankName or currentRankName
+		showToast(string.format("配達完了！ +%d Coins%s%s%s", payload.reward or 0, bonusText, extraText, unlockText))
 
 		currentHouseName = nil
 		currentDisplayName = nil
@@ -355,9 +503,45 @@ deliveryEvent.OnClientEvent:Connect(function(action, payload)
 		end
 	elseif action == "SpeedUpgraded" then
 		showToast(string.format("速度Lv.%d に強化！", payload.level or 0))
+	elseif action == "AssistReward" then
+		showToast(string.format("🤝 %s の配達を手伝った！ +%d Coins", payload.playerName or "誰か", payload.reward or 0))
+	elseif action == "WeatherChanged" then
+		currentWeatherName = payload.weatherName or "晴れ"
+		currentWeatherMultiplier = payload.rewardMultiplier or 1
+		updateStats()
+		if currentWeatherMultiplier > 1 then
+			showToast(string.format("%sになった。配達報酬 x%.2f", currentWeatherName, currentWeatherMultiplier))
+		end
+	elseif action == "ShopOpened" then
+		shopFrame.Visible = true
+		deliveryEvent:FireServer("RequestShopState")
+	elseif action == "ShopState" then
+		shopCoins.Text = string.format("Coins %d", payload.coins or 0)
+		if (payload.speedCost or 0) > 0 then
+			speedButton.Text = string.format("🚲 速度 Lv.%d → Lv.%d  /  %d Coins", payload.speedLevel or 0, (payload.speedLevel or 0) + 1, payload.speedCost)
+		else
+			speedButton.Text = "🚲 速度強化 MAX"
+		end
+		if payload.bagNextName then
+			bagButton.Text = string.format("📦 バッグ %s → %s  /  %d Coins", payload.bagStyleName or "-", payload.bagNextName, payload.bagCost or 0)
+		else
+			bagButton.Text = string.format("📦 バッグ %s  /  MAX", payload.bagStyleName or "-")
+		end
+		if payload.bikeNextName then
+			bikeStyleButton.Text = string.format("🎨 自転車 %s → %s  /  %d Coins", payload.bikeStyleName or "-", payload.bikeNextName, payload.bikeCost or 0)
+		else
+			bikeStyleButton.Text = string.format("🎨 自転車 %s  /  MAX", payload.bikeStyleName or "-")
+		end
+	elseif action == "CosmeticPurchased" then
+		showToast(string.format("✨ %s を解放！", payload.name or "コスメ"))
 	elseif action == "Welcome" then
+		currentRankName = payload.rankName or currentRankName
+		shiftProgress = payload.shiftProgress or 0
+		shiftTarget = payload.shiftTarget or 5
+		currentWeatherName = payload.weatherName or currentWeatherName
+		currentWeatherMultiplier = payload.weatherMultiplier or currentWeatherMultiplier
 		if (payload.speedLevel or 0) > 0 then
-			showToast(string.format("おかえり！ 速度Lv.%d", payload.speedLevel))
+			showToast(string.format("おかえり！ %s / 速度Lv.%d", currentRankName, payload.speedLevel))
 		end
 		updateStats()
 	elseif action == "Message" then
