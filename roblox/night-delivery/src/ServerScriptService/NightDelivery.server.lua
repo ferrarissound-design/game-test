@@ -1115,6 +1115,30 @@ local function startWeatherLoop()
 	end)
 end
 
+local function sendPlayerState(player)
+	local stats = getStats(player)
+	local deliveries = stats and stats.deliveries and stats.deliveries.Value or 0
+	local speedLevel = player:GetAttribute("SpeedLevel") or 0
+
+	sendStatus(player, "Welcome", {
+		speedLevel = speedLevel,
+		deliveries = deliveries,
+		rankName = getRankName(deliveries),
+		shiftProgress = playerShiftProgress[player] or 0,
+		shiftTarget = SHIFT_TARGET,
+		shiftWins = player:GetAttribute("ShiftWins") or 0,
+		weatherName = currentWeather.name,
+		weatherMultiplier = currentWeather.rewardMultiplier,
+		riversideUnlockAt = RIVERSIDE_UNLOCK_DELIVERIES,
+		specialJobUnlockAt = SPECIAL_JOB_UNLOCK_DELIVERIES,
+		warehouseUnlockAt = WAREHOUSE_UNLOCK_DELIVERIES,
+		riversideUnlocked = deliveries >= RIVERSIDE_UNLOCK_DELIVERIES,
+		specialJobsUnlocked = deliveries >= SPECIAL_JOB_UNLOCK_DELIVERIES,
+		warehouseUnlocked = deliveries >= WAREHOUSE_UNLOCK_DELIVERIES,
+		nextUpgradeCost = speedLevel < MAX_SPEED_LEVEL and getSpeedUpgradeCost(speedLevel) or 0,
+	})
+end
+
 local depotPrompt, bikePrompt, shopPrompt, housePrompts = createWorld()
 
 depotPrompt.Triggered:Connect(assignJob)
@@ -1122,7 +1146,9 @@ bikePrompt.Triggered:Connect(toggleBike)
 shopPrompt.Triggered:Connect(openShop)
 
 deliveryEvent.OnServerEvent:Connect(function(player, action)
-	if action == "BuySpeed" then
+	if action == "RequestState" then
+		sendPlayerState(player)
+	elseif action == "BuySpeed" then
 		if isNearPart(player, shopPadRef, 18) then
 			tryUpgradeSpeed(player)
 			sendShopState(player)
@@ -1172,7 +1198,7 @@ local function setupPlayer(player)
 	playerStreak[player] = 0
 	playerShiftProgress[player] = 0
 
-	player.CharacterAdded:Connect(function(character)
+	local function setupCharacter(character)
 		local humanoid = character:WaitForChild("Humanoid", 10)
 		if humanoid then
 			task.wait(0.2)
@@ -1184,25 +1210,14 @@ local function setupPlayer(player)
 		if playerJobs[player] then
 			addParcelVisual(player, playerJobs[player].jobTypeId)
 		end
-	end)
+	end
 
-	sendStatus(player, "Welcome", {
-		speedLevel = data.speedLevel,
-		deliveries = data.deliveries,
-		rankName = getRankName(data.deliveries),
-		shiftProgress = 0,
-		shiftTarget = SHIFT_TARGET,
-		shiftWins = data.shiftWins,
-		weatherName = currentWeather.name,
-		weatherMultiplier = currentWeather.rewardMultiplier,
-		riversideUnlockAt = RIVERSIDE_UNLOCK_DELIVERIES,
-		specialJobUnlockAt = SPECIAL_JOB_UNLOCK_DELIVERIES,
-		warehouseUnlockAt = WAREHOUSE_UNLOCK_DELIVERIES,
-		riversideUnlocked = data.deliveries >= RIVERSIDE_UNLOCK_DELIVERIES,
-		specialJobsUnlocked = data.deliveries >= SPECIAL_JOB_UNLOCK_DELIVERIES,
-		warehouseUnlocked = data.deliveries >= WAREHOUSE_UNLOCK_DELIVERIES,
-		nextUpgradeCost = data.speedLevel < MAX_SPEED_LEVEL and getSpeedUpgradeCost(data.speedLevel) or 0,
-	})
+	player.CharacterAdded:Connect(setupCharacter)
+	if player.Character then
+		task.spawn(setupCharacter, player.Character)
+	end
+
+	sendPlayerState(player)
 end
 
 Players.PlayerAdded:Connect(setupPlayer)
