@@ -26,6 +26,8 @@ local COOP_BONUS_PER_HELPER = 0.15
 local MAX_COOP_HELPERS = 2
 local HELPER_REWARD = 25
 local WEATHER_CHANGE_SECONDS = 150
+local AUTOSAVE_SECONDS = 120
+local REMOTE_COOLDOWN_SECONDS = 0.12
 
 local DISTRICT_NAMES = {
 	central = "住宅街",
@@ -118,6 +120,7 @@ local playerJobs = {}
 local playerLastHouse = {}
 local playerStreak = {}
 local playerShiftProgress = {}
+local remoteLastAction = {}
 local currentWeather = WEATHER_TYPES[1]
 local shopPadRef = nil
 
@@ -943,9 +946,19 @@ local function loadData(player)
 		shiftWins = 0,
 	}
 
-	local success, data = pcall(function()
-		return DELIVERY_STORE:GetAsync("player_" .. player.UserId)
-	end)
+	local success = false
+	local data = nil
+
+	for attempt = 1, 3 do
+		success, data = pcall(function()
+			return DELIVERY_STORE:GetAsync("player_" .. player.UserId)
+		end)
+		if success then
+			break
+		end
+		warn("Night Delivery: DataStore load attempt failed for", player.Name, attempt, data)
+		task.wait(0.35 * attempt)
+	end
 
 	if success and type(data) == "table" then
 		defaultData.coins = tonumber(data.coins) or 0
@@ -955,7 +968,7 @@ local function loadData(player)
 		defaultData.bikeStyleLevel = math.clamp(tonumber(data.bikeStyleLevel) or 0, 0, #BIKE_STYLES - 1)
 		defaultData.shiftWins = math.max(0, tonumber(data.shiftWins) or 0)
 	elseif not success then
-		warn("Night Delivery: DataStore load failed for", player.Name, data)
+		warn("Night Delivery: DataStore load failed after retries for", player.Name)
 	end
 
 	return defaultData
@@ -976,15 +989,23 @@ local function saveData(player)
 		shiftWins = player:GetAttribute("ShiftWins") or 0,
 	}
 
-	local success, err = pcall(function()
-		DELIVERY_STORE:UpdateAsync("player_" .. player.UserId, function()
-			return payload
+	local success = false
+	local err = nil
+	for attempt = 1, 3 do
+		success, err = pcall(function()
+			DELIVERY_STORE:UpdateAsync("player_" .. player.UserId, function()
+				return payload
+			end)
 		end)
-	end)
-
-	if not success then
-		warn("Night Delivery: DataStore save failed for", player.Name, err)
+		if success then
+			return true
+		end
+		warn("Night Delivery: DataStore save attempt failed for", player.Name, attempt, err)
+		task.wait(0.35 * attempt)
 	end
+
+	warn("Night Delivery: DataStore save failed after retries for", player.Name, err)
+	return false
 end
 
 local function sendShopState(player)
@@ -1146,6 +1167,17 @@ bikePrompt.Triggered:Connect(toggleBike)
 shopPrompt.Triggered:Connect(openShop)
 
 deliveryEvent.OnServerEvent:Connect(function(player, action)
+	if type(action) ~= "string" then
+		return
+	end
+
+	local now = os.clock()
+	local lastAction = remoteLastAction[player] or 0
+	if now - lastAction < REMOTE_COOLDOWN_SECONDS then
+		return
+	end
+	remoteLastAction[player] = now
+
 	if action == "RequestState" then
 		if player:GetAttribute("NightDeliveryReady") == true then
 			sendPlayerState(player)
@@ -1191,6 +1223,9 @@ end
 local function setupPlayer(player)
 	player:SetAttribute("NightDeliveryReady", false)
 	local data = loadData(player)
+	if not player.Parent then
+		return
+	end
 
 	local leaderstats = Instance.new("Folder")
 	leaderstats.Name = "leaderstats"
@@ -1249,6 +1284,16 @@ Players.PlayerRemoving:Connect(function(player)
 	playerLastHouse[player] = nil
 	playerStreak[player] = nil
 	playerShiftProgress[player] = nil
+	remoteLastAction[player] = nil
+end)
+
+task.spawn(function()
+	while true do
+		task.wait(AUTOSAVE_SECONDS)
+		for _, player in ipairs(Players:GetPlayers()) do
+			task.spawn(saveData, player)
+		end
+	end
 end)
 
 game:BindToClose(function()
