@@ -53,6 +53,9 @@ v4では、Roblox Studioで実物を見ながら調整する必要がある部�
 - Coins / 配達回数 / 速度 / コスメ / 夜勤達成回数をDataStore保存
 - v2から同じDataStore名を維持
 - UpdateAsyncで保存
+- 120秒ごとのオートセーブ
+- DataStore読込 / 保存を最大3回リトライ
+- RemoteEventの簡易連打抑制
 - 参加直後にRemoteEventを取りこぼしても再同期する仕組み
 
 ## 基本ループ
