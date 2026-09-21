@@ -1,7 +1,7 @@
--- Night Delivery v2
+-- Night Delivery v3
 -- ServerScriptService/NightDelivery.server.lua
 -- Self-contained prototype: generates the town, runs delivery jobs,
--- saves progression, and provides a simple "bike mode" speed boost.
+-- saves progression, unlocks a second district, and adds rare veteran jobs.
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -16,6 +16,13 @@ local BASE_WALK_SPEED = 20
 local BIKE_BONUS_SPEED = 10
 local SPEED_PER_LEVEL = 2
 local MAX_SPEED_LEVEL = 5
+local RIVERSIDE_UNLOCK_DELIVERIES = 5
+local SPECIAL_JOB_UNLOCK_DELIVERIES = 8
+
+local DISTRICT_NAMES = {
+	central = "住宅街",
+	riverside = "川沿い地区",
+}
 
 local DELIVERY_STORE = DataStoreService:GetDataStore(DATASTORE_NAME)
 
@@ -27,6 +34,7 @@ local JOB_TYPES = {
 		timeLimit = 60,
 		baseReward = 50,
 		timeBonusPerSecond = 2,
+		minDeliveries = 0,
 	},
 	{
 		id = "express",
@@ -35,6 +43,7 @@ local JOB_TYPES = {
 		timeLimit = 35,
 		baseReward = 90,
 		timeBonusPerSecond = 3,
+		minDeliveries = 0,
 	},
 	{
 		id = "long",
@@ -43,6 +52,16 @@ local JOB_TYPES = {
 		timeLimit = 90,
 		baseReward = 120,
 		timeBonusPerSecond = 1,
+		minDeliveries = 0,
+	},
+	{
+		id = "special",
+		name = "深夜特別便",
+		weight = 8,
+		timeLimit = 50,
+		baseReward = 220,
+		timeBonusPerSecond = 4,
+		minDeliveries = SPECIAL_JOB_UNLOCK_DELIVERIES,
 	},
 }
 
@@ -146,10 +165,12 @@ local function createStreetLight(position)
 	light.Parent = lamp
 end
 
-local function createHouse(id, displayName, position, bodyColor)
+local function createHouse(id, displayName, districtId, position, bodyColor)
 	local model = Instance.new("Model")
 	model.Name = id
 	model:SetAttribute("DisplayName", displayName)
+	model:SetAttribute("DistrictId", districtId)
+	model:SetAttribute("DistrictName", DISTRICT_NAMES[districtId] or districtId)
 	model.Parent = housesFolder
 
 	local body = makePart(
@@ -227,8 +248,8 @@ local function createWorld()
 
 	makePart(
 		"Ground",
-		Vector3.new(320, 1, 260),
-		Vector3.new(0, -0.5, 10),
+		Vector3.new(420, 1, 380),
+		Vector3.new(0, -0.5, 35),
 		Color3.fromRGB(47, 61, 57),
 		world,
 		Enum.Material.Grass
@@ -260,6 +281,30 @@ local function createWorld()
 		world,
 		Enum.Material.Pavement
 	)
+
+	makePart(
+		"RiversideRoad",
+		Vector3.new(360, 0.3, 24),
+		Vector3.new(0, 0.17, 135),
+		Color3.fromRGB(45, 47, 52),
+		world,
+		Enum.Material.Pavement
+	)
+
+	local canal = makePart(
+		"Canal",
+		Vector3.new(400, 0.5, 22),
+		Vector3.new(0, 0.05, 182),
+		Color3.fromRGB(44, 91, 122),
+		world,
+		Enum.Material.Glass
+	)
+	canal.Transparency = 0.18
+	canal.CanCollide = false
+
+	for x = -165, 165, 55 do
+		createStreetLight(Vector3.new(x, 0, 123))
+	end
 
 	for z = -100, 120, 30 do
 		createStreetLight(Vector3.new(-21, 0, z))
@@ -354,19 +399,23 @@ local function createWorld()
 	shopPrompt.Parent = shopPad
 
 	local houseDefinitions = {
-		{name = "BlueHouse", displayName = "青い家", position = Vector3.new(-72, 0, 46), color = Color3.fromRGB(74, 111, 154)},
-		{name = "RedHouse", displayName = "赤い家", position = Vector3.new(72, 0, 60), color = Color3.fromRGB(146, 76, 72)},
-		{name = "GreenHouse", displayName = "緑の家", position = Vector3.new(-78, 0, 102), color = Color3.fromRGB(77, 124, 94)},
-		{name = "YellowHouse", displayName = "黄色い家", position = Vector3.new(76, 0, -8), color = Color3.fromRGB(151, 127, 69)},
-		{name = "PurpleHouse", displayName = "紫の家", position = Vector3.new(78, 0, -72), color = Color3.fromRGB(111, 81, 137)},
-		{name = "WhiteHouse", displayName = "白い家", position = Vector3.new(-112, 0, 96), color = Color3.fromRGB(180, 184, 190)},
-		{name = "OrangeHouse", displayName = "橙の家", position = Vector3.new(118, 0, 96), color = Color3.fromRGB(173, 107, 65)},
-		{name = "MintHouse", displayName = "ミントの家", position = Vector3.new(112, 0, 24), color = Color3.fromRGB(93, 151, 145)},
+		{name = "BlueHouse", displayName = "青い家", districtId = "central", position = Vector3.new(-72, 0, 46), color = Color3.fromRGB(74, 111, 154)},
+		{name = "RedHouse", displayName = "赤い家", districtId = "central", position = Vector3.new(72, 0, 60), color = Color3.fromRGB(146, 76, 72)},
+		{name = "GreenHouse", displayName = "緑の家", districtId = "central", position = Vector3.new(-78, 0, 102), color = Color3.fromRGB(77, 124, 94)},
+		{name = "YellowHouse", displayName = "黄色い家", districtId = "central", position = Vector3.new(76, 0, -8), color = Color3.fromRGB(151, 127, 69)},
+		{name = "PurpleHouse", displayName = "紫の家", districtId = "central", position = Vector3.new(78, 0, -72), color = Color3.fromRGB(111, 81, 137)},
+		{name = "WhiteHouse", displayName = "白い家", districtId = "central", position = Vector3.new(-112, 0, 96), color = Color3.fromRGB(180, 184, 190)},
+		{name = "OrangeHouse", displayName = "橙の家", districtId = "central", position = Vector3.new(118, 0, 96), color = Color3.fromRGB(173, 107, 65)},
+		{name = "MintHouse", displayName = "ミントの家", districtId = "central", position = Vector3.new(112, 0, 24), color = Color3.fromRGB(93, 151, 145)},
+		{name = "RiverBlueHouse", displayName = "川辺の青い家", districtId = "riverside", position = Vector3.new(-150, 0, 157), color = Color3.fromRGB(71, 105, 148)},
+		{name = "RiverPinkHouse", displayName = "川辺の桃色の家", districtId = "riverside", position = Vector3.new(-82, 0, 157), color = Color3.fromRGB(158, 101, 119)},
+		{name = "RiverTealHouse", displayName = "川辺の青緑の家", districtId = "riverside", position = Vector3.new(82, 0, 157), color = Color3.fromRGB(72, 132, 133)},
+		{name = "RiverCreamHouse", displayName = "川辺のクリームの家", districtId = "riverside", position = Vector3.new(150, 0, 157), color = Color3.fromRGB(181, 161, 119)},
 	}
 
 	local prompts = {}
 	for _, definition in ipairs(houseDefinitions) do
-		local _, prompt = createHouse(definition.name, definition.displayName, definition.position, definition.color)
+		local _, prompt = createHouse(definition.name, definition.displayName, definition.districtId, definition.position, definition.color)
 		table.insert(prompts, {
 			houseName = definition.name,
 			displayName = definition.displayName,
@@ -447,10 +496,21 @@ local function addParcelVisual(player, jobTypeId)
 	local parcel = Instance.new("Part")
 	parcel.Name = "DeliveryParcel"
 	parcel.Size = Vector3.new(2.2, 1.7, 1.3)
-	parcel.Color = jobTypeId == "express"
-		and Color3.fromRGB(255, 178, 72)
-		or Color3.fromRGB(176, 132, 82)
-	parcel.Material = Enum.Material.SmoothPlastic
+
+	if jobTypeId == "special" then
+		parcel.Color = Color3.fromRGB(186, 112, 255)
+		parcel.Material = Enum.Material.Neon
+	elseif jobTypeId == "express" then
+		parcel.Color = Color3.fromRGB(255, 178, 72)
+		parcel.Material = Enum.Material.SmoothPlastic
+	elseif jobTypeId == "long" then
+		parcel.Color = Color3.fromRGB(91, 151, 204)
+		parcel.Material = Enum.Material.SmoothPlastic
+	else
+		parcel.Color = Color3.fromRGB(176, 132, 82)
+		parcel.Material = Enum.Material.SmoothPlastic
+	end
+
 	parcel.CanCollide = false
 	parcel.CanQuery = false
 	parcel.Massless = true
@@ -463,23 +523,45 @@ local function addParcelVisual(player, jobTypeId)
 	weld.Parent = parcel
 end
 
-local function chooseJobType()
+local function getPlayerDeliveries(player)
+	local stats = getStats(player)
+	if stats and stats.deliveries then
+		return stats.deliveries.Value
+	end
+	return 0
+end
+
+local function isHouseUnlocked(player, house)
+	local districtId = house:GetAttribute("DistrictId") or "central"
+	if districtId == "riverside" then
+		return getPlayerDeliveries(player) >= RIVERSIDE_UNLOCK_DELIVERIES
+	end
+	return true
+end
+
+local function chooseJobType(player)
+	local deliveries = getPlayerDeliveries(player)
+	local available = {}
 	local totalWeight = 0
+
 	for _, jobType in ipairs(JOB_TYPES) do
-		totalWeight += jobType.weight
+		if deliveries >= (jobType.minDeliveries or 0) then
+			table.insert(available, jobType)
+			totalWeight += jobType.weight
+		end
 	end
 
 	local roll = math.random() * totalWeight
 	local cursor = 0
 
-	for _, jobType in ipairs(JOB_TYPES) do
+	for _, jobType in ipairs(available) do
 		cursor += jobType.weight
 		if roll <= cursor then
 			return jobType
 		end
 	end
 
-	return JOB_TYPES[1]
+	return available[1] or JOB_TYPES[1]
 end
 
 local function findJobType(id)
@@ -508,19 +590,27 @@ local function assignJob(player)
 	local lastHouse = playerLastHouse[player]
 
 	for _, house in ipairs(houses) do
-		if house.Name ~= lastHouse or #houses == 1 then
+		if isHouseUnlocked(player, house) and (house.Name ~= lastHouse or #houses == 1) then
 			table.insert(candidates, house)
 		end
 	end
 
+	if #candidates == 0 then
+		return
+	end
+
 	local target = candidates[math.random(1, #candidates)]
-	local jobType = chooseJobType()
+	local jobType = chooseJobType(player)
+	local districtId = target:GetAttribute("DistrictId") or "central"
+	local districtName = target:GetAttribute("DistrictName") or DISTRICT_NAMES[districtId] or districtId
 	local now = workspace:GetServerTimeNow()
 	local expiresAt = now + jobType.timeLimit
 
 	playerJobs[player] = {
 		houseName = target.Name,
 		displayName = target:GetAttribute("DisplayName") or target.Name,
+		districtId = districtId,
+		districtName = districtName,
 		jobTypeId = jobType.id,
 		expiresAt = expiresAt,
 		startedAt = now,
@@ -532,6 +622,8 @@ local function assignJob(player)
 	sendStatus(player, "JobAssigned", {
 		houseName = target.Name,
 		displayName = target:GetAttribute("DisplayName") or target.Name,
+		districtId = districtId,
+		districtName = districtName,
 		jobTypeId = jobType.id,
 		jobTypeName = jobType.name,
 		expiresAt = expiresAt,
@@ -571,9 +663,24 @@ local function completeDelivery(player, houseName)
 	local reward = jobType.baseReward + (remaining * jobType.timeBonusPerSecond) + streakBonus
 
 	local stats = getStats(player)
+	local deliveriesAfter = nil
 	if stats and stats.coins and stats.deliveries then
 		stats.coins.Value += reward
 		stats.deliveries.Value += 1
+		deliveriesAfter = stats.deliveries.Value
+	end
+
+	if deliveriesAfter == RIVERSIDE_UNLOCK_DELIVERIES then
+		sendStatus(player, "DistrictUnlocked", {
+			districtId = "riverside",
+			districtName = DISTRICT_NAMES.riverside,
+		})
+	end
+
+	if deliveriesAfter == SPECIAL_JOB_UNLOCK_DELIVERIES then
+		sendStatus(player, "SpecialJobsUnlocked", {
+			jobTypeName = "深夜特別便",
+		})
 	end
 
 	playerJobs[player] = nil
@@ -725,6 +832,11 @@ local function setupPlayer(player)
 
 	sendStatus(player, "Welcome", {
 		speedLevel = data.speedLevel,
+		deliveries = data.deliveries,
+		riversideUnlockAt = RIVERSIDE_UNLOCK_DELIVERIES,
+		specialJobUnlockAt = SPECIAL_JOB_UNLOCK_DELIVERIES,
+		riversideUnlocked = data.deliveries >= RIVERSIDE_UNLOCK_DELIVERIES,
+		specialJobsUnlocked = data.deliveries >= SPECIAL_JOB_UNLOCK_DELIVERIES,
 		nextUpgradeCost = data.speedLevel < MAX_SPEED_LEVEL and getSpeedUpgradeCost(data.speedLevel) or 0,
 	})
 end
