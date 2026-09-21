@@ -36,8 +36,9 @@ gui.Parent = player:WaitForChild("PlayerGui")
 
 local panel = Instance.new("Frame")
 panel.Name = "DeliveryPanel"
-panel.Size = UDim2.fromOffset(380, 222)
-panel.Position = UDim2.new(0.5, -180, 0, 18)
+panel.Size = UDim2.new(0.94, 0, 0, 222)
+panel.AnchorPoint = Vector2.new(0.5, 0)
+panel.Position = UDim2.new(0.5, 0, 0, 18)
 panel.BackgroundColor3 = Color3.fromRGB(22, 27, 38)
 panel.BackgroundTransparency = 0.06
 panel.BorderSizePixel = 0
@@ -183,8 +184,9 @@ guideCorner.Parent = guide
 
 local shopFrame = Instance.new("Frame")
 shopFrame.Name = "ShopPanel"
-shopFrame.Size = UDim2.fromOffset(340, 260)
-shopFrame.Position = UDim2.new(0.5, -170, 0.5, -130)
+shopFrame.Size = UDim2.new(0.9, 0, 0, 260)
+shopFrame.AnchorPoint = Vector2.new(0.5, 0.5)
+shopFrame.Position = UDim2.new(0.5, 0, 0.5, 0)
 shopFrame.BackgroundColor3 = Color3.fromRGB(22, 27, 38)
 shopFrame.BackgroundTransparency = 0.03
 shopFrame.BorderSizePixel = 0
@@ -271,6 +273,39 @@ end)
 bikeStyleButton.Activated:Connect(function()
 	deliveryEvent:FireServer("BuyBikeStyle")
 end)
+
+local weatherOverlay = Instance.new("Frame")
+weatherOverlay.Name = "WeatherOverlay"
+weatherOverlay.Size = UDim2.fromScale(1, 1)
+weatherOverlay.BackgroundColor3 = Color3.fromRGB(116, 126, 142)
+weatherOverlay.BackgroundTransparency = 1
+weatherOverlay.BorderSizePixel = 0
+weatherOverlay.ZIndex = 0
+weatherOverlay.Parent = gui
+
+local rainLines = {}
+for index = 1, 24 do
+	local line = Instance.new("Frame")
+	line.Name = "Rain" .. index
+	line.Size = UDim2.fromOffset(2, 24)
+	line.BackgroundColor3 = Color3.fromRGB(190, 210, 230)
+	line.BackgroundTransparency = 0.58
+	line.BorderSizePixel = 0
+	line.Rotation = 12
+	line.Visible = false
+	line.ZIndex = 0
+	line.Parent = weatherOverlay
+	table.insert(rainLines, line)
+end
+
+local function updateWeatherVisual()
+	local raining = currentWeatherName == "雨"
+	local foggy = currentWeatherName == "濃霧"
+	weatherOverlay.BackgroundTransparency = foggy and 0.9 or 1
+	for _, line in ipairs(rainLines) do
+		line.Visible = raining
+	end
+end
 
 local toastSerial = 0
 
@@ -431,6 +466,7 @@ deliveryEvent.OnClientEvent:Connect(function(action, payload)
 		currentJobTypeId = payload.jobTypeId
 		currentWeatherName = payload.weatherName or currentWeatherName
 		currentWeatherMultiplier = payload.weatherMultiplier or currentWeatherMultiplier
+		updateWeatherVisual()
 		expiresAt = payload.expiresAt
 
 		targetLabel.Text = "配達先: " .. (currentDisplayName or currentHouseName)
@@ -509,6 +545,7 @@ deliveryEvent.OnClientEvent:Connect(function(action, payload)
 	elseif action == "WeatherChanged" then
 		currentWeatherName = payload.weatherName or "晴れ"
 		currentWeatherMultiplier = payload.rewardMultiplier or 1
+		updateWeatherVisual()
 		updateStats()
 		if currentWeatherMultiplier > 1 then
 			showToast(string.format("%sになった。配達報酬 x%.2f", currentWeatherName, currentWeatherMultiplier))
@@ -541,6 +578,7 @@ deliveryEvent.OnClientEvent:Connect(function(action, payload)
 		shiftTarget = payload.shiftTarget or 5
 		currentWeatherName = payload.weatherName or currentWeatherName
 		currentWeatherMultiplier = payload.weatherMultiplier or currentWeatherMultiplier
+		updateWeatherVisual()
 		if (payload.deliveries or 0) == 0 then
 			showToast("最初は黄色い床で配達を受注。5件で川沿い地区が開くよ。")
 		elseif (payload.speedLevel or 0) > 0 then
@@ -555,6 +593,18 @@ end)
 deliveryEvent:FireServer("RequestState")
 
 RunService.RenderStepped:Connect(function()
+	if currentWeatherName == "雨" then
+		local t = os.clock()
+		local width = workspace.CurrentCamera and workspace.CurrentCamera.ViewportSize.X or 400
+		local height = workspace.CurrentCamera and workspace.CurrentCamera.ViewportSize.Y or 700
+		for index, line in ipairs(rainLines) do
+			local speed = 260 + (index % 5) * 36
+			local y = ((t * speed) + index * 83) % (height + 80) - 40
+			local x = ((index * 97) + math.floor(t * 18) * 7) % math.max(width, 1)
+			line.Position = UDim2.fromOffset(x, y)
+		end
+	end
+
 	if expiresAt and currentHouseName then
 		local remaining = math.max(0, math.ceil(expiresAt - workspace:GetServerTimeNow()))
 		timerLabel.Text = string.format("残り %d秒  •  早いほどボーナス", remaining)
