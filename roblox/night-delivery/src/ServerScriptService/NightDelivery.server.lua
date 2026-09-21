@@ -1147,7 +1147,22 @@ shopPrompt.Triggered:Connect(openShop)
 
 deliveryEvent.OnServerEvent:Connect(function(player, action)
 	if action == "RequestState" then
-		sendPlayerState(player)
+		if player:GetAttribute("NightDeliveryReady") == true then
+			sendPlayerState(player)
+		else
+			task.spawn(function()
+				for _ = 1, 100 do
+					if not player.Parent then
+						return
+					end
+					if player:GetAttribute("NightDeliveryReady") == true then
+						sendPlayerState(player)
+						return
+					end
+					task.wait(0.1)
+				end
+			end)
+		end
 	elseif action == "BuySpeed" then
 		if isNearPart(player, shopPadRef, 18) then
 			tryUpgradeSpeed(player)
@@ -1174,6 +1189,7 @@ for _, entry in ipairs(housePrompts) do
 end
 
 local function setupPlayer(player)
+	player:SetAttribute("NightDeliveryReady", false)
 	local data = loadData(player)
 
 	local leaderstats = Instance.new("Folder")
@@ -1217,6 +1233,7 @@ local function setupPlayer(player)
 		task.spawn(setupCharacter, player.Character)
 	end
 
+	player:SetAttribute("NightDeliveryReady", true)
 	sendPlayerState(player)
 end
 
