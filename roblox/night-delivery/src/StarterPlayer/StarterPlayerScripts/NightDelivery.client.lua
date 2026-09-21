@@ -480,6 +480,7 @@ deliveryEvent.OnClientEvent:Connect(function(action, payload)
 		shiftTarget = payload.shiftTarget or shiftTarget
 		currentRankName = payload.rankName or currentRankName
 		showToast(string.format("配達完了！ +%d Coins%s%s%s", payload.reward or 0, bonusText, extraText, unlockText))
+		updateStats()
 
 		currentHouseName = nil
 		currentDisplayName = nil
@@ -540,7 +541,9 @@ deliveryEvent.OnClientEvent:Connect(function(action, payload)
 		shiftTarget = payload.shiftTarget or 5
 		currentWeatherName = payload.weatherName or currentWeatherName
 		currentWeatherMultiplier = payload.weatherMultiplier or currentWeatherMultiplier
-		if (payload.speedLevel or 0) > 0 then
+		if (payload.deliveries or 0) == 0 then
+			showToast("最初は黄色い床で配達を受注。5件で川沿い地区が開くよ。")
+		elseif (payload.speedLevel or 0) > 0 then
 			showToast(string.format("おかえり！ %s / 速度Lv.%d", currentRankName, payload.speedLevel))
 		end
 		updateStats()
@@ -548,6 +551,8 @@ deliveryEvent.OnClientEvent:Connect(function(action, payload)
 		showToast(payload.text or "")
 	end
 end)
+
+deliveryEvent:FireServer("RequestState")
 
 RunService.RenderStepped:Connect(function()
 	if expiresAt and currentHouseName then
