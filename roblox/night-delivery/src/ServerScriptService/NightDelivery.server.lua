@@ -670,18 +670,8 @@ local function completeDelivery(player, houseName)
 		deliveriesAfter = stats.deliveries.Value
 	end
 
-	if deliveriesAfter == RIVERSIDE_UNLOCK_DELIVERIES then
-		sendStatus(player, "DistrictUnlocked", {
-			districtId = "riverside",
-			districtName = DISTRICT_NAMES.riverside,
-		})
-	end
-
-	if deliveriesAfter == SPECIAL_JOB_UNLOCK_DELIVERIES then
-		sendStatus(player, "SpecialJobsUnlocked", {
-			jobTypeName = "深夜特別便",
-		})
-	end
+	local districtUnlocked = deliveriesAfter == RIVERSIDE_UNLOCK_DELIVERIES
+	local specialJobsUnlocked = deliveriesAfter == SPECIAL_JOB_UNLOCK_DELIVERIES
 
 	playerJobs[player] = nil
 	clearParcelVisual(player)
@@ -693,6 +683,8 @@ local function completeDelivery(player, houseName)
 		timeRemaining = remaining,
 		streak = streak,
 		streakBonus = streakBonus,
+		districtUnlocked = districtUnlocked,
+		specialJobsUnlocked = specialJobsUnlocked,
 	})
 end
 
