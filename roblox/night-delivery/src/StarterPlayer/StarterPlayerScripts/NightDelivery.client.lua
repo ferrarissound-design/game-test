@@ -301,12 +301,13 @@ deliveryEvent.OnClientEvent:Connect(function(action, payload)
 		currentJobTypeId = payload.jobTypeId
 		expiresAt = payload.expiresAt
 
-		targetLabel.Text = string.format(
-			"配達先: %s  •  %s",
-			currentDisplayName or currentHouseName,
-			currentDistrictName or "住宅街"
+		targetLabel.Text = "配達先: " .. (currentDisplayName or currentHouseName)
+		jobLabel.Text = string.format(
+			"%s  •  %s  •  基本報酬 %d",
+			currentDistrictName or "住宅街",
+			currentJobTypeName or "配達",
+			payload.baseReward or 0
 		)
-		jobLabel.Text = string.format("%s  •  基本報酬 %d", currentJobTypeName or "配達", payload.baseReward or 0)
 		jobLabel.TextColor3 = currentJobTypeId == "special"
 			and Color3.fromRGB(214, 156, 255)
 			or Color3.fromRGB(157, 190, 225)
@@ -320,9 +321,17 @@ deliveryEvent.OnClientEvent:Connect(function(action, payload)
 	elseif action == "Delivered" then
 		local bonusText = ""
 		if (payload.streakBonus or 0) > 0 then
-			bonusText = string.format("  連続ボーナス +%d", payload.streakBonus)
+			bonusText = string.format("  連続 +%d", payload.streakBonus)
 		end
-		showToast(string.format("配達完了！ +%d Coins%s", payload.reward or 0, bonusText))
+
+		local unlockText = ""
+		if payload.districtUnlocked then
+			unlockText = "  🌉 川沿い地区 解放！"
+		elseif payload.specialJobsUnlocked then
+			unlockText = "  🟣 深夜特別便 解放！"
+		end
+
+		showToast(string.format("配達完了！ +%d Coins%s%s", payload.reward or 0, bonusText, unlockText))
 
 		currentHouseName = nil
 		currentDisplayName = nil
@@ -346,12 +355,6 @@ deliveryEvent.OnClientEvent:Connect(function(action, payload)
 		end
 	elseif action == "SpeedUpgraded" then
 		showToast(string.format("速度Lv.%d に強化！", payload.level or 0))
-	elseif action == "DistrictUnlocked" then
-		showToast("🌉 川沿い地区が解放！ 新しい配達先が増えた。")
-		updateStats()
-	elseif action == "SpecialJobsUnlocked" then
-		showToast("🟣 深夜特別便が解放！ まれに高報酬の依頼が出る。")
-		updateStats()
 	elseif action == "Welcome" then
 		if (payload.speedLevel or 0) > 0 then
 			showToast(string.format("おかえり！ 速度Lv.%d", payload.speedLevel))
