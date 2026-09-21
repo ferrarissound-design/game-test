@@ -26,6 +26,7 @@ local shiftTarget = 5
 local expiresAt = nil
 local currentHighlight = nil
 local currentBillboard = nil
+local currentTargetPart = nil
 local bikeActive = false
 
 local gui = Instance.new("ScreenGui")
@@ -85,7 +86,7 @@ local jobLabel = Instance.new("TextLabel")
 jobLabel.Size = UDim2.new(1, -24, 0, 22)
 jobLabel.Position = UDim2.fromOffset(12, 66)
 jobLabel.BackgroundTransparency = 1
-jobLabel.Text = "通常便 / 速達便 / 遠距離便"
+jobLabel.Text = "通常便 / 速達便 / 遠距離便 / 深夜特別便"
 jobLabel.TextColor3 = Color3.fromRGB(157, 190, 225)
 jobLabel.Font = Enum.Font.GothamMedium
 jobLabel.TextSize = 13
@@ -148,8 +149,9 @@ shiftLabel.TextXAlignment = Enum.TextXAlignment.Left
 shiftLabel.Parent = panel
 
 local toast = Instance.new("TextLabel")
-toast.Size = UDim2.fromOffset(360, 58)
-toast.Position = UDim2.new(0.5, -180, 1, -92)
+toast.Size = UDim2.new(0.9, 0, 0, 58)
+toast.AnchorPoint = Vector2.new(0.5, 1)
+toast.Position = UDim2.new(0.5, 0, 1, -34)
 toast.BackgroundColor3 = Color3.fromRGB(20, 24, 32)
 toast.BackgroundTransparency = 1
 toast.TextTransparency = 1
@@ -165,8 +167,9 @@ toastCorner.CornerRadius = UDim.new(0, 12)
 toastCorner.Parent = toast
 
 local guide = Instance.new("TextLabel")
-guide.Size = UDim2.fromOffset(330, 46)
-guide.Position = UDim2.new(0.5, -165, 1, -148)
+guide.Size = UDim2.new(0.86, 0, 0, 46)
+guide.AnchorPoint = Vector2.new(0.5, 1)
+guide.Position = UDim2.new(0.5, 0, 1, -100)
 guide.BackgroundColor3 = Color3.fromRGB(28, 34, 44)
 guide.BackgroundTransparency = 0.18
 guide.TextColor3 = Color3.fromRGB(215, 226, 238)
@@ -341,6 +344,7 @@ local function clearWaypoint()
 		currentBillboard:Destroy()
 		currentBillboard = nil
 	end
+	currentTargetPart = nil
 end
 
 local function setWaypoint(houseName)
@@ -365,6 +369,7 @@ local function setWaypoint(houseName)
 	if not body then
 		return
 	end
+	currentTargetPart = body
 
 	local highlight = Instance.new("Highlight")
 	highlight.Name = "LocalDeliveryHighlight"
@@ -609,10 +614,15 @@ RunService.RenderStepped:Connect(function()
 
 	if expiresAt and currentHouseName then
 		local remaining = math.max(0, math.ceil(expiresAt - workspace:GetServerTimeNow()))
-		timerLabel.Text = string.format("残り %d秒  •  早いほどボーナス", remaining)
+		local character = player.Character
+		local root = character and character:FindFirstChild("HumanoidRootPart")
+		local distance = root and currentTargetPart and math.floor((root.Position - currentTargetPart.Position).Magnitude) or nil
+		local distanceText = distance and string.format("  •  距離 %d", distance) or ""
+
+		timerLabel.Text = string.format("残り %d秒%s", remaining, distanceText)
 
 		if remaining <= 0 then
-			timerLabel.Text = "時間切れ  •  基本報酬で配達可能"
+			timerLabel.Text = "時間切れ" .. distanceText .. "  •  基本報酬"
 		end
 	end
 end)
