@@ -12,6 +12,19 @@ local REMOTE_NAME = "NightDeliveryEvent"
 local WORLD_NAME = "NightDeliveryWorld"
 local DATASTORE_NAME = "NightDeliveryPlayerData_v2"
 
+local deliveryEvent = ReplicatedStorage:FindFirstChild(REMOTE_NAME)
+if deliveryEvent and not deliveryEvent:IsA("RemoteEvent") then
+	warn("Night Delivery: replacing non-RemoteEvent instance named " .. REMOTE_NAME)
+	deliveryEvent:Destroy()
+	deliveryEvent = nil
+end
+
+if not deliveryEvent then
+	deliveryEvent = Instance.new("RemoteEvent")
+	deliveryEvent.Name = REMOTE_NAME
+	deliveryEvent.Parent = ReplicatedStorage
+end
+
 local BASE_WALK_SPEED = 20
 local BIKE_BONUS_SPEED = 10
 local SPEED_PER_LEVEL = 2
@@ -55,7 +68,14 @@ local BIKE_STYLES = {
 	{name = "ゴールド", cost = 3000, color = Color3.fromRGB(228, 184, 67)},
 }
 
-local DELIVERY_STORE = DataStoreService:GetDataStore(DATASTORE_NAME)
+local dataStoreAvailable, deliveryStoreResult = pcall(function()
+	return DataStoreService:GetDataStore(DATASTORE_NAME)
+end)
+local DELIVERY_STORE = dataStoreAvailable and deliveryStoreResult or nil
+
+if not dataStoreAvailable then
+	warn("Night Delivery: DataStore is unavailable; using session data only", deliveryStoreResult)
+end
 
 local JOB_TYPES = {
 	{
@@ -95,13 +115,6 @@ local JOB_TYPES = {
 		minDeliveries = SPECIAL_JOB_UNLOCK_DELIVERIES,
 	},
 }
-
-local deliveryEvent = ReplicatedStorage:FindFirstChild(REMOTE_NAME)
-if not deliveryEvent then
-	deliveryEvent = Instance.new("RemoteEvent")
-	deliveryEvent.Name = REMOTE_NAME
-	deliveryEvent.Parent = ReplicatedStorage
-end
 
 local oldWorld = workspace:FindFirstChild(WORLD_NAME)
 if oldWorld then
@@ -247,6 +260,7 @@ local function createHouse(id, displayName, districtId, position, bodyColor)
 	prompt.ActionText = "配達する"
 	prompt.ObjectText = displayName
 	prompt.KeyboardKeyCode = Enum.KeyCode.E
+	prompt.Style = Enum.ProximityPromptStyle.Custom
 	prompt.HoldDuration = 0.2
 	prompt.MaxActivationDistance = 10
 	prompt.RequiresLineOfSight = false
@@ -385,6 +399,7 @@ local function createWorld()
 	depotPrompt.ActionText = "配達を受ける"
 	depotPrompt.ObjectText = "夜間配達所"
 	depotPrompt.KeyboardKeyCode = Enum.KeyCode.E
+	depotPrompt.Style = Enum.ProximityPromptStyle.Custom
 	depotPrompt.HoldDuration = 0.25
 	depotPrompt.MaxActivationDistance = 12
 	depotPrompt.RequiresLineOfSight = false
@@ -423,6 +438,7 @@ local function createWorld()
 	bikePrompt.ActionText = "自転車モード切替"
 	bikePrompt.ObjectText = "配達自転車"
 	bikePrompt.KeyboardKeyCode = Enum.KeyCode.B
+	bikePrompt.Style = Enum.ProximityPromptStyle.Custom
 	bikePrompt.HoldDuration = 0.2
 	bikePrompt.MaxActivationDistance = 12
 	bikePrompt.RequiresLineOfSight = false
@@ -441,6 +457,7 @@ local function createWorld()
 	shopPrompt.ActionText = "ショップを開く"
 	shopPrompt.ObjectText = "夜間配達ショップ"
 	shopPrompt.KeyboardKeyCode = Enum.KeyCode.U
+	shopPrompt.Style = Enum.ProximityPromptStyle.Custom
 	shopPrompt.HoldDuration = 0.2
 	shopPrompt.MaxActivationDistance = 12
 	shopPrompt.RequiresLineOfSight = false
@@ -945,6 +962,9 @@ local function loadData(player)
 		bikeStyleLevel = 0,
 		shiftWins = 0,
 	}
+	if not DELIVERY_STORE then
+		return defaultData
+	end
 
 	local success = false
 	local data = nil
@@ -975,6 +995,10 @@ local function loadData(player)
 end
 
 local function saveData(player)
+	if not DELIVERY_STORE then
+		return false
+	end
+
 	local stats = getStats(player)
 	if not stats or not stats.coins or not stats.deliveries then
 		return

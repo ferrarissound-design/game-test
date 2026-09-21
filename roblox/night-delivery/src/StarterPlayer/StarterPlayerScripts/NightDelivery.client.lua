@@ -5,6 +5,7 @@ local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 local TweenService = game:GetService("TweenService")
+local ProximityPromptService = game:GetService("ProximityPromptService")
 
 local player = Players.LocalPlayer
 local deliveryEvent = ReplicatedStorage:WaitForChild("NightDeliveryEvent")
@@ -36,153 +37,270 @@ gui.IgnoreGuiInset = false
 gui.Parent = player:WaitForChild("PlayerGui")
 
 local panel = Instance.new("Frame")
-panel.Name = "DeliveryPanel"
-panel.Size = UDim2.new(0.94, 0, 0, 222)
-panel.AnchorPoint = Vector2.new(0.5, 0)
-panel.Position = UDim2.new(0.5, 0, 0, 18)
+panel.Name = "ObjectivePanel"
+panel.Size = UDim2.new(0.46, 0, 0, 112)
+panel.Position = UDim2.fromOffset(10, 10)
 panel.BackgroundColor3 = Color3.fromRGB(22, 27, 38)
-panel.BackgroundTransparency = 0.06
+panel.BackgroundTransparency = 0.28
 panel.BorderSizePixel = 0
 panel.Parent = gui
 
 local sizeConstraint = Instance.new("UISizeConstraint")
-sizeConstraint.MinSize = Vector2.new(320, 222)
-sizeConstraint.MaxSize = Vector2.new(400, 222)
+sizeConstraint.MinSize = Vector2.new(150, 112)
+sizeConstraint.MaxSize = Vector2.new(300, 112)
 sizeConstraint.Parent = panel
 
 local corner = Instance.new("UICorner")
-corner.CornerRadius = UDim.new(0, 14)
+corner.CornerRadius = UDim.new(0, 10)
 corner.Parent = panel
 
 local stroke = Instance.new("UIStroke")
 stroke.Color = Color3.fromRGB(97, 140, 180)
-stroke.Transparency = 0.35
-stroke.Thickness = 1.4
+stroke.Transparency = 0.5
+stroke.Thickness = 1
 stroke.Parent = panel
 
 local title = Instance.new("TextLabel")
-title.Size = UDim2.new(1, -24, 0, 28)
-title.Position = UDim2.fromOffset(12, 8)
+title.Size = UDim2.new(1, -20, 0, 20)
+title.Position = UDim2.fromOffset(10, 5)
 title.BackgroundTransparency = 1
-title.Text = "🌙 静かな夜間配達"
+title.Text = "現在の目的"
 title.TextColor3 = Color3.fromRGB(232, 241, 255)
 title.Font = Enum.Font.GothamBold
-title.TextSize = 20
+title.TextSize = 14
 title.TextXAlignment = Enum.TextXAlignment.Left
 title.Parent = panel
 
 local targetLabel = Instance.new("TextLabel")
-targetLabel.Size = UDim2.new(1, -24, 0, 25)
-targetLabel.Position = UDim2.fromOffset(12, 39)
+targetLabel.Size = UDim2.new(1, -20, 0, 22)
+targetLabel.Position = UDim2.fromOffset(10, 26)
 targetLabel.BackgroundTransparency = 1
 targetLabel.Text = "配達所で荷物を受け取ろう"
 targetLabel.TextColor3 = Color3.fromRGB(210, 219, 232)
-targetLabel.Font = Enum.Font.Gotham
-targetLabel.TextSize = 17
+targetLabel.Font = Enum.Font.GothamMedium
+targetLabel.TextSize = 13
 targetLabel.TextXAlignment = Enum.TextXAlignment.Left
+targetLabel.TextWrapped = true
 targetLabel.Parent = panel
 
 local jobLabel = Instance.new("TextLabel")
-jobLabel.Size = UDim2.new(1, -24, 0, 22)
-jobLabel.Position = UDim2.fromOffset(12, 66)
+jobLabel.Size = UDim2.new(1, -20, 0, 36)
+jobLabel.Position = UDim2.fromOffset(10, 48)
 jobLabel.BackgroundTransparency = 1
 jobLabel.Text = "通常便 / 速達便 / 遠距離便 / 深夜特別便"
 jobLabel.TextColor3 = Color3.fromRGB(157, 190, 225)
 jobLabel.Font = Enum.Font.GothamMedium
-jobLabel.TextSize = 13
+jobLabel.TextSize = 11
 jobLabel.TextXAlignment = Enum.TextXAlignment.Left
+jobLabel.TextYAlignment = Enum.TextYAlignment.Top
+jobLabel.TextWrapped = true
 jobLabel.Parent = panel
 
 local timerLabel = Instance.new("TextLabel")
-timerLabel.Size = UDim2.new(1, -24, 0, 22)
-timerLabel.Position = UDim2.fromOffset(12, 90)
+timerLabel.Size = UDim2.new(1, -20, 0, 20)
+timerLabel.Position = UDim2.fromOffset(10, 86)
 timerLabel.BackgroundTransparency = 1
 timerLabel.Text = ""
 timerLabel.TextColor3 = Color3.fromRGB(255, 219, 138)
 timerLabel.Font = Enum.Font.GothamMedium
-timerLabel.TextSize = 15
+timerLabel.TextSize = 13
 timerLabel.TextXAlignment = Enum.TextXAlignment.Left
 timerLabel.Parent = panel
 
+local statusPanel = Instance.new("Frame")
+statusPanel.Name = "StatusPanel"
+statusPanel.Size = UDim2.new(0.46, 0, 0, 132)
+statusPanel.AnchorPoint = Vector2.new(1, 0)
+statusPanel.Position = UDim2.new(1, -10, 0, 10)
+statusPanel.BackgroundColor3 = Color3.fromRGB(22, 27, 38)
+statusPanel.BackgroundTransparency = 0.28
+statusPanel.BorderSizePixel = 0
+statusPanel.Parent = gui
+
+local statusSizeConstraint = Instance.new("UISizeConstraint")
+statusSizeConstraint.MinSize = Vector2.new(150, 132)
+statusSizeConstraint.MaxSize = Vector2.new(300, 132)
+statusSizeConstraint.Parent = statusPanel
+
+local statusCorner = Instance.new("UICorner")
+statusCorner.CornerRadius = UDim.new(0, 10)
+statusCorner.Parent = statusPanel
+
+local statusStroke = Instance.new("UIStroke")
+statusStroke.Color = Color3.fromRGB(97, 140, 180)
+statusStroke.Transparency = 0.5
+statusStroke.Thickness = 1
+statusStroke.Parent = statusPanel
+
+local statusTitle = Instance.new("TextLabel")
+statusTitle.Size = UDim2.new(1, -20, 0, 20)
+statusTitle.Position = UDim2.fromOffset(10, 5)
+statusTitle.BackgroundTransparency = 1
+statusTitle.Text = "🌙 NIGHT DELIVERY"
+statusTitle.TextColor3 = Color3.fromRGB(232, 241, 255)
+statusTitle.Font = Enum.Font.GothamBold
+statusTitle.TextSize = 13
+statusTitle.TextXAlignment = Enum.TextXAlignment.Right
+statusTitle.Parent = statusPanel
+
 local statsLabel = Instance.new("TextLabel")
-statsLabel.Size = UDim2.new(1, -24, 0, 23)
-statsLabel.Position = UDim2.fromOffset(12, 117)
+statsLabel.Size = UDim2.new(1, -20, 0, 20)
+statsLabel.Position = UDim2.fromOffset(10, 27)
 statsLabel.BackgroundTransparency = 1
 statsLabel.Text = "Coins 0  •  配達 0  •  🚲 OFF"
 statsLabel.TextColor3 = Color3.fromRGB(190, 206, 220)
 statsLabel.Font = Enum.Font.Gotham
-statsLabel.TextSize = 14
-statsLabel.TextXAlignment = Enum.TextXAlignment.Left
-statsLabel.Parent = panel
+statsLabel.TextSize = 12
+statsLabel.TextXAlignment = Enum.TextXAlignment.Right
+statsLabel.Parent = statusPanel
 
 local progressLabel = Instance.new("TextLabel")
-progressLabel.Size = UDim2.new(1, -24, 0, 22)
-progressLabel.Position = UDim2.fromOffset(12, 143)
+progressLabel.Size = UDim2.new(1, -20, 0, 36)
+progressLabel.Position = UDim2.fromOffset(10, 93)
 progressLabel.BackgroundTransparency = 1
 progressLabel.Text = "川沿い地区まであと5件"
 progressLabel.TextColor3 = Color3.fromRGB(145, 207, 184)
 progressLabel.Font = Enum.Font.GothamMedium
-progressLabel.TextSize = 14
-progressLabel.TextXAlignment = Enum.TextXAlignment.Left
-progressLabel.Parent = panel
+progressLabel.TextSize = 11
+progressLabel.TextXAlignment = Enum.TextXAlignment.Right
+progressLabel.TextYAlignment = Enum.TextYAlignment.Top
+progressLabel.TextWrapped = true
+progressLabel.Parent = statusPanel
 
 local weatherLabel = Instance.new("TextLabel")
-weatherLabel.Size = UDim2.new(1, -24, 0, 22)
-weatherLabel.Position = UDim2.fromOffset(12, 166)
+weatherLabel.Size = UDim2.new(1, -20, 0, 20)
+weatherLabel.Position = UDim2.fromOffset(10, 49)
 weatherLabel.BackgroundTransparency = 1
 weatherLabel.Text = "☀ 晴れ  •  報酬 x1.00"
 weatherLabel.TextColor3 = Color3.fromRGB(191, 210, 228)
 weatherLabel.Font = Enum.Font.GothamMedium
-weatherLabel.TextSize = 14
-weatherLabel.TextXAlignment = Enum.TextXAlignment.Left
-weatherLabel.Parent = panel
+weatherLabel.TextSize = 12
+weatherLabel.TextXAlignment = Enum.TextXAlignment.Right
+weatherLabel.Parent = statusPanel
 
 local shiftLabel = Instance.new("TextLabel")
-shiftLabel.Size = UDim2.new(1, -24, 0, 22)
-shiftLabel.Position = UDim2.fromOffset(12, 189)
+shiftLabel.Size = UDim2.new(1, -20, 0, 20)
+shiftLabel.Position = UDim2.fromOffset(10, 71)
 shiftLabel.BackgroundTransparency = 1
 shiftLabel.Text = "新人  •  夜勤 0/5"
 shiftLabel.TextColor3 = Color3.fromRGB(225, 205, 154)
 shiftLabel.Font = Enum.Font.GothamMedium
-shiftLabel.TextSize = 14
-shiftLabel.TextXAlignment = Enum.TextXAlignment.Left
-shiftLabel.Parent = panel
+shiftLabel.TextSize = 12
+shiftLabel.TextXAlignment = Enum.TextXAlignment.Right
+shiftLabel.Parent = statusPanel
 
 local toast = Instance.new("TextLabel")
-toast.Size = UDim2.new(0.9, 0, 0, 58)
+toast.Size = UDim2.new(0.78, 0, 0, 42)
 toast.AnchorPoint = Vector2.new(0.5, 1)
-toast.Position = UDim2.new(0.5, 0, 1, -34)
+toast.Position = UDim2.new(0.5, 0, 1, -74)
 toast.BackgroundColor3 = Color3.fromRGB(20, 24, 32)
 toast.BackgroundTransparency = 1
 toast.TextTransparency = 1
 toast.TextColor3 = Color3.fromRGB(245, 248, 255)
 toast.Font = Enum.Font.GothamMedium
-toast.TextSize = 17
+toast.TextSize = 14
 toast.TextWrapped = true
 toast.BorderSizePixel = 0
 toast.Parent = gui
 
+local toastSizeConstraint = Instance.new("UISizeConstraint")
+toastSizeConstraint.MinSize = Vector2.new(220, 42)
+toastSizeConstraint.MaxSize = Vector2.new(440, 42)
+toastSizeConstraint.Parent = toast
+
 local toastCorner = Instance.new("UICorner")
-toastCorner.CornerRadius = UDim.new(0, 12)
+toastCorner.CornerRadius = UDim.new(0, 9)
 toastCorner.Parent = toast
 
 local guide = Instance.new("TextLabel")
-guide.Size = UDim2.new(0.86, 0, 0, 46)
+guide.Size = UDim2.new(1, 0, 0, 24)
 guide.AnchorPoint = Vector2.new(0.5, 1)
-guide.Position = UDim2.new(0.5, 0, 1, -100)
+guide.Position = UDim2.new(0.5, 0, 1, 0)
 guide.BackgroundColor3 = Color3.fromRGB(28, 34, 44)
-guide.BackgroundTransparency = 0.18
+guide.BackgroundTransparency = 0.38
 guide.TextColor3 = Color3.fromRGB(215, 226, 238)
 guide.Font = Enum.Font.Gotham
-guide.TextSize = 14
-guide.TextWrapped = true
-guide.Text = "配達所: 受注 / 青: 自転車 / 紫: ショップ"
+guide.TextSize = 11
+guide.Text = "黄  配達所  /  青  自転車  /  紫  ショップ"
 guide.BorderSizePixel = 0
 guide.Parent = gui
 
-local guideCorner = Instance.new("UICorner")
-guideCorner.CornerRadius = UDim.new(0, 10)
-guideCorner.Parent = guide
+local promptButton = Instance.new("TextButton")
+promptButton.Name = "InteractionPrompt"
+promptButton.Size = UDim2.new(0.72, 0, 0, 34)
+promptButton.AnchorPoint = Vector2.new(0.5, 1)
+promptButton.Position = UDim2.new(0.5, 0, 1, -30)
+promptButton.BackgroundColor3 = Color3.fromRGB(24, 30, 40)
+promptButton.BackgroundTransparency = 0.18
+promptButton.BorderSizePixel = 0
+promptButton.TextColor3 = Color3.fromRGB(245, 248, 255)
+promptButton.Font = Enum.Font.GothamBold
+promptButton.TextSize = 13
+promptButton.AutoButtonColor = true
+promptButton.Visible = false
+promptButton.ZIndex = 5
+promptButton.Parent = gui
+
+local promptSizeConstraint = Instance.new("UISizeConstraint")
+promptSizeConstraint.MinSize = Vector2.new(180, 34)
+promptSizeConstraint.MaxSize = Vector2.new(300, 34)
+promptSizeConstraint.Parent = promptButton
+
+local promptCorner = Instance.new("UICorner")
+promptCorner.CornerRadius = UDim.new(0, 8)
+promptCorner.Parent = promptButton
+
+local activePrompt = nil
+local promptHoldActive = false
+
+local function endPromptHold()
+	if activePrompt and promptHoldActive then
+		promptHoldActive = false
+		activePrompt:InputHoldEnd()
+	end
+end
+
+ProximityPromptService.PromptShown:Connect(function(prompt, inputType)
+	endPromptHold()
+	activePrompt = prompt
+
+	local inputText = prompt.KeyboardKeyCode.Name
+	if inputType == Enum.ProximityPromptInputType.Touch then
+		inputText = "タップ"
+	elseif inputType == Enum.ProximityPromptInputType.Gamepad then
+		inputText = prompt.GamepadKeyCode.Name:gsub("Button", "")
+	end
+
+	promptButton.Text = string.format("%s  %s", inputText, prompt.ActionText)
+	promptButton.Visible = true
+end)
+
+ProximityPromptService.PromptHidden:Connect(function(prompt)
+	if prompt ~= activePrompt then
+		return
+	end
+
+	endPromptHold()
+	activePrompt = nil
+	promptButton.Visible = false
+end)
+
+promptButton.InputBegan:Connect(function(input)
+	local isPointer = input.UserInputType == Enum.UserInputType.MouseButton1
+		or input.UserInputType == Enum.UserInputType.Touch
+	if activePrompt and isPointer and not promptHoldActive then
+		promptHoldActive = true
+		activePrompt:InputHoldBegin()
+	end
+end)
+
+promptButton.InputEnded:Connect(function(input)
+	local isPointer = input.UserInputType == Enum.UserInputType.MouseButton1
+		or input.UserInputType == Enum.UserInputType.Touch
+	if isPointer then
+		endPromptHold()
+	end
+end)
 
 
 local shopFrame = Instance.new("Frame")
