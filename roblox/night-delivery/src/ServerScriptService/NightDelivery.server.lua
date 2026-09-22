@@ -580,7 +580,7 @@ local function createShowaHouse(model, position, bodyColor, variant)
 	makePart("Awning", Vector3.new(8.0, 0.35, 2.8), position + Vector3.new(3.6, 7.2, frontZ - 1.2), Color3.fromRGB(93, 87, 75), model, Enum.Material.Metal)
 
 	if variant == 3 then
-		makePart("SideShed", Vector3.new(7, 5.5, 11), position + Vector3.new(12, 2.75, 1), Color3.fromRGB(96, 92, 82), model, Enum.Material.CorrugatedMetal)
+		makePart("SideShed", Vector3.new(7, 5.5, 11), position + Vector3.new(12, 2.75, 1), Color3.fromRGB(96, 92, 82), model, Enum.Material.CorrodedMetal)
 	end
 	return body, frontZ
 end
