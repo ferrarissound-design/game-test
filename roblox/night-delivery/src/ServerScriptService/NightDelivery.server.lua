@@ -151,6 +151,124 @@ local function makePart(name, size, position, color, parent, material)
 	return part
 end
 
+local WORLD_THEMES = {
+	{
+		id = "japanese",
+		name = "日本住宅街",
+		groundColor = Color3.fromRGB(47, 61, 57),
+		roadColor = selectedWorldTheme.roadColor,
+		warehouseRoadColor = Color3.fromRGB(42, 44, 49),
+		canalColor = Color3.fromRGB(44, 91, 122),
+		streetLightColor = Color3.fromRGB(255, 229, 174),
+		streetLightBrightness = 1.8,
+		streetLightRange = 24,
+		streetLightHeight = 10,
+		roadScale = 0.92,
+		decoration = "japanese",
+		initialWeatherId = "clear",
+	},
+	{
+		id = "western",
+		name = "西洋住宅街",
+		groundColor = Color3.fromRGB(54, 71, 54),
+		roadColor = Color3.fromRGB(50, 51, 56),
+		warehouseRoadColor = Color3.fromRGB(44, 45, 50),
+		canalColor = Color3.fromRGB(48, 94, 126),
+		streetLightColor = Color3.fromRGB(255, 236, 194),
+		streetLightBrightness = 1.7,
+		streetLightRange = 27,
+		streetLightHeight = 11,
+		roadScale = 1.08,
+		decoration = "western",
+		initialWeatherId = "clear",
+	},
+	{
+		id = "showa",
+		name = "昭和住宅街",
+		groundColor = Color3.fromRGB(54, 57, 50),
+		roadColor = Color3.fromRGB(55, 54, 52),
+		warehouseRoadColor = Color3.fromRGB(49, 48, 47),
+		canalColor = Color3.fromRGB(55, 78, 87),
+		streetLightColor = Color3.fromRGB(255, 193, 119),
+		streetLightBrightness = 1.25,
+		streetLightRange = 20,
+		streetLightHeight = 8.5,
+		roadScale = 0.78,
+		decoration = "showa",
+		initialWeatherId = "clear",
+	},
+	{
+		id = "luxury",
+		name = "高級住宅街",
+		groundColor = Color3.fromRGB(43, 66, 52),
+		roadColor = Color3.fromRGB(43, 45, 49),
+		warehouseRoadColor = Color3.fromRGB(40, 42, 46),
+		canalColor = Color3.fromRGB(42, 95, 119),
+		streetLightColor = Color3.fromRGB(255, 240, 207),
+		streetLightBrightness = 2.0,
+		streetLightRange = 30,
+		streetLightHeight = 12,
+		roadScale = 1.18,
+		decoration = "luxury",
+		initialWeatherId = "clear",
+	},
+	{
+		id = "harbor",
+		name = "雨の港町",
+		groundColor = Color3.fromRGB(48, 54, 57),
+		roadColor = Color3.fromRGB(39, 43, 47),
+		warehouseRoadColor = Color3.fromRGB(36, 40, 44),
+		canalColor = Color3.fromRGB(35, 74, 95),
+		streetLightColor = Color3.fromRGB(183, 219, 239),
+		streetLightBrightness = 1.65,
+		streetLightRange = 25,
+		streetLightHeight = 11,
+		roadScale = 1.02,
+		decoration = "harbor",
+		initialWeatherId = "rain",
+	},
+	{
+		id = "mountain",
+		name = "山間集落",
+		groundColor = Color3.fromRGB(39, 58, 43),
+		roadColor = Color3.fromRGB(56, 55, 51),
+		warehouseRoadColor = Color3.fromRGB(49, 49, 46),
+		canalColor = Color3.fromRGB(47, 84, 94),
+		streetLightColor = Color3.fromRGB(255, 213, 145),
+		streetLightBrightness = 1.1,
+		streetLightRange = 19,
+		streetLightHeight = 8,
+		roadScale = 0.74,
+		decoration = "mountain",
+		initialWeatherId = "fog",
+	},
+	{
+		id = "danchi",
+		name = "団地エリア",
+		groundColor = Color3.fromRGB(57, 65, 58),
+		roadColor = Color3.fromRGB(48, 50, 53),
+		warehouseRoadColor = Color3.fromRGB(43, 45, 48),
+		canalColor = Color3.fromRGB(52, 88, 105),
+		streetLightColor = Color3.fromRGB(220, 232, 238),
+		streetLightBrightness = 1.55,
+		streetLightRange = 24,
+		streetLightHeight = 10.5,
+		roadScale = 1.0,
+		decoration = "danchi",
+		initialWeatherId = "clear",
+	},
+}
+
+local worldRandom = Random.new()
+local selectedWorldTheme = WORLD_THEMES[worldRandom:NextInteger(1, #WORLD_THEMES)]
+
+for _, weather in ipairs(WEATHER_TYPES) do
+	if weather.id == selectedWorldTheme.initialWeatherId then
+		currentWeather = weather
+		break
+	end
+end
+
 local function makeSurfaceText(part, text, face)
 	local gui = Instance.new("SurfaceGui")
 	gui.Face = face or Enum.NormalId.Front
@@ -168,12 +286,18 @@ local function makeSurfaceText(part, text, face)
 end
 
 local function setupLighting()
-	Lighting.ClockTime = 22.35
-	Lighting.Brightness = 1.35
-	Lighting.Ambient = Color3.fromRGB(67, 72, 96)
-	Lighting.OutdoorAmbient = Color3.fromRGB(42, 47, 68)
-	Lighting.FogColor = Color3.fromRGB(34, 39, 57)
-	Lighting.FogEnd = 700
+	Lighting.ClockTime = selectedWorldTheme.id == "showa" and 21.85 or 22.35
+	Lighting.Brightness = selectedWorldTheme.id == "harbor" and 0.95 or (selectedWorldTheme.id == "mountain" and 1.05 or 1.35)
+	Lighting.Ambient = selectedWorldTheme.id == "harbor"
+		and Color3.fromRGB(53, 64, 76)
+		or Color3.fromRGB(67, 72, 96)
+	Lighting.OutdoorAmbient = selectedWorldTheme.id == "mountain"
+		and Color3.fromRGB(34, 42, 42)
+		or Color3.fromRGB(42, 47, 68)
+	Lighting.FogColor = selectedWorldTheme.id == "mountain"
+		and Color3.fromRGB(74, 82, 78)
+		or (selectedWorldTheme.id == "harbor" and Color3.fromRGB(58, 69, 79) or Color3.fromRGB(34, 39, 57))
+	Lighting.FogEnd = selectedWorldTheme.id == "mountain" and 330 or (selectedWorldTheme.id == "harbor" and 470 or 700)
 
 	local atmosphere = Lighting:FindFirstChild("NightDeliveryAtmosphere")
 	if not atmosphere then
@@ -181,9 +305,11 @@ local function setupLighting()
 		atmosphere.Name = "NightDeliveryAtmosphere"
 		atmosphere.Parent = Lighting
 	end
-	atmosphere.Density = 0.2
-	atmosphere.Haze = 1.1
-	atmosphere.Color = Color3.fromRGB(145, 159, 205)
+	atmosphere.Density = selectedWorldTheme.id == "mountain" and 0.36 or (selectedWorldTheme.id == "harbor" and 0.29 or 0.2)
+	atmosphere.Haze = selectedWorldTheme.id == "mountain" and 2.0 or (selectedWorldTheme.id == "harbor" and 1.6 or 1.1)
+	atmosphere.Color = selectedWorldTheme.id == "showa"
+		and Color3.fromRGB(187, 161, 128)
+		or Color3.fromRGB(145, 159, 205)
 	atmosphere.Decay = Color3.fromRGB(73, 78, 110)
 end
 
@@ -213,13 +339,6 @@ local function createStreetLight(position)
 	light.Parent = lamp
 end
 
-local WORLD_THEMES = {
-	{id = "japanese", name = "日本住宅街"},
-	{id = "western", name = "西洋住宅街"},
-}
-
-local worldRandom = Random.new()
-local selectedWorldTheme = WORLD_THEMES[worldRandom:NextInteger(1, #WORLD_THEMES)]
 
 local function makeLitWindow(model, name, size, position, color)
 	local window = makePart(
@@ -445,6 +564,110 @@ local function createWesternHouse(model, position, bodyColor, variant)
 	return body, frontZ
 end
 
+
+local function createShowaHouse(model, position, bodyColor, variant)
+	local bodyHeight = variant == 2 and 10 or 8
+	local bodyWidth = variant == 3 and 18 or 20
+	local bodyDepth = 18
+	local fadedColor = bodyColor:Lerp(Color3.fromRGB(143, 137, 121), 0.46)
+	local body = makePart("Body", Vector3.new(bodyWidth, bodyHeight, bodyDepth), position + Vector3.new(0, bodyHeight / 2, 0), fadedColor, model, Enum.Material.WoodPlanks)
+	local frontZ = -(bodyDepth / 2) - 0.3
+
+	makePart("TinRoof", Vector3.new(bodyWidth + 3, 0.7, bodyDepth + 3), position + Vector3.new(0, bodyHeight + 0.6, 0), Color3.fromRGB(70, 72, 69), model, Enum.Material.Metal)
+	makePart("Door", Vector3.new(3.2, 6.0, 0.5), position + Vector3.new(-2.2, 3.0, frontZ), Color3.fromRGB(76, 66, 52), model, Enum.Material.Wood)
+	makeLitWindow(model, "Window1", Vector3.new(4.4, 2.7, 0.2), position + Vector3.new(4.2, 5.0, frontZ - 0.15), Color3.fromRGB(242, 197, 125))
+	makeLitWindow(model, "Window2", Vector3.new(3.0, 2.4, 0.2), position + Vector3.new(-6.0, 5.2, frontZ - 0.15), Color3.fromRGB(238, 188, 112))
+	makePart("Awning", Vector3.new(8.0, 0.35, 2.8), position + Vector3.new(3.6, 7.2, frontZ - 1.2), Color3.fromRGB(93, 87, 75), model, Enum.Material.Metal)
+
+	if variant == 3 then
+		makePart("SideShed", Vector3.new(7, 5.5, 11), position + Vector3.new(12, 2.75, 1), Color3.fromRGB(96, 92, 82), model, Enum.Material.CorrugatedMetal)
+	end
+	return body, frontZ
+end
+
+local function createLuxuryHouse(model, position, bodyColor, variant)
+	local bodyHeight = variant == 2 and 15 or 12
+	local bodyWidth = variant == 3 and 28 or 24
+	local bodyDepth = 19
+	local body = makePart("Body", Vector3.new(bodyWidth, bodyHeight, bodyDepth), position + Vector3.new(0, bodyHeight / 2, 0), bodyColor:Lerp(Color3.fromRGB(224, 224, 219), 0.52), model, Enum.Material.Concrete)
+	local frontZ = -(bodyDepth / 2) - 0.3
+
+	makePart("FlatRoof", Vector3.new(bodyWidth + 1.5, 0.55, bodyDepth + 1.5), position + Vector3.new(0, bodyHeight + 0.3, 0), Color3.fromRGB(51, 54, 58), model, Enum.Material.Concrete)
+	makePart("AccentWall", Vector3.new(5.0, bodyHeight - 1, 0.5), position + Vector3.new(-7.0, (bodyHeight - 1) / 2, frontZ), Color3.fromRGB(72, 67, 61), model, Enum.Material.Slate)
+	makePart("Door", Vector3.new(3.8, 7.2, 0.45), position + Vector3.new(0, 3.6, frontZ), Color3.fromRGB(73, 65, 56), model, Enum.Material.Wood)
+	makeLitWindow(model, "PanoramaWindow", Vector3.new(8.8, 3.6, 0.2), position + Vector3.new(6.3, 6.1, frontZ - 0.15), Color3.fromRGB(236, 226, 191))
+	makeLitWindow(model, "SideWindow", Vector3.new(3.0, 3.0, 0.2), position + Vector3.new(-3.8, 6.2, frontZ - 0.15), Color3.fromRGB(229, 223, 196))
+
+	makePart("GateLeft", Vector3.new(0.7, 4.2, 0.7), position + Vector3.new(-7.5, 2.1, frontZ - 5.2), Color3.fromRGB(66, 67, 69), model, Enum.Material.Slate)
+	makePart("GateRight", Vector3.new(0.7, 4.2, 0.7), position + Vector3.new(7.5, 2.1, frontZ - 5.2), Color3.fromRGB(66, 67, 69), model, Enum.Material.Slate)
+	makePart("Driveway", Vector3.new(12, 0.15, 8), position + Vector3.new(0, 0.1, frontZ - 5.0), Color3.fromRGB(100, 104, 105), model, Enum.Material.Concrete)
+
+	if variant == 2 then
+		makeLitWindow(model, "UpperWindow", Vector3.new(10, 2.6, 0.2), position + Vector3.new(2.5, 11.1, frontZ - 0.15), Color3.fromRGB(228, 219, 189))
+	end
+	return body, frontZ
+end
+
+local function createHarborHouse(model, position, bodyColor, variant)
+	local bodyHeight = variant == 2 and 13 or 10
+	local bodyWidth = 20
+	local bodyDepth = 17
+	local body = makePart("Body", Vector3.new(bodyWidth, bodyHeight, bodyDepth), position + Vector3.new(0, bodyHeight / 2, 0), bodyColor:Lerp(Color3.fromRGB(119, 133, 138), 0.42), model, variant == 3 and Enum.Material.Brick or Enum.Material.Metal)
+	local frontZ = -(bodyDepth / 2) - 0.3
+
+	makePart("Roof", Vector3.new(bodyWidth + 2, 0.7, bodyDepth + 2), position + Vector3.new(0, bodyHeight + 0.4, 0), Color3.fromRGB(48, 54, 59), model, Enum.Material.Metal)
+	makePart("Door", Vector3.new(3.5, 6.5, 0.5), position + Vector3.new(-4.8, 3.25, frontZ), Color3.fromRGB(58, 74, 81), model, Enum.Material.Metal)
+	makeLitWindow(model, "Window1", Vector3.new(4.2, 3.0, 0.2), position + Vector3.new(3.5, 5.6, frontZ - 0.15), Color3.fromRGB(203, 225, 232))
+	makePart("Pipe", Vector3.new(0.65, bodyHeight - 1, 0.65), position + Vector3.new(8.6, (bodyHeight - 1) / 2, frontZ - 0.4), Color3.fromRGB(86, 92, 95), model, Enum.Material.Metal)
+	makePart("MetalAwning", Vector3.new(8, 0.4, 3.2), position + Vector3.new(-2.6, 7.0, frontZ - 1.3), Color3.fromRGB(75, 83, 87), model, Enum.Material.Metal)
+
+	if variant == 2 then
+		makePart("UpperDeck", Vector3.new(9, 0.35, 2.5), position + Vector3.new(3.5, 9.3, frontZ - 1.4), Color3.fromRGB(84, 88, 91), model, Enum.Material.Metal)
+		makeLitWindow(model, "UpperWindow", Vector3.new(4.4, 2.4, 0.2), position + Vector3.new(3.3, 10.7, frontZ - 0.15), Color3.fromRGB(196, 218, 229))
+	end
+	return body, frontZ
+end
+
+local function createMountainHouse(model, position, bodyColor, variant)
+	local bodyHeight = variant == 2 and 11 or 8.5
+	local bodyWidth = variant == 3 and 23 or 19
+	local bodyDepth = 18
+	local body = makePart("Body", Vector3.new(bodyWidth, bodyHeight, bodyDepth), position + Vector3.new(0, bodyHeight / 2, 0), bodyColor:Lerp(Color3.fromRGB(118, 91, 62), 0.38), model, Enum.Material.WoodPlanks)
+	local frontZ = -(bodyDepth / 2) - 0.3
+	local roofBaseY = bodyHeight + 0.4
+
+	makeRotatedPart("RoofLeft", Vector3.new(bodyWidth / 1.05, 1.1, bodyDepth + 5), position + Vector3.new(-bodyWidth * 0.22, roofBaseY + 2.7, 0), Color3.fromRGB(48, 49, 47), model, Enum.Material.Slate, 0, 0, -31)
+	makeRotatedPart("RoofRight", Vector3.new(bodyWidth / 1.05, 1.1, bodyDepth + 5), position + Vector3.new(bodyWidth * 0.22, roofBaseY + 2.7, 0), Color3.fromRGB(48, 49, 47), model, Enum.Material.Slate, 0, 0, 31)
+	makePart("Door", Vector3.new(3.5, 6.4, 0.5), position + Vector3.new(0, 3.2, frontZ), Color3.fromRGB(74, 55, 39), model, Enum.Material.Wood)
+	makeLitWindow(model, "Window1", Vector3.new(4.0, 3.0, 0.2), position + Vector3.new(-5.0, 5.2, frontZ - 0.15), Color3.fromRGB(244, 205, 139))
+	makeLitWindow(model, "Window2", Vector3.new(4.0, 3.0, 0.2), position + Vector3.new(5.0, 5.2, frontZ - 0.15), Color3.fromRGB(244, 205, 139))
+	makePart("WoodPile", Vector3.new(4.8, 2.0, 2.0), position + Vector3.new(8.0, 1.0, frontZ - 2.4), Color3.fromRGB(92, 66, 44), model, Enum.Material.Wood)
+	return body, frontZ
+end
+
+local function createDanchiHouse(model, position, bodyColor, variant)
+	local floors = variant == 2 and 4 or 3
+	local bodyHeight = floors * 5
+	local bodyWidth = variant == 3 and 28 or 24
+	local bodyDepth = 15
+	local body = makePart("Body", Vector3.new(bodyWidth, bodyHeight, bodyDepth), position + Vector3.new(0, bodyHeight / 2, 0), bodyColor:Lerp(Color3.fromRGB(188, 191, 184), 0.62), model, Enum.Material.Concrete)
+	local frontZ = -(bodyDepth / 2) - 0.3
+
+	makePart("FlatRoof", Vector3.new(bodyWidth + 1, 0.5, bodyDepth + 1), position + Vector3.new(0, bodyHeight + 0.3, 0), Color3.fromRGB(105, 107, 107), model, Enum.Material.Concrete)
+	makePart("Entry", Vector3.new(4, 7, 0.5), position + Vector3.new(0, 3.5, frontZ), Color3.fromRGB(85, 91, 94), model, Enum.Material.Metal)
+
+	for floor = 1, floors do
+		local y = 2.7 + (floor - 1) * 5
+		for _, x in ipairs({-7.5, -2.5, 2.5, 7.5}) do
+			makeLitWindow(model, "Window_" .. floor .. "_" .. tostring(x), Vector3.new(2.6, 2.0, 0.18), position + Vector3.new(x, y, frontZ - 0.15), Color3.fromRGB(222, 224, 203))
+		end
+		if floor < floors then
+			makePart("Balcony_" .. floor, Vector3.new(bodyWidth - 2, 0.25, 1.7), position + Vector3.new(0, y + 1.4, frontZ - 1.0), Color3.fromRGB(145, 147, 144), model, Enum.Material.Concrete)
+		end
+	end
+	return body, frontZ
+end
+
 local function createWarehouseHouse(model, position, bodyColor, variant)
 	local body = makePart(
 		"Body",
@@ -494,8 +717,20 @@ local function createHouse(id, displayName, districtId, position, bodyColor)
 		body, frontZ = createWarehouseHouse(model, position, bodyColor, variant)
 	elseif selectedWorldTheme.id == "japanese" then
 		body, frontZ = createJapaneseHouse(model, position, bodyColor, variant)
-	else
+	elseif selectedWorldTheme.id == "western" then
 		body, frontZ = createWesternHouse(model, position, bodyColor, variant)
+	elseif selectedWorldTheme.id == "showa" then
+		body, frontZ = createShowaHouse(model, position, bodyColor, variant)
+	elseif selectedWorldTheme.id == "luxury" then
+		body, frontZ = createLuxuryHouse(model, position, bodyColor, variant)
+	elseif selectedWorldTheme.id == "harbor" then
+		body, frontZ = createHarborHouse(model, position, bodyColor, variant)
+	elseif selectedWorldTheme.id == "mountain" then
+		body, frontZ = createMountainHouse(model, position, bodyColor, variant)
+	elseif selectedWorldTheme.id == "danchi" then
+		body, frontZ = createDanchiHouse(model, position, bodyColor, variant)
+	else
+		body, frontZ = createJapaneseHouse(model, position, bodyColor, variant)
 	end
 
 	local porch = makePart(
@@ -537,9 +772,98 @@ local function createHouse(id, displayName, districtId, position, bodyColor)
 	return model, prompt
 end
 
+
+local function createThemeTree(position, scale, pine)
+	scale = scale or 1
+	local trunk = makePart("ThemeTreeTrunk", Vector3.new(1.1 * scale, 5.5 * scale, 1.1 * scale), position + Vector3.new(0, 2.75 * scale, 0), Color3.fromRGB(78, 59, 43), world, Enum.Material.Wood)
+	if pine then
+		for level = 1, 3 do
+			local crown = makePart("PineCrown", Vector3.new((6.5 - level) * scale, 3.5 * scale, (6.5 - level) * scale), position + Vector3.new(0, (5.0 + level * 2.1) * scale, 0), Color3.fromRGB(40, 72, 49), world, Enum.Material.Grass)
+			crown.Shape = Enum.PartType.Ball
+		end
+	else
+		local crown = makePart("ThemeTreeCrown", Vector3.new(5.6 * scale, 5.6 * scale, 5.6 * scale), position + Vector3.new(0, 7.1 * scale, 0), Color3.fromRGB(44, 82, 55), world, Enum.Material.Grass)
+		crown.Shape = Enum.PartType.Ball
+	end
+	return trunk
+end
+
+local function createUtilityPole(position)
+	local pole = makePart("UtilityPole", Vector3.new(0.55, 10, 0.55), position + Vector3.new(0, 5, 0), Color3.fromRGB(74, 65, 55), world, Enum.Material.Wood)
+	makePart("UtilityCrossbar", Vector3.new(5.0, 0.35, 0.35), position + Vector3.new(0, 9.1, 0), Color3.fromRGB(74, 65, 55), world, Enum.Material.Wood)
+	return pole
+end
+
+local function createThemeDressing()
+	local theme = selectedWorldTheme.id
+
+	if theme == "japanese" then
+		for _, pos in ipairs({Vector3.new(-105, 0, 52), Vector3.new(102, 0, 48), Vector3.new(-128, 0, 118)}) do
+			makePart("BlockWall", Vector3.new(12, 2.2, 0.7), pos + Vector3.new(0, 1.1, 0), Color3.fromRGB(112, 113, 106), world, Enum.Material.Concrete)
+		end
+		makePart("VendingMachineTheme", Vector3.new(3, 6, 2), Vector3.new(37, 3, 75), Color3.fromRGB(178, 65, 64), world, Enum.Material.Metal)
+	elseif theme == "western" then
+		for _, pos in ipairs({Vector3.new(-118, 0, 45), Vector3.new(119, 0, 70), Vector3.new(-105, 0, 118), Vector3.new(105, 0, 118)}) do
+			createThemeTree(pos, 1.0, false)
+		end
+		for _, pos in ipairs({Vector3.new(-46, 0, 65), Vector3.new(48, 0, 85)}) do
+			makePart("MailboxPost", Vector3.new(0.35, 3.5, 0.35), pos + Vector3.new(0, 1.75, 0), Color3.fromRGB(84, 73, 61), world, Enum.Material.Wood)
+			makePart("Mailbox", Vector3.new(1.8, 1.2, 1.2), pos + Vector3.new(0, 3.6, 0), Color3.fromRGB(77, 91, 104), world, Enum.Material.Metal)
+		end
+	elseif theme == "showa" then
+		for z = -75, 115, 38 do
+			createUtilityPole(Vector3.new(-31, 0, z))
+			createUtilityPole(Vector3.new(31, 0, z + 12))
+		end
+		makePart("OldShopAwning", Vector3.new(13, 0.4, 4), Vector3.new(-145, 5.8, -12), Color3.fromRGB(132, 73, 59), world, Enum.Material.Fabric)
+		local sign = makePart("OldShopSign", Vector3.new(8, 2.2, 0.35), Vector3.new(-145, 8, -14), Color3.fromRGB(198, 169, 103), world, Enum.Material.Neon)
+		makeSurfaceText(sign, "よろず屋")
+	elseif theme == "luxury" then
+		for _, pos in ipairs({Vector3.new(-125, 0, 52), Vector3.new(123, 0, 52), Vector3.new(-125, 0, 105), Vector3.new(123, 0, 105)}) do
+			createThemeTree(pos, 1.15, false)
+		end
+		for _, x in ipairs({-132, -120, 120, 132}) do
+			makePart("Hedge", Vector3.new(9, 3.0, 2.2), Vector3.new(x, 1.5, 78), Color3.fromRGB(45, 88, 57), world, Enum.Material.Grass)
+		end
+		makePart("LuxuryGate", Vector3.new(18, 0.6, 1.2), Vector3.new(0, 3.0, 121), Color3.fromRGB(78, 81, 82), world, Enum.Material.Metal)
+	elseif theme == "harbor" then
+		for index, pos in ipairs({Vector3.new(-146, 0, -92), Vector3.new(-126, 0, -92), Vector3.new(115, 0, -96), Vector3.new(137, 0, -96)}) do
+			makePart("CargoContainer" .. index, Vector3.new(14, 7, 6), pos + Vector3.new(0, 3.5, 0), index % 2 == 0 and Color3.fromRGB(70, 103, 116) or Color3.fromRGB(127, 72, 62), world, Enum.Material.Metal)
+		end
+		for _, pos in ipairs({Vector3.new(-180, 0, 164), Vector3.new(180, 0, 164)}) do
+			makePart("HarborCranePost", Vector3.new(1.5, 18, 1.5), pos + Vector3.new(0, 9, 0), Color3.fromRGB(93, 100, 104), world, Enum.Material.Metal)
+			makePart("HarborCraneArm", Vector3.new(14, 1.0, 1.0), pos + Vector3.new(6, 17, 0), Color3.fromRGB(93, 100, 104), world, Enum.Material.Metal)
+		end
+	elseif theme == "mountain" then
+		for _, pos in ipairs({
+			Vector3.new(-180, 0, -20), Vector3.new(-160, 0, 40), Vector3.new(-175, 0, 105),
+			Vector3.new(180, 0, 5), Vector3.new(165, 0, 62), Vector3.new(176, 0, 120),
+			Vector3.new(-90, 0, 150), Vector3.new(95, 0, 152)
+		}) do
+			createThemeTree(pos, worldRandom:NextNumber(0.9, 1.3), true)
+		end
+		for _, pos in ipairs({Vector3.new(-38, 0, 35), Vector3.new(40, 0, 92)}) do
+			makePart("Rock", Vector3.new(5, 3, 4), pos + Vector3.new(0, 1.5, 0), Color3.fromRGB(86, 88, 82), world, Enum.Material.Rock)
+		end
+	elseif theme == "danchi" then
+		for _, x in ipairs({-150, -118, 118, 150}) do
+			local block = makePart("DanchiBackground", Vector3.new(24, 24, 18), Vector3.new(x, 12, 72), Color3.fromRGB(160, 164, 160), world, Enum.Material.Concrete)
+			for floor = 1, 4 do
+				for _, dx in ipairs({-7, 0, 7}) do
+					makePart("DanchiWindow", Vector3.new(2.8, 1.8, 0.18), Vector3.new(x + dx, 3 + (floor - 1) * 5.2, 62.9), Color3.fromRGB(221, 222, 199), world, Enum.Material.Neon)
+				end
+			end
+		end
+		makePart("PlaygroundSand", Vector3.new(30, 0.25, 24), Vector3.new(-150, 0.15, 15), Color3.fromRGB(135, 119, 90), world, Enum.Material.Sand)
+		makePart("SlidePlatform", Vector3.new(5, 4, 5), Vector3.new(-150, 2, 15), Color3.fromRGB(91, 115, 129), world, Enum.Material.Metal)
+	end
+end
+
 local function createWorld()
 	world:SetAttribute("ThemeId", selectedWorldTheme.id)
 	world:SetAttribute("ThemeName", selectedWorldTheme.name)
+	world:SetAttribute("ThemeDecoration", selectedWorldTheme.decoration)
+	world:SetAttribute("InitialWeather", selectedWorldTheme.initialWeatherId)
 	print("Night Delivery world theme:", selectedWorldTheme.name)
 	setupLighting()
 
@@ -547,41 +871,41 @@ local function createWorld()
 		"Ground",
 		Vector3.new(460, 1, 410),
 		Vector3.new(0, -0.5, 20),
-		Color3.fromRGB(47, 61, 57),
+		selectedWorldTheme.groundColor,
 		world,
 		Enum.Material.Grass
 	)
 
 	makePart(
 		"MainRoad",
-		Vector3.new(34, 0.3, 260),
+		Vector3.new(34 * selectedWorldTheme.roadScale, 0.3, 260),
 		Vector3.new(0, 0.15, 10),
-		Color3.fromRGB(45, 47, 52),
+		selectedWorldTheme.roadColor,
 		world,
 		Enum.Material.Pavement
 	)
 
 	makePart(
 		"CrossRoad",
-		Vector3.new(320, 0.3, 28),
+		Vector3.new(320, 0.3, 28 * selectedWorldTheme.roadScale),
 		Vector3.new(0, 0.17, 20),
-		Color3.fromRGB(45, 47, 52),
+		selectedWorldTheme.roadColor,
 		world,
 		Enum.Material.Pavement
 	)
 
 	makePart(
 		"NorthRoad",
-		Vector3.new(240, 0.3, 24),
+		Vector3.new(240, 0.3, 24 * selectedWorldTheme.roadScale),
 		Vector3.new(0, 0.17, 95),
-		Color3.fromRGB(45, 47, 52),
+		selectedWorldTheme.roadColor,
 		world,
 		Enum.Material.Pavement
 	)
 
 	makePart(
 		"RiversideRoad",
-		Vector3.new(360, 0.3, 24),
+		Vector3.new(360, 0.3, 24 * selectedWorldTheme.roadScale),
 		Vector3.new(0, 0.17, 135),
 		Color3.fromRGB(45, 47, 52),
 		world,
@@ -592,7 +916,7 @@ local function createWorld()
 		"Canal",
 		Vector3.new(400, 0.5, 22),
 		Vector3.new(0, 0.05, 182),
-		Color3.fromRGB(44, 91, 122),
+		selectedWorldTheme.canalColor,
 		world,
 		Enum.Material.Glass
 	)
@@ -605,9 +929,9 @@ local function createWorld()
 
 	makePart(
 		"WarehouseRoad",
-		Vector3.new(360, 0.3, 24),
+		Vector3.new(360, 0.3, 24 * selectedWorldTheme.roadScale),
 		Vector3.new(0, 0.17, -125),
-		Color3.fromRGB(42, 44, 49),
+		selectedWorldTheme.warehouseRoadColor,
 		world,
 		Enum.Material.Pavement
 	)
@@ -739,6 +1063,8 @@ local function createWorld()
 			prompt = prompt,
 		})
 	end
+
+	createThemeDressing()
 
 	shopPadRef = shopPad
 	return depotPrompt, bikePrompt, shopPrompt, prompts
