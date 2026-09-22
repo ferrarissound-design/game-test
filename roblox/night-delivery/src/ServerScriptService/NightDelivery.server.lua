@@ -213,43 +213,295 @@ local function createStreetLight(position)
 	light.Parent = lamp
 end
 
-local function createHouse(id, displayName, districtId, position, bodyColor)
-	local model = Instance.new("Model")
-	model.Name = id
-	model:SetAttribute("DisplayName", displayName)
-	model:SetAttribute("DistrictId", districtId)
-	model:SetAttribute("DistrictName", DISTRICT_NAMES[districtId] or districtId)
-	model.Parent = housesFolder
+local WORLD_THEMES = {
+	{id = "japanese", name = "日本住宅街"},
+	{id = "western", name = "西洋住宅街"},
+}
 
+local worldRandom = Random.new()
+local selectedWorldTheme = WORLD_THEMES[worldRandom:NextInteger(1, #WORLD_THEMES)]
+
+local function makeLitWindow(model, name, size, position, color)
+	local window = makePart(
+		name,
+		size,
+		position,
+		color or Color3.fromRGB(255, 221, 145),
+		model,
+		Enum.Material.Neon
+	)
+	window.CanCollide = false
+
+	local light = Instance.new("PointLight")
+	light.Brightness = 0.45
+	light.Range = 11
+	light.Color = Color3.fromRGB(255, 222, 160)
+	light.Parent = window
+	return window
+end
+
+local function makeRotatedPart(name, size, position, color, parent, material, yaw, pitch, roll)
+	local part = makePart(name, size, position, color, parent, material)
+	part.CFrame = CFrame.new(position) * CFrame.Angles(
+		math.rad(pitch or 0),
+		math.rad(yaw or 0),
+		math.rad(roll or 0)
+	)
+	return part
+end
+
+local function createJapaneseHouse(model, position, bodyColor, variant)
+	local bodyHeight = variant == 1 and 8 or (variant == 2 and 11 or 9)
+	local bodyWidth = variant == 3 and 22 or 20
+	local bodyDepth = variant == 2 and 17 or 19
 	local body = makePart(
 		"Body",
-		Vector3.new(18, 12, 16),
-		position + Vector3.new(0, 6, 0),
-		bodyColor,
-		model
+		Vector3.new(bodyWidth, bodyHeight, bodyDepth),
+		position + Vector3.new(0, bodyHeight / 2, 0),
+		bodyColor:Lerp(Color3.fromRGB(214, 205, 184), 0.18),
+		model,
+		Enum.Material.WoodPlanks
 	)
 
+	local roofColor = variant == 3 and Color3.fromRGB(46, 49, 55) or Color3.fromRGB(56, 60, 66)
 	makePart(
-		"Roof",
-		Vector3.new(20, 2, 18),
-		position + Vector3.new(0, 13, 0),
-		Color3.fromRGB(52, 56, 68),
+		"RoofLower",
+		Vector3.new(bodyWidth + 4, 0.8, bodyDepth + 4),
+		position + Vector3.new(0, bodyHeight + 0.45, 0),
+		roofColor,
+		model,
+		Enum.Material.Slate
+	)
+	makePart(
+		"RoofUpper",
+		Vector3.new(bodyWidth + 2.2, 0.7, bodyDepth + 2.2),
+		position + Vector3.new(0, bodyHeight + 1.15, 0),
+		roofColor:Lerp(Color3.fromRGB(25, 27, 31), 0.16),
+		model,
+		Enum.Material.Slate
+	)
+	makePart(
+		"RoofRidge",
+		Vector3.new(1.1, 1.1, bodyDepth + 1.5),
+		position + Vector3.new(0, bodyHeight + 1.85, 0),
+		Color3.fromRGB(40, 42, 47),
+		model,
+		Enum.Material.Slate
+	)
+
+	local frontZ = -(bodyDepth / 2) - 0.31
+	makePart(
+		"Door",
+		Vector3.new(3.6, 6.2, 0.55),
+		position + Vector3.new(0, 3.1, frontZ),
+		Color3.fromRGB(86, 62, 44),
+		model,
+		Enum.Material.Wood
+	)
+
+	-- Wooden frame and a small engawa/entry deck make the silhouette read as Japanese.
+	for _, x in ipairs({-bodyWidth / 2 + 1.1, bodyWidth / 2 - 1.1}) do
+		makePart(
+			"FrontPost",
+			Vector3.new(0.45, bodyHeight - 0.8, 0.45),
+			position + Vector3.new(x, (bodyHeight - 0.8) / 2, frontZ - 0.1),
+			Color3.fromRGB(77, 59, 43),
+			model,
+			Enum.Material.Wood
+		)
+	end
+
+	makePart(
+		"Engawa",
+		Vector3.new(bodyWidth - 3, 0.35, 2.3),
+		position + Vector3.new(0, 0.55, frontZ - 1.25),
+		Color3.fromRGB(104, 78, 55),
+		model,
+		Enum.Material.WoodPlanks
+	)
+
+	if variant == 2 then
+		makePart(
+			"UpperBand",
+			Vector3.new(bodyWidth + 0.3, 0.5, bodyDepth + 0.3),
+			position + Vector3.new(0, 7.1, 0),
+			Color3.fromRGB(86, 67, 50),
+			model,
+			Enum.Material.Wood
+		)
+	end
+
+	makeLitWindow(model, "Window1", Vector3.new(3.2, 2.8, 0.22), position + Vector3.new(-5.1, math.min(5.7, bodyHeight - 2.3), frontZ - 0.18))
+	makeLitWindow(model, "Window2", Vector3.new(3.2, 2.8, 0.22), position + Vector3.new(5.1, math.min(5.7, bodyHeight - 2.3), frontZ - 0.18))
+
+	if variant == 2 then
+		makeLitWindow(model, "WindowUpper", Vector3.new(4.4, 2.1, 0.22), position + Vector3.new(0, 8.7, frontZ - 0.18), Color3.fromRGB(247, 214, 155))
+	end
+
+	return body, frontZ
+end
+
+local function createWesternHouse(model, position, bodyColor, variant)
+	local bodyHeight = variant == 1 and 12 or (variant == 2 and 15 or 10)
+	local bodyWidth = variant == 3 and 24 or 19
+	local bodyDepth = 16
+	local wallMaterial = variant == 3 and Enum.Material.Brick or Enum.Material.Concrete
+	local body = makePart(
+		"Body",
+		Vector3.new(bodyWidth, bodyHeight, bodyDepth),
+		position + Vector3.new(0, bodyHeight / 2, 0),
+		bodyColor:Lerp(Color3.fromRGB(225, 218, 205), 0.2),
+		model,
+		wallMaterial
+	)
+
+	local frontZ = -(bodyDepth / 2) - 0.31
+	local roofBaseY = bodyHeight + 0.5
+	local roofColor = variant == 2 and Color3.fromRGB(67, 49, 45) or Color3.fromRGB(62, 58, 61)
+
+	-- Two sloped roof planes create a clear western-house silhouette.
+	makeRotatedPart(
+		"RoofLeft",
+		Vector3.new(bodyWidth / 1.05, 1.0, bodyDepth + 4),
+		position + Vector3.new(-bodyWidth * 0.22, roofBaseY + 2.2, 0),
+		roofColor,
+		model,
+		Enum.Material.Slate,
+		0, 0, -24
+	)
+	makeRotatedPart(
+		"RoofRight",
+		Vector3.new(bodyWidth / 1.05, 1.0, bodyDepth + 4),
+		position + Vector3.new(bodyWidth * 0.22, roofBaseY + 2.2, 0),
+		roofColor,
+		model,
+		Enum.Material.Slate,
+		0, 0, 24
+	)
+	makePart(
+		"RoofRidge",
+		Vector3.new(1.0, 0.7, bodyDepth + 3.5),
+		position + Vector3.new(0, roofBaseY + 4.0, 0),
+		roofColor:Lerp(Color3.fromRGB(30, 29, 31), 0.2),
 		model,
 		Enum.Material.Slate
 	)
 
 	makePart(
 		"Door",
-		Vector3.new(4, 7, 0.6),
-		position + Vector3.new(0, 3.5, -8.3),
-		Color3.fromRGB(112, 73, 48),
-		model
+		Vector3.new(3.5, 7, 0.55),
+		position + Vector3.new(0, 3.5, frontZ),
+		variant == 2 and Color3.fromRGB(61, 89, 112) or Color3.fromRGB(105, 70, 48),
+		model,
+		Enum.Material.Wood
 	)
+
+	makePart(
+		"Porch",
+		Vector3.new(9, 0.45, 3.3),
+		position + Vector3.new(0, 0.45, frontZ - 1.8),
+		Color3.fromRGB(132, 126, 115),
+		model,
+		Enum.Material.WoodPlanks
+	)
+
+	for _, x in ipairs({-3.7, 3.7}) do
+		makePart(
+			"PorchColumn",
+			Vector3.new(0.45, 6.5, 0.45),
+			position + Vector3.new(x, 3.25, frontZ - 2.7),
+			Color3.fromRGB(222, 218, 207),
+			model,
+			Enum.Material.Wood
+		)
+	end
+
+	makePart(
+		"PorchAwning",
+		Vector3.new(10.5, 0.45, 4.6),
+		position + Vector3.new(0, 6.55, frontZ - 1.3),
+		roofColor,
+		model,
+		Enum.Material.Slate
+	)
+
+	makeLitWindow(model, "Window1", Vector3.new(3.2, 3.2, 0.22), position + Vector3.new(-5, 6.4, frontZ - 0.18))
+	makeLitWindow(model, "Window2", Vector3.new(3.2, 3.2, 0.22), position + Vector3.new(5, 6.4, frontZ - 0.18))
+
+	if variant == 2 then
+		makeLitWindow(model, "WindowUpper1", Vector3.new(3, 2.7, 0.22), position + Vector3.new(-4.8, 11.3, frontZ - 0.18))
+		makeLitWindow(model, "WindowUpper2", Vector3.new(3, 2.7, 0.22), position + Vector3.new(4.8, 11.3, frontZ - 0.18))
+	elseif variant == 3 then
+		makePart(
+			"GarageDoor",
+			Vector3.new(7.2, 5.3, 0.45),
+			position + Vector3.new(7.0, 2.65, frontZ),
+			Color3.fromRGB(177, 178, 174),
+			model,
+			Enum.Material.Metal
+		)
+	end
+
+	return body, frontZ
+end
+
+local function createWarehouseHouse(model, position, bodyColor, variant)
+	local body = makePart(
+		"Body",
+		Vector3.new(24, 10, 20),
+		position + Vector3.new(0, 5, 0),
+		bodyColor,
+		model,
+		variant == 2 and Enum.Material.Brick or Enum.Material.Metal
+	)
+	makePart(
+		"Roof",
+		Vector3.new(26, 1, 22),
+		position + Vector3.new(0, 10.5, 0),
+		Color3.fromRGB(55, 58, 64),
+		model,
+		Enum.Material.Metal
+	)
+	makePart(
+		"LoadingDoor",
+		Vector3.new(9, 7, 0.5),
+		position + Vector3.new(0, 3.5, -10.25),
+		Color3.fromRGB(119, 124, 128),
+		model,
+		Enum.Material.Metal
+	)
+	makeLitWindow(model, "WarehouseWindow1", Vector3.new(3, 2.4, 0.2), position + Vector3.new(-7.5, 7.5, -10.3), Color3.fromRGB(208, 225, 226))
+	makeLitWindow(model, "WarehouseWindow2", Vector3.new(3, 2.4, 0.2), position + Vector3.new(7.5, 7.5, -10.3), Color3.fromRGB(208, 225, 226))
+	return body, -10.25
+end
+
+local function createHouse(id, displayName, districtId, position, bodyColor)
+	local model = Instance.new("Model")
+	model.Name = id
+	model:SetAttribute("DisplayName", displayName)
+	model:SetAttribute("DistrictId", districtId)
+	model:SetAttribute("DistrictName", DISTRICT_NAMES[districtId] or districtId)
+	model:SetAttribute("WorldThemeId", selectedWorldTheme.id)
+	model:SetAttribute("WorldThemeName", selectedWorldTheme.name)
+	model.Parent = housesFolder
+
+	local variant = worldRandom:NextInteger(1, 3)
+	model:SetAttribute("HouseVariant", variant)
+
+	local body
+	local frontZ
+	if districtId == "warehouse" then
+		body, frontZ = createWarehouseHouse(model, position, bodyColor, variant)
+	elseif selectedWorldTheme.id == "japanese" then
+		body, frontZ = createJapaneseHouse(model, position, bodyColor, variant)
+	else
+		body, frontZ = createWesternHouse(model, position, bodyColor, variant)
+	end
 
 	local porch = makePart(
 		"DeliveryPoint",
 		Vector3.new(5.5, 0.5, 4),
-		position + Vector3.new(0, 0.25, -11),
+		position + Vector3.new(0, 0.25, frontZ - 3),
 		Color3.fromRGB(76, 88, 96),
 		model,
 		Enum.Material.Concrete
@@ -266,33 +518,29 @@ local function createHouse(id, displayName, districtId, position, bodyColor)
 	prompt.RequiresLineOfSight = false
 	prompt.Parent = porch
 
-	local windowOffsets = {
-		Vector3.new(-5, 7, -8.35),
-		Vector3.new(5, 7, -8.35),
-	}
-
-	for index, offset in ipairs(windowOffsets) do
-		local window = makePart(
-			"Window" .. index,
-			Vector3.new(3.4, 3.4, 0.3),
-			position + offset,
-			Color3.fromRGB(255, 221, 145),
-			model,
-			Enum.Material.Neon
-		)
-
-		local light = Instance.new("PointLight")
-		light.Brightness = 0.5
-		light.Range = 11
-		light.Color = Color3.fromRGB(255, 222, 160)
-		light.Parent = window
-	end
+	local porchLight = makePart(
+		"PorchLight",
+		Vector3.new(0.55, 0.55, 0.25),
+		position + Vector3.new(0, 7.25, frontZ - 0.2),
+		Color3.fromRGB(255, 226, 169),
+		model,
+		Enum.Material.Neon
+	)
+	porchLight.CanCollide = false
+	local light = Instance.new("PointLight")
+	light.Brightness = 0.7
+	light.Range = 13
+	light.Color = Color3.fromRGB(255, 222, 165)
+	light.Parent = porchLight
 
 	model.PrimaryPart = body
 	return model, prompt
 end
 
 local function createWorld()
+	world:SetAttribute("ThemeId", selectedWorldTheme.id)
+	world:SetAttribute("ThemeName", selectedWorldTheme.name)
+	print("Night Delivery world theme:", selectedWorldTheme.name)
 	setupLighting()
 
 	makePart(
