@@ -190,6 +190,88 @@ introBody.TextColor3 = Color3.fromRGB(220, 228, 239)
 local introHint = makeLabel(introFrame, UDim2.new(1, -24, 0, 18), UDim2.fromOffset(12, 96), "配達3件で最初のセッション報酬", 11, Enum.Font.Gotham)
 introHint.TextColor3 = Color3.fromRGB(255, 208, 116)
 
+local townRevealShown = false
+local townRevealActive = false
+
+local townReveal = Instance.new("Frame")
+townReveal.Name = "TownReveal"
+townReveal.Size = UDim2.fromScale(1, 1)
+townReveal.Position = UDim2.fromScale(0, 0)
+townReveal.BackgroundColor3 = Color3.fromRGB(7, 10, 15)
+townReveal.BackgroundTransparency = 1
+townReveal.Visible = false
+townReveal.ZIndex = 60
+townReveal.Parent = gui
+
+local townKicker = makeLabel(townReveal, UDim2.new(1, -40, 0, 28), UDim2.new(0, 20, 0.5, -74), "今夜の街", 14, Enum.Font.GothamBold)
+townKicker.TextXAlignment = Enum.TextXAlignment.Center
+townKicker.TextColor3 = Color3.fromRGB(177, 191, 211)
+townKicker.TextTransparency = 1
+townKicker.ZIndex = 61
+
+local townTitle = makeLabel(townReveal, UDim2.new(1, -40, 0, 58), UDim2.new(0, 20, 0.5, -42), "", 34, Enum.Font.GothamBlack)
+townTitle.TextXAlignment = Enum.TextXAlignment.Center
+townTitle.TextColor3 = Color3.fromRGB(244, 247, 252)
+townTitle.TextTransparency = 1
+townTitle.ZIndex = 61
+
+local townSubtitle = makeLabel(townReveal, UDim2.new(1, -56, 0, 42), UDim2.new(0, 28, 0.5, 24), "", 13, Enum.Font.Gotham)
+townSubtitle.TextXAlignment = Enum.TextXAlignment.Center
+townSubtitle.TextWrapped = true
+townSubtitle.TextColor3 = Color3.fromRGB(178, 191, 207)
+townSubtitle.TextTransparency = 1
+townSubtitle.ZIndex = 61
+
+local themeSubtitles = {
+	japanese = "静かな住宅街。狭い道と玄関灯を頼りに走れ。",
+	western = "広い通りとポーチの灯り。距離を読んで最短を狙え。",
+	showa = "古い街灯と電柱が残る夜。路地を見落とすな。",
+	luxury = "広い道路と大きな邸宅。門の先が配達地点だ。",
+	harbor = "雨と海風の港町。濡れた路面の向こうへ急げ。",
+	mountain = "霧の山間集落。灯りの少ない道を慎重に進め。",
+	danchi = "似た建物が並ぶ団地。棟と位置をよく見ろ。",
+}
+
+local function showTownReveal()
+	if townRevealShown then
+		return
+	end
+	townRevealShown = true
+
+	local world = workspace:FindFirstChild("NightDeliveryWorld") or workspace:WaitForChild("NightDeliveryWorld", 12)
+	if not world then
+		return
+	end
+
+	local themeName = world:GetAttribute("ThemeName") or "夜の街"
+	local themeId = world:GetAttribute("ThemeId") or ""
+	townTitle.Text = tostring(themeName)
+	townSubtitle.Text = themeSubtitles[themeId] or "今夜も街のどこかで、荷物を待つ家がある。"
+
+	townRevealActive = true
+	townReveal.Visible = true
+	townReveal.BackgroundTransparency = 1
+	townKicker.TextTransparency = 1
+	townTitle.TextTransparency = 1
+	townSubtitle.TextTransparency = 1
+
+	TweenService:Create(townReveal, TweenInfo.new(0.4), {BackgroundTransparency = 0.28}):Play()
+	TweenService:Create(townKicker, TweenInfo.new(0.42), {TextTransparency = 0}):Play()
+	TweenService:Create(townTitle, TweenInfo.new(0.5, Enum.EasingStyle.Quint, Enum.EasingDirection.Out), {TextTransparency = 0}):Play()
+	TweenService:Create(townSubtitle, TweenInfo.new(0.55), {TextTransparency = 0}):Play()
+
+	task.delay(2.35, function()
+		TweenService:Create(townKicker, TweenInfo.new(0.4), {TextTransparency = 1}):Play()
+		TweenService:Create(townTitle, TweenInfo.new(0.4), {TextTransparency = 1}):Play()
+		TweenService:Create(townSubtitle, TweenInfo.new(0.35), {TextTransparency = 1}):Play()
+		local fade = TweenService:Create(townReveal, TweenInfo.new(0.5), {BackgroundTransparency = 1})
+		fade:Play()
+		fade.Completed:Wait()
+		townReveal.Visible = false
+		townRevealActive = false
+	end)
+end
+
 local function showIntro()
 	introFrame.Visible = true
 	introFrame.BackgroundTransparency = 1
@@ -398,6 +480,10 @@ deliveryEvent.OnClientEvent:Connect(function(action, payload)
 		if introFrame.Visible then
 			introFrame.Visible = false
 		end
+		if townRevealActive then
+			townReveal.Visible = false
+			townRevealActive = false
+		end
 	elseif action == "Delivered" then
 		deliveryEvent:FireServer("PolishDeliveryComplete", {
 			houseName = currentHouseName,
@@ -409,8 +495,13 @@ deliveryEvent.OnClientEvent:Connect(function(action, payload)
 		orderStartedAt = nil
 		orderExpiresAt = nil
 	elseif action == "Welcome" then
+		showTownReveal()
 		if (payload.deliveries or 0) == 0 then
-			showIntro()
+			task.delay(3.15, function()
+				if not currentHouseName and not introFrame.Visible then
+					showIntro()
+				end
+			end)
 		end
 		deliveryEvent:FireServer("PolishRequestState")
 	elseif action == "PolishSessionState" then
@@ -473,6 +564,9 @@ local function updateResponsiveScale()
 		modifierTitle.TextSize = 12
 		modifierDescription.TextSize = 10
 		resultFrame.Size = UDim2.new(0.86, 0, 0, 180)
+		townTitle.TextSize = 27
+		townKicker.TextSize = 12
+		townSubtitle.TextSize = 11
 	else
 		navFrame.Size = UDim2.fromOffset(300, 64)
 		missionFrame.Size = UDim2.fromOffset(255, 82)
@@ -482,6 +576,9 @@ local function updateResponsiveScale()
 		modifierTitle.TextSize = 14
 		modifierDescription.TextSize = 12
 		resultFrame.Size = UDim2.fromOffset(360, 190)
+		townTitle.TextSize = 34
+		townKicker.TextSize = 14
+		townSubtitle.TextSize = 13
 	end
 end
 
