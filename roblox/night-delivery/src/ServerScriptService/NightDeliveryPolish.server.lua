@@ -338,6 +338,11 @@ end
 
 Players.PlayerAdded:Connect(initializePlayer)
 Players.PlayerRemoving:Connect(function(player)
+	local state = playerState[player]
+	local order = state and state.activeOrder
+	if order and order.jumpConnection then
+		order.jumpConnection:Disconnect()
+	end
 	playerState[player] = nil
 end)
 
