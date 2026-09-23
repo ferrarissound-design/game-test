@@ -1654,10 +1654,10 @@ local function startDestinationEventHazardMonitor(player, job)
 	end
 
 	local jobSerial = job.jobSerial
+	local startingRoot = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
+	local startingPosition = startingRoot and startingRoot.Position or nil
 	task.spawn(function()
-		-- Give the player a brief grace period after choosing so a prompt-side spawn never
-		-- counts as an instant failure.
-		task.wait(0.8)
+		local armed = startingPosition == nil
 		while player.Parent do
 			local currentJob = playerJobs[player]
 			if currentJob ~= job
@@ -1669,9 +1669,12 @@ local function startDestinationEventHazardMonitor(player, job)
 			local character = player.Character
 			local root = character and character:FindFirstChild("HumanoidRootPart")
 			if root then
+				if not armed and (root.Position - startingPosition).Magnitude >= 2.5 then
+					armed = true
+				end
 				local delta = root.Position - job.destinationEventHazardPosition
 				local horizontalDistance = Vector3.new(delta.X, 0, delta.Z).Magnitude
-				if horizontalDistance <= (job.destinationEventHazardRadius or DOG_ALERT_RADIUS) then
+				if armed and horizontalDistance <= (job.destinationEventHazardRadius or DOG_ALERT_RADIUS) then
 					if not job.destinationEventHazardTriggered then
 						job.destinationEventHazardTriggered = true
 						job.destinationEventReward = 0
