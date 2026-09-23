@@ -1611,9 +1611,13 @@ local function assignJob(player)
 		or callbackHouse:GetAttribute("DistrictId") == "warehouse"
 		or not isHouseUnlocked(player, callbackHouse)
 	) then
+		local sourceId = neighborhoodCallback.sourceId
 		callbackHouse = nil
 		playerPendingNeighborhoodStory[player] = nil
-		neighborhoodCallback = nil
+		neighborhoodCallback = queueNeighborhoodStory(player, sourceId)
+		callbackHouse = neighborhoodCallback
+			and housesFolder:FindFirstChild(neighborhoodCallback.targetHouseName)
+			or nil
 	end
 
 	if neighborhoodCallback then
@@ -1634,7 +1638,7 @@ local function assignJob(player)
 
 	player:SetAttribute("NightDeliveryTimeLimit", nil)
 	player:SetAttribute("NightDeliveryOrderStartedAt", nil)
-	player:SetAttribute("NightDeliveryRequestedModifier", nil)
+	player:SetAttribute("NightDeliveryRequestedModifier", neighborhoodCallback and "none" or nil)
 	player:SetAttribute("NightDeliveryBikeBlocked", false)
 	player:SetAttribute("NightDeliveryNavSoft", false)
 	player:SetAttribute("NightDeliveryJobType", jobType.id)
