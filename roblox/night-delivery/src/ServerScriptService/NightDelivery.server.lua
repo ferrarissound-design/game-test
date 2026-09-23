@@ -2099,6 +2099,8 @@ local function sendShopState(player)
 		bagStyleName = bagStyle.name,
 		bagNextName = nextBag and nextBag.name or nil,
 		bagCost = nextBag and nextBag.cost or 0,
+		bagCapacity = math.clamp(1 + bagLevel, 1, 3),
+		bagNextCapacity = nextBag and math.clamp(1 + bagLevel + 1, 1, 3) or math.clamp(1 + bagLevel, 1, 3),
 		bikeStyleName = bikeStyle.name,
 		bikeNextName = nextBike and nextBike.name or nil,
 		bikeCost = nextBike and nextBike.cost or 0,
@@ -2190,6 +2192,16 @@ local function applyWeather(weather)
 		end
 	end
 
+	for _, descendant in ipairs(world:GetDescendants()) do
+		if descendant:IsA("PointLight") and descendant.Parent and descendant.Parent.Name == "StreetLightLamp" then
+			local baseBrightness = descendant:GetAttribute("NightDeliveryBaseBrightness")
+			if not baseBrightness then
+				baseBrightness = descendant.Brightness
+				descendant:SetAttribute("NightDeliveryBaseBrightness", baseBrightness)
+			end
+			descendant.Brightness = currentNightRule.id == "blackout" and baseBrightness * 0.2 or baseBrightness
+		end
+	end
 	if currentNightRule.id == "fog" then
 		Lighting.FogEnd = math.min(Lighting.FogEnd, 390)
 	elseif currentNightRule.id == "blackout" then
