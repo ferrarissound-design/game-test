@@ -2260,7 +2260,14 @@ deliveryEvent.OnServerEvent:Connect(function(player, action, payload)
 
 	local now = os.clock()
 	local lastAction = remoteLastAction[player] or 0
-	if action ~= "ChooseRoute" and now - lastAction < REMOTE_COOLDOWN_SECONDS then
+	local immediateActions = {
+		ChooseRoute = true,
+		ResolveDestinationEvent = true,
+		AcceptSideJob = true,
+		IgnoreSideJob = true,
+		ChooseNextStop = true,
+	}
+	if not immediateActions[action] and now - lastAction < REMOTE_COOLDOWN_SECONDS then
 		return
 	end
 	remoteLastAction[player] = now
