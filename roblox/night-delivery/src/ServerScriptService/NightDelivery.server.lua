@@ -134,6 +134,7 @@ local playerLastHouse = {}
 local playerStreak = {}
 local playerShiftProgress = {}
 local remoteLastAction = {}
+local playerDataLoadSucceeded = {}
 local currentWeather = WEATHER_TYPES[1]
 local shopPadRef = nil
 local jobCounterRef = nil
@@ -1671,7 +1672,7 @@ local function loadData(player)
 		shiftWins = 0,
 	}
 	if not DELIVERY_STORE then
-		return defaultData
+		return defaultData, false
 	end
 
 	local success = false
@@ -1699,11 +1700,19 @@ local function loadData(player)
 		warn("Night Delivery: DataStore load failed after retries for", player.Name)
 	end
 
-	return defaultData
+	local dataCanBeSaved = success and (data == nil or type(data) == "table")
+	if success and data ~= nil and type(data) ~= "table" then
+		warn("Night Delivery: invalid saved data; refusing to overwrite it for", player.Name)
+	end
+
+	return defaultData, dataCanBeSaved
 end
 
 local function saveData(player)
 	if not DELIVERY_STORE then
+		return false
+	end
+	if playerDataLoadSucceeded[player] ~= true then
 		return false
 	end
 
@@ -1954,10 +1963,11 @@ end
 
 local function setupPlayer(player)
 	player:SetAttribute("NightDeliveryReady", false)
-	local data = loadData(player)
+	local data, dataCanBeSaved = loadData(player)
 	if not player.Parent then
 		return
 	end
+	playerDataLoadSucceeded[player] = dataCanBeSaved == true
 
 	local leaderstats = Instance.new("Folder")
 	leaderstats.Name = "leaderstats"
@@ -2008,6 +2018,11 @@ local function setupPlayer(player)
 
 	player:SetAttribute("NightDeliveryReady", true)
 	sendPlayerState(player)
+	if DELIVERY_STORE and not dataCanBeSaved then
+		sendStatus(player, "Message", {
+			text = "セーブデータを確認できませんでした。このセッションの進行は保存されません。",
+		})
+	end
 end
 
 Players.PlayerAdded:Connect(setupPlayer)
@@ -2023,6 +2038,7 @@ Players.PlayerRemoving:Connect(function(player)
 	playerStreak[player] = nil
 	playerShiftProgress[player] = nil
 	remoteLastAction[player] = nil
+	playerDataLoadSucceeded[player] = nil
 end)
 
 task.spawn(function()
