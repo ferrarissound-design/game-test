@@ -1804,7 +1804,8 @@ local function completeDelivery(player, houseName)
 		for _, stop in ipairs(job.extraStops) do
 			local house = housesFolder:FindFirstChild(stop.houseName)
 			local point = house and house:FindFirstChild("DeliveryPoint")
-			local root = getRootPart(player)
+			local character = player.Character
+			local root = character and character:FindFirstChild("HumanoidRootPart")
 			table.insert(options, {
 				houseName = stop.houseName,
 				displayName = stop.displayName,
@@ -1834,7 +1835,8 @@ local function sendSideRequestOffer(player, jobSerial)
 		return
 	end
 
-	local root = getRootPart(player)
+	local character = player.Character
+	local root = character and character:FindFirstChild("HumanoidRootPart")
 	if not root then
 		return
 	end
@@ -1894,6 +1896,7 @@ local function startNextStop(player, job, stopIndex)
 	job.destinationEventReward = 0
 	job.routeReward = 0
 	job.routeTitle = nil
+	job.isAnomaly = math.random() <= RULES.RareAnomalyChance
 	job.isSideRequest = true
 	job.baseTimeLimit = getJobTimeLimit(findJobType(job.jobTypeId), target)
 	job.routeChoice = nil
@@ -2307,7 +2310,7 @@ deliveryEvent.OnServerEvent:Connect(function(player, action, payload)
 		})
 		if #job.extraStops < (job.bagCapacity - 1) then
 			local jobSerial = job.jobSerial
-			task.delay(16, function()
+			task.delay(5, function()
 				local currentJob = playerJobs[player]
 				if currentJob and currentJob.jobSerial == jobSerial and currentJob.houseName then
 					sendSideRequestOffer(player, jobSerial)
