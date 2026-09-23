@@ -691,6 +691,80 @@ local function showRareAnomaly(payload)
 	rumorReward.Text = "次の夜には、何も起きないかもしれない。"
 end
 
+local eventAppearance = nil
+local hiddenResidentParts = {}
+
+local function clearEventAppearance()
+	for part, transparency in pairs(hiddenResidentParts) do
+		if part and part.Parent then
+			part.LocalTransparencyModifier = transparency
+		end
+	end
+	table.clear(hiddenResidentParts)
+	if eventAppearance then
+		eventAppearance:Destroy()
+		eventAppearance = nil
+	end
+end
+
+local function addLocalEventPart(parent, name, size, position, color, shape)
+	local part = Instance.new("Part")
+	part.Name = name
+	part.Size = size
+	part.Position = position
+	part.Anchored = true
+	part.CanCollide = false
+	part.CanTouch = false
+	part.CanQuery = false
+	part.CastShadow = false
+	part.Color = color
+	part.Material = Enum.Material.SmoothPlastic
+	if shape then part.Shape = shape end
+	part.Parent = parent
+	return part
+end
+
+local function showEventAppearance(eventId)
+	clearEventAppearance()
+	local world = workspace:FindFirstChild("NightDeliveryWorld")
+	local houses = world and world:FindFirstChild("Houses")
+	local house = houses and houses:FindFirstChild(currentHouseName or "")
+	local point = house and house:FindFirstChild("DeliveryPoint")
+	if not house or not point then return end
+
+	eventAppearance = Instance.new("Model")
+	eventAppearance.Name = "LocalDeliveryEvent"
+	eventAppearance.Parent = workspace
+	if eventId == "absent" then
+		for _, descendant in ipairs(house:GetDescendants()) do
+			if descendant.Name:match("^Resident") then
+				if descendant:IsA("BasePart") then
+					hiddenResidentParts[descendant] = descendant.LocalTransparencyModifier
+					descendant.LocalTransparencyModifier = 1
+				elseif descendant:IsA("BillboardGui") then
+					hiddenResidentParts[descendant] = descendant.Enabled and 0 or 1
+					descendant.Enabled = false
+				end
+			end
+		end
+		addLocalEventPart(eventAppearance, "ParcelLocker", Vector3.new(2.2, 1.6, 1.4), point.Position + Vector3.new(3.4, 1.05, -0.4), Color3.fromRGB(102, 127, 151))
+		addLocalEventPart(eventAppearance, "LockerSlot", Vector3.new(1.2, 0.55, 0.12), point.Position + Vector3.new(3.4, 1.1, -1.16), Color3.fromRGB(37, 47, 58), Enum.PartType.Block)
+	elseif eventId == "dog" then
+		local dogPosition = point.Position + Vector3.new(3.5, 0.8, 0)
+		addLocalEventPart(eventAppearance, "DogBody", Vector3.new(2, 1.25, 1.1), dogPosition, Color3.fromRGB(150, 105, 70))
+		addLocalEventPart(eventAppearance, "DogHead", Vector3.new(0.95, 0.95, 0.95), dogPosition + Vector3.new(1.05, 0.42, 0), Color3.fromRGB(171, 125, 83), Enum.PartType.Ball)
+		for _, offset in ipairs({Vector3.new(-0.6, -0.55, -0.3), Vector3.new(0.6, -0.55, -0.3), Vector3.new(-0.6, -0.55, 0.3), Vector3.new(0.6, -0.55, 0.3)}) do
+			addLocalEventPart(eventAppearance, "DogLeg", Vector3.new(0.3, 0.7, 0.3), dogPosition + offset, Color3.fromRGB(123, 84, 59))
+		end
+	elseif eventId == "work" then
+		local barrier = addLocalEventPart(eventAppearance, "WorkBarrier", Vector3.new(5.5, 1.1, 0.45), point.Position + Vector3.new(3.5, 1.0, -0.3), Color3.fromRGB(225, 137, 56))
+		barrier.Orientation = Vector3.new(0, 0, -8)
+		for _, offset in ipairs({-1.8, 1.8}) do
+			addLocalEventPart(eventAppearance, "WorkCone", Vector3.new(0.8, 1.2, 0.8), point.Position + Vector3.new(offset + 3.5, 0.85, -1.1), Color3.fromRGB(239, 116, 60), Enum.PartType.Block)
+		end
+	end
+end
+
 local function setTarget(houseName, displayName)
 	currentTarget = nil
 	currentHouseName = houseName
@@ -895,6 +969,7 @@ deliveryEvent.OnClientEvent:Connect(function(action, payload)
 			jobSerial = payload.jobSerial,
 		})
 	elseif action == "Delivered" then
+		clearEventAppearance()
 		showResident(payload)
 		deliveryEvent:FireServer("PolishDeliveryComplete", {
 			houseName = currentHouseName,
@@ -936,6 +1011,7 @@ deliveryEvent.OnClientEvent:Connect(function(action, payload)
 	elseif action == "NextStopOptions" then
 		showNextStops(payload)
 	elseif action == "DestinationEvent" then
+		showEventAppearance(tostring(payload.id or ""))
 		destinationEventSerial = tonumber(payload.jobSerial)
 		destinationEventTitle.Text = tostring(payload.title or "配達先で小さな問題")
 		destinationEventBody.Text = tostring(payload.body or "届け方を選ぼう。")
