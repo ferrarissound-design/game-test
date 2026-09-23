@@ -1079,6 +1079,16 @@ local function sendStatus(player, action, payload)
 	deliveryEvent:FireClient(player, action, payload or {})
 end
 
+local function requirePlayerReady(player)
+	if player:GetAttribute("NightDeliveryReady") == true then
+		return true
+	end
+	sendStatus(player, "Message", {
+		text = "プレイヤーデータを読み込み中。少し待ってから操作してね。",
+	})
+	return false
+end
+
 local function getStats(player)
 	local leaderstats = player:FindFirstChild("leaderstats")
 	if not leaderstats then
@@ -1398,6 +1408,9 @@ local function getJobTimeLimit(jobType, house)
 end
 
 local function assignJob(player)
+	if not requirePlayerReady(player) then
+		return
+	end
 	if not isNearPart(player, jobCounterRef, 14) then
 		return
 	end
@@ -1489,6 +1502,9 @@ local function assignJob(player)
 end
 
 local function completeDelivery(player, houseName)
+	if not requirePlayerReady(player) then
+		return
+	end
 	local job = playerJobs[player]
 	if not job then
 		sendStatus(player, "Message", {
@@ -1614,6 +1630,9 @@ local function completeDelivery(player, houseName)
 end
 
 local function toggleBike(player)
+	if not requirePlayerReady(player) then
+		return
+	end
 	if not isNearPart(player, bikePadRef, 14) then
 		return
 	end
@@ -1629,6 +1648,9 @@ local function toggleBike(player)
 end
 
 local function tryUpgradeSpeed(player)
+	if not requirePlayerReady(player) then
+		return
+	end
 	local level = player:GetAttribute("SpeedLevel") or 0
 	if level >= MAX_SPEED_LEVEL then
 		sendStatus(player, "Message", {
@@ -1777,6 +1799,9 @@ local function sendShopState(player)
 end
 
 local function openShop(player)
+	if not requirePlayerReady(player) then
+		return
+	end
 	if not isNearPart(player, shopPadRef, 16) then
 		return
 	end
@@ -1785,6 +1810,9 @@ local function openShop(player)
 end
 
 local function buyNextStyle(player, kind)
+	if not requirePlayerReady(player) then
+		return
+	end
 	if not isNearPart(player, shopPadRef, 18) then
 		return
 	end
@@ -1946,7 +1974,7 @@ deliveryEvent.OnServerEvent:Connect(function(player, action)
 	elseif action == "BuyBikeStyle" then
 		buyNextStyle(player, "bike")
 	elseif action == "RequestShopState" then
-		if isNearPart(player, shopPadRef, 18) then
+		if requirePlayerReady(player) and isNearPart(player, shopPadRef, 18) then
 			sendShopState(player)
 		end
 	end
