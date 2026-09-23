@@ -1921,7 +1921,7 @@ local function startNextStop(player, job, stopIndex)
 	job.routeTitle = nil
 	job.isAnomaly = math.random() <= RULES.RareAnomalyChance
 	job.isSideRequest = true
-	job.baseTimeLimit = getJobTimeLimit(findJobType(job.jobTypeId), target)
+	job.baseTimeLimit = math.min(getJobTimeLimit(findJobType(job.jobTypeId), target), stop.timeLimit or 35)
 	job.routeChoice = nil
 	job.expiresAt = nil
 	job.startedAt = nil
@@ -2350,6 +2350,7 @@ deliveryEvent.OnServerEvent:Connect(function(player, action, payload)
 			houseName = sideHouse.Name,
 			displayName = sideHouse:GetAttribute("DisplayName") or sideHouse.Name,
 			reward = job.sideOffer.reward,
+			timeLimit = 35,
 			cargoRuleId = job.sideOffer.cargoRuleId,
 		})
 		job.sideOffer = nil
