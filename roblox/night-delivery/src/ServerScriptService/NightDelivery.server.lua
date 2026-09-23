@@ -1579,6 +1579,7 @@ local function assignJob(player)
 	}
 
 	player:SetAttribute("NightDeliveryBikeBlocked", false)
+	player:SetAttribute("NightDeliveryRequestedModifier", nil)
 	if isAnomaly then
 		sendStatus(player, "RareAnomaly", {title = "宛名が一瞬、読めなくなった"})
 	end
@@ -1768,6 +1769,7 @@ local function completeDelivery(player, houseName)
 	player:SetAttribute("NightDeliveryJobType", nil)
 	player:SetAttribute("NightDeliveryHouseName", nil)
 	player:SetAttribute("NightDeliveryBikeBlocked", false)
+	player:SetAttribute("NightDeliveryRequestedModifier", nil)
 	clearParcelVisual(player)
 
 	sendStatus(player, "Delivered", {
@@ -1922,6 +1924,7 @@ local function startNextStop(player, job, stopIndex)
 	player:SetAttribute("NightDeliveryJobType", job.jobTypeId)
 	player:SetAttribute("NightDeliveryHouseName", target.Name)
 	player:SetAttribute("NightDeliveryBikeBlocked", false)
+	player:SetAttribute("NightDeliveryRequestedModifier", job.forcedModifierId)
 	addParcelVisual(player, job.jobTypeId)
 	sendStatus(player, "JobAssigned", {
 		houseName = target.Name,
@@ -2513,6 +2516,7 @@ local function setupPlayer(player)
 	player:SetAttribute("NightDeliveryJobType", nil)
 	player:SetAttribute("NightDeliveryHouseName", nil)
 	player:SetAttribute("NightDeliveryBikeBlocked", false)
+	player:SetAttribute("NightDeliveryRequestedModifier", nil)
 	player:SetAttribute("BagStyleLevel", data.bagStyleLevel)
 	player:SetAttribute("BikeStyleLevel", data.bikeStyleLevel)
 	player:SetAttribute("ShiftWins", data.shiftWins)
