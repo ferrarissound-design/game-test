@@ -522,7 +522,16 @@ residentLineLabel.ZIndex = 46
 local function showResident(payload)
 	residentSerial += 1
 	local serial = residentSerial
-	residentNameLabel.Text = tostring(payload.residentName or "住人")
+	local callbackTitle = tostring(payload.neighborhoodCallbackTitle or "")
+	if callbackTitle ~= "" then
+		residentNameLabel.Text = string.format("%s  ・  %s", tostring(payload.residentName or "住人"), callbackTitle)
+		residentNameLabel.TextColor3 = Color3.fromRGB(255, 213, 130)
+		residentStroke.Color = Color3.fromRGB(237, 184, 94)
+	else
+		residentNameLabel.Text = tostring(payload.residentName or "住人")
+		residentNameLabel.TextColor3 = Color3.fromRGB(154, 220, 185)
+		residentStroke.Color = Color3.fromRGB(131, 205, 174)
+	end
 	residentLineLabel.Text = tostring(payload.residentReaction or "配達ありがとう。")
 	residentFrame.Visible = true
 	residentFrame.BackgroundTransparency = 1
@@ -1359,9 +1368,16 @@ deliveryEvent.OnClientEvent:Connect(function(action, payload)
 		end
 	elseif action == "TravelEventResolved" then
 		if tonumber(payload.jobSerial) == tonumber(travelEventSerial) then
+			local followUpText = tostring(payload.followUpText or "")
+			local outcomeText = string.format("+%d Coins  配達を続けよう。", tonumber(payload.reward) or 0)
+			local outcomeTitle = "道中イベント解決"
+			if followUpText ~= "" then
+				outcomeTitle = tostring(payload.followUpTitle or "街のつながり")
+				outcomeText ..= "  " .. followUpText
+			end
 			showTravelEventOutcome(
-				"道中イベント解決",
-				string.format("+%d Coins  配達を続けよう。", tonumber(payload.reward) or 0),
+				outcomeTitle,
+				outcomeText,
 				true
 			)
 		end

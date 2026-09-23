@@ -609,7 +609,9 @@ deliveryEvent.OnClientEvent:Connect(function(action, payload)
 			or (currentJobTypeId == "rush" and Color3.fromRGB(255, 207, 110) or Color3.fromRGB(157, 190, 225))
 
 		setWaypoint(currentHouseName)
-		if currentJobTypeId == "special" then
+		if payload.neighborhoodThreadTitle then
+			showToast("🧩 街のつながり: " .. tostring(payload.neighborhoodThreadTitle))
+		elseif currentJobTypeId == "special" then
 			showToast("🟣 深夜特別便！ 高報酬のレア依頼だ。")
 		elseif currentJobTypeId == "rush" then
 			showToast("⚡ 急ぎ便！ 短い制限時間で届けよう。")
@@ -651,6 +653,9 @@ deliveryEvent.OnClientEvent:Connect(function(action, payload)
 		if (payload.sideRequestBonus or 0) > 0 then
 			bonusText ..= string.format("  追加便 +%d", payload.sideRequestBonus)
 		end
+		if (payload.neighborhoodCallbackBonus or 0) > 0 then
+			bonusText ..= string.format("  つながり +%d", payload.neighborhoodCallbackBonus)
+		end
 
 		local unlockText = ""
 		if payload.districtUnlocked then
@@ -673,6 +678,13 @@ deliveryEvent.OnClientEvent:Connect(function(action, payload)
 		end
 		if (payload.shiftBonus or 0) > 0 then
 			extraText ..= string.format("  夜勤+%d", payload.shiftBonus)
+		end
+		if (payload.neighborhoodKindnessGained or 0) > 0 then
+			extraText ..= string.format(
+				"  🤝 街の信頼 +%d（合計%d）",
+				payload.neighborhoodKindnessGained,
+				payload.neighborhoodKindness or 0
+			)
 		end
 
 		shiftProgress = payload.shiftProgress or shiftProgress

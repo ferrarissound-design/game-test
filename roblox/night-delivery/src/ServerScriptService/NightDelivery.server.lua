@@ -152,6 +152,7 @@ local playerLastHouse = {}
 local playerResidentVisits = {}
 local playerLastDestinationEvent = {}
 local playerLastTravelEvent = {}
+local playerPendingNeighborhoodStory = {}
 local currentNightRule = RULES.NightConditions[1]
 local playerStreak = {}
 local playerShiftProgress = {}
@@ -1503,6 +1504,57 @@ local function getJobTimeLimit(jobType, house)
 	return math.clamp(math.ceil(seconds), profile.minimum, profile.maximum)
 end
 
+local function buildNeighborhoodStory(sourceId, targetHouseName)
+	local definition = RULES.NeighborhoodCallbacks and RULES.NeighborhoodCallbacks[sourceId]
+	if not definition or type(targetHouseName) ~= "string" or targetHouseName == "" then
+		return nil
+	end
+	return {
+		sourceId = sourceId,
+		targetHouseName = targetHouseName,
+		title = definition.title,
+		threadStartedText = definition.threadStartedText,
+		reaction = definition.reaction,
+		reward = definition.reward or 0,
+		kindness = definition.kindness or 1,
+	}
+end
+
+local function queueNeighborhoodStory(player, sourceId)
+	if playerPendingNeighborhoodStory[player] then
+		return playerPendingNeighborhoodStory[player]
+	end
+	local definition = RULES.NeighborhoodCallbacks and RULES.NeighborhoodCallbacks[sourceId]
+	if not definition then
+		return nil
+	end
+
+	local candidates = {}
+	local currentHouseName = playerJobs[player] and playerJobs[player].houseName or nil
+	for _, house in ipairs(housesFolder:GetChildren()) do
+		if house.Name ~= currentHouseName
+			and house.Name ~= playerLastHouse[player]
+			and isHouseUnlocked(player, house) then
+			table.insert(candidates, house)
+		end
+	end
+	if #candidates == 0 then
+		for _, house in ipairs(housesFolder:GetChildren()) do
+			if house.Name ~= currentHouseName and isHouseUnlocked(player, house) then
+				table.insert(candidates, house)
+			end
+		end
+	end
+	if #candidates == 0 then
+		return nil
+	end
+
+	local target = candidates[math.random(1, #candidates)]
+	local story = buildNeighborhoodStory(sourceId, target.Name)
+	playerPendingNeighborhoodStory[player] = story
+	return story
+end
+
 local function assignJob(player)
 	if not requirePlayerReady(player) then
 		return
@@ -1547,13 +1599,26 @@ local function assignJob(player)
 		return
 	end
 
-	local target = candidates[math.random(1, #candidates)]
+	local neighborhoodCallback = playerPendingNeighborhoodStory[player]
+	local callbackHouse = neighborhoodCallback
+		and housesFolder:FindFirstChild(neighborhoodCallback.targetHouseName)
+		or nil
+	if neighborhoodCallback and (not callbackHouse or not isHouseUnlocked(player, callbackHouse)) then
+		callbackHouse = nil
+		playerPendingNeighborhoodStory[player] = nil
+		neighborhoodCallback = nil
+	end
+
+	if neighborhoodCallback then
+		jobType = JOB_TYPES[1]
+	end
+	local target = callbackHouse or candidates[math.random(1, #candidates)]
 	local destinationEvent = nil
-	if math.random() <= RULES.DestinationEventChance then
+	if not neighborhoodCallback and math.random() <= RULES.DestinationEventChance then
 		destinationEvent = RULES.chooseWeighted(RULES.DestinationEvents, playerLastDestinationEvent[player])
 		playerLastDestinationEvent[player] = destinationEvent.id
 	end
-	local isAnomaly = math.random() <= RULES.RareAnomalyChance
+	local isAnomaly = not neighborhoodCallback and math.random() <= RULES.RareAnomalyChance
 	local districtId = target:GetAttribute("DistrictId") or "central"
 	local districtName = target:GetAttribute("DistrictName") or DISTRICT_NAMES[districtId] or districtId
 	local weather = currentWeather
@@ -1592,12 +1657,13 @@ local function assignJob(player)
 		destinationEventHazardPosition = nil,
 		destinationEventHazardRadius = nil,
 		destinationEventHazardTriggered = false,
-		travelEventStarted = false,
+		travelEventStarted = neighborhoodCallback ~= nil,
 		travelEventActive = false,
 		travelEventResolved = false,
 		travelEventBlocking = false,
 		travelEventObjectivePosition = nil,
 		travelEventId = nil,
+		neighborhoodCallback = neighborhoodCallback,
 		isAnomaly = isAnomaly,
 	}
 
@@ -1621,6 +1687,8 @@ local function assignJob(player)
 		baseReward = jobType.baseReward,
 		bagCapacity = playerJobs[player].bagCapacity,
 		nightCondition = currentNightRule.name,
+		neighborhoodThreadTitle = neighborhoodCallback and neighborhoodCallback.title or nil,
+		neighborhoodKindness = player:GetAttribute("NeighborhoodKindness") or 0,
 	})
 	if isAnomaly then
 		sendStatus(player, "RareAnomaly", {title = "宛名が一瞬、読めなくなった"})
@@ -1858,6 +1926,19 @@ local function completeDelivery(player, houseName)
 	local visitCount = visits[job.houseName] or 0
 	visits[job.houseName] = visitCount + 1
 	local residentReaction = visitCount == 0 and job.residentFirstLine or job.residentReturnLine
+	local neighborhoodCallback = job.neighborhoodCallback
+	local neighborhoodCallbackBonus = 0
+	local neighborhoodKindnessGained = 0
+	if neighborhoodCallback and neighborhoodCallback.targetHouseName == job.houseName then
+		residentReaction = neighborhoodCallback.reaction or residentReaction
+		neighborhoodCallbackBonus = math.max(0, tonumber(neighborhoodCallback.reward) or 0)
+		neighborhoodKindnessGained = math.max(0, tonumber(neighborhoodCallback.kindness) or 1)
+		playerPendingNeighborhoodStory[player] = nil
+		player:SetAttribute(
+			"NeighborhoodKindness",
+			(player:GetAttribute("NeighborhoodKindness") or 0) + neighborhoodKindnessGained
+		)
+	end
 
 	local jobType = findJobType(job.jobTypeId)
 	local now = workspace:GetServerTimeNow()
@@ -1908,7 +1989,7 @@ local function completeDelivery(player, houseName)
 	end
 
 	local coopBonus = math.floor(reward * (COOP_BONUS_PER_HELPER * helperCount))
-	reward += coopBonus + destinationEventBonus
+	reward += coopBonus + destinationEventBonus + neighborhoodCallbackBonus
 
 	-- A small chance of a grateful resident tipping the courier keeps ordinary jobs surprising.
 	local tipChance = currentNightRule.id == "tip" and 30 or 14
@@ -1992,6 +2073,10 @@ local function completeDelivery(player, houseName)
 		sideRequestBonus = sideRequestBonus,
 		destinationEventId = job.destinationEvent and job.destinationEvent.id or nil,
 		destinationEventHazardTriggered = job.destinationEventHazardTriggered == true,
+		neighborhoodCallbackTitle = neighborhoodCallback and neighborhoodCallback.title or nil,
+		neighborhoodCallbackBonus = neighborhoodCallbackBonus,
+		neighborhoodKindnessGained = neighborhoodKindnessGained,
+		neighborhoodKindness = player:GetAttribute("NeighborhoodKindness") or 0,
 		isAnomaly = job.isAnomaly == true,
 		weatherName = job.weatherName or "晴れ",
 		weatherBonus = weatherBonus,
@@ -2041,7 +2126,8 @@ local function sendSideRequestOffer(player, jobSerial)
 		job.sideOffer = nil
 	end
 	if not job or job.jobSerial ~= jobSerial or not job.houseName
-		or job.sideOffer or job.travelEventActive
+		or job.sideOffer or job.travelEventActive or job.neighborhoodCallback
+		or playerPendingNeighborhoodStory[player]
 		or #job.extraStops >= (job.bagCapacity - 1)
 		or math.random() > 0.38 then
 		return
@@ -2237,6 +2323,8 @@ local function loadData(player)
 		bikeStyleLevel = 0,
 		shiftWins = 0,
 		rumorClueLevel = 0,
+		neighborhoodKindness = 0,
+		pendingNeighborhoodStory = nil,
 	}
 	if not DELIVERY_STORE then
 		return defaultData, false
@@ -2264,6 +2352,19 @@ local function loadData(player)
 		defaultData.bikeStyleLevel = math.clamp(tonumber(data.bikeStyleLevel) or 0, 0, #BIKE_STYLES - 1)
 		defaultData.shiftWins = math.max(0, tonumber(data.shiftWins) or 0)
 		defaultData.rumorClueLevel = math.clamp(tonumber(data.rumorClueLevel) or 0, 0, #RUMOR_CLUES)
+		defaultData.neighborhoodKindness = math.max(0, tonumber(data.neighborhoodKindness) or 0)
+		if type(data.pendingNeighborhoodStory) == "table" then
+			local sourceId = tostring(data.pendingNeighborhoodStory.sourceId or "")
+			local targetHouseName = tostring(data.pendingNeighborhoodStory.targetHouseName or "")
+			if RULES.NeighborhoodCallbacks
+				and RULES.NeighborhoodCallbacks[sourceId]
+				and targetHouseName ~= "" then
+				defaultData.pendingNeighborhoodStory = {
+					sourceId = sourceId,
+					targetHouseName = targetHouseName,
+				}
+			end
+		end
 	elseif not success then
 		warn("Night Delivery: DataStore load failed after retries for", player.Name)
 	end
@@ -2289,6 +2390,7 @@ local function saveData(player)
 		return
 	end
 
+	local pendingNeighborhoodStory = playerPendingNeighborhoodStory[player]
 	local payload = {
 		coins = stats.coins.Value,
 		deliveries = stats.deliveries.Value,
@@ -2297,6 +2399,11 @@ local function saveData(player)
 		bikeStyleLevel = player:GetAttribute("BikeStyleLevel") or 0,
 		shiftWins = player:GetAttribute("ShiftWins") or 0,
 		rumorClueLevel = player:GetAttribute("NightDeliveryRumorClueLevel") or 0,
+		neighborhoodKindness = player:GetAttribute("NeighborhoodKindness") or 0,
+		pendingNeighborhoodStory = pendingNeighborhoodStory and {
+			sourceId = pendingNeighborhoodStory.sourceId,
+			targetHouseName = pendingNeighborhoodStory.targetHouseName,
+		} or nil,
 	}
 
 	local success = false
@@ -2499,6 +2606,8 @@ local function sendPlayerState(player)
 		shiftProgress = playerShiftProgress[player] or 0,
 		shiftTarget = SHIFT_TARGET,
 		shiftWins = player:GetAttribute("ShiftWins") or 0,
+		neighborhoodKindness = player:GetAttribute("NeighborhoodKindness") or 0,
+		hasPendingNeighborhoodStory = playerPendingNeighborhoodStory[player] ~= nil,
 		nightConditionId = currentNightRule.id,
 		nightConditionName = currentNightRule.name,
 		nightConditionDescription = currentNightRule.description,
@@ -2685,6 +2794,7 @@ deliveryEvent.OnServerEvent:Connect(function(player, action, payload)
 
 		local resolvedId = job.travelEventId
 		local reward = math.max(0, tonumber(job.travelEventReward) or 0)
+		local followUpStory = queueNeighborhoodStory(player, resolvedId)
 		job.travelEventResolved = true
 		job.travelEventActive = false
 		job.travelEventBlocking = false
@@ -2701,6 +2811,8 @@ deliveryEvent.OnServerEvent:Connect(function(player, action, payload)
 			jobSerial = job.jobSerial,
 			id = resolvedId,
 			reward = reward,
+			followUpText = followUpStory and followUpStory.threadStartedText or nil,
+			followUpTitle = followUpStory and followUpStory.title or nil,
 		})
 	elseif action == "ChooseRoute" then
 		local job = playerJobs[player]
@@ -2831,6 +2943,14 @@ local function setupPlayer(player)
 	player:SetAttribute("BikeStyleLevel", data.bikeStyleLevel)
 	player:SetAttribute("ShiftWins", data.shiftWins)
 	player:SetAttribute("NightDeliveryRumorClueLevel", data.rumorClueLevel)
+	player:SetAttribute("NeighborhoodKindness", data.neighborhoodKindness or 0)
+	playerPendingNeighborhoodStory[player] = nil
+	if data.pendingNeighborhoodStory then
+		playerPendingNeighborhoodStory[player] = buildNeighborhoodStory(
+			data.pendingNeighborhoodStory.sourceId,
+			data.pendingNeighborhoodStory.targetHouseName
+		)
+	end
 	playerStreak[player] = 0
 	playerShiftProgress[player] = 0
 
@@ -2875,6 +2995,7 @@ Players.PlayerRemoving:Connect(function(player)
 	playerResidentVisits[player] = nil
 	playerLastDestinationEvent[player] = nil
 	playerLastTravelEvent[player] = nil
+	playerPendingNeighborhoodStory[player] = nil
 	playerStreak[player] = nil
 	playerShiftProgress[player] = nil
 	remoteLastAction[player] = nil
