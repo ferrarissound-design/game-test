@@ -3,6 +3,7 @@
 local Rules = {}
 
 Rules.DestinationEventChance = 0.22
+Rules.TravelEventChance = 0.34
 Rules.RareAnomalyChance = 0.004
 
 Rules.SideCargoTypes = {
@@ -11,6 +12,36 @@ Rules.SideCargoTypes = {
 	{id = "oversized", title = "大型荷物"},
 	{id = "hot", title = "温かい料理"},
 	{id = "secret", title = "秘密便"},
+}
+
+Rules.TravelEvents = {
+	{
+		id = "roadblock",
+		weight = 3,
+		title = "道が塞がれている",
+		body = "工事車両で正面が塞がれた。黄色い迂回ポイントを通って先へ進もう。",
+		blocking = true,
+		reward = 30,
+		lifetime = 0,
+	},
+	{
+		id = "lost_item",
+		weight = 2,
+		title = "落とし物を発見",
+		body = "少し寄り道すれば拾える。時間を使う代わりにお礼がもらえるかもしれない。",
+		blocking = false,
+		reward = 60,
+		lifetime = 12,
+	},
+	{
+		id = "help_request",
+		weight = 2,
+		title = "困っている人がいる",
+		body = "道端で荷物を落とした人がいる。寄り道して手伝うか、そのまま配達を急ぐか。",
+		blocking = false,
+		reward = 45,
+		lifetime = 14,
+	},
 }
 
 Rules.DestinationEvents = {
