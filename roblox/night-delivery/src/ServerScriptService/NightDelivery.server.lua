@@ -1454,6 +1454,7 @@ local function assignJob(player)
 	player:SetAttribute("NightDeliveryHouseName", target.Name)
 	playerJobs[player] = {
 		jobSerial = jobSerial,
+		houseName = target.Name,
 		displayName = target:GetAttribute("DisplayName") or target.Name,
 		districtId = districtId,
 		districtName = districtName,
