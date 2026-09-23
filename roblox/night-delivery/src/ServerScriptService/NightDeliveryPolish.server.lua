@@ -342,8 +342,7 @@ local function finishTrackedOrder(player)
 	if deliveries.Value <= order.baselineDeliveries then
 		return
 	end
-	if tonumber(player:GetAttribute("NightDeliveryCompletedJobSerial")) ~= order.jobSerial
-		or tonumber(player:GetAttribute("NightDeliveryJobSerial")) ~= order.jobSerial then
+	if tonumber(player:GetAttribute("NightDeliveryCompletedJobSerial")) ~= order.jobSerial then
 		if order.jumpConnection then
 			order.jumpConnection:Disconnect()
 		end
