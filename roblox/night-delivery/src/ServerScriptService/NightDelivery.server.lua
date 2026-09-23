@@ -1609,13 +1609,16 @@ local function assignJob(player)
 		neighborhoodCallback = nil
 	end
 
+	if neighborhoodCallback then
+		jobType = JOB_TYPES[1]
+	end
 	local target = callbackHouse or candidates[math.random(1, #candidates)]
 	local destinationEvent = nil
 	if not neighborhoodCallback and math.random() <= RULES.DestinationEventChance then
 		destinationEvent = RULES.chooseWeighted(RULES.DestinationEvents, playerLastDestinationEvent[player])
 		playerLastDestinationEvent[player] = destinationEvent.id
 	end
-	local isAnomaly = math.random() <= RULES.RareAnomalyChance
+	local isAnomaly = not neighborhoodCallback and math.random() <= RULES.RareAnomalyChance
 	local districtId = target:GetAttribute("DistrictId") or "central"
 	local districtName = target:GetAttribute("DistrictName") or DISTRICT_NAMES[districtId] or districtId
 	local weather = currentWeather
@@ -2124,6 +2127,7 @@ local function sendSideRequestOffer(player, jobSerial)
 	end
 	if not job or job.jobSerial ~= jobSerial or not job.houseName
 		or job.sideOffer or job.travelEventActive or job.neighborhoodCallback
+		or playerPendingNeighborhoodStory[player]
 		or #job.extraStops >= (job.bagCapacity - 1)
 		or math.random() > 0.38 then
 		return
