@@ -821,7 +821,10 @@ RunService.RenderStepped:Connect(function()
 		if objectiveActive then
 			if currentHighlight then currentHighlight.Enabled = false end
 			if currentBillboard then currentBillboard.Enabled = false end
-		elseif distance and player:GetAttribute("NightDeliveryNavSoft") == true then
+		elseif distance and (
+			player:GetAttribute("NightDeliveryNavSoft") == true
+			or player:GetAttribute("NightDeliveryNightNavSoft") == true
+		) then
 			local visible = distance <= 70
 			if currentHighlight then currentHighlight.Enabled = visible end
 			if currentBillboard then currentBillboard.Enabled = visible end
