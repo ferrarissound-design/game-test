@@ -303,8 +303,9 @@ local function setTarget(houseName, displayName)
 	local houses = world and world:FindFirstChild("Houses")
 	local house = houses and houses:FindFirstChild(houseName)
 	local body = house and house:FindFirstChild("Body")
+	local deliveryPoint = house and house:FindFirstChild("DeliveryPoint")
 	if body then
-		currentTarget = body
+		currentTarget = deliveryPoint or body
 		navTitle.Text = displayName or houseName or "配達先"
 		navFrame.Visible = true
 	end
