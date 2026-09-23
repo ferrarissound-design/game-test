@@ -633,6 +633,9 @@ deliveryEvent.OnClientEvent:Connect(function(action, payload)
 		if (payload.coopBonus or 0) > 0 then
 			extraText ..= string.format("  協力+%d", payload.coopBonus)
 		end
+		if (payload.neighborhoodTip or 0) > 0 then
+			extraText ..= string.format("  🌙 ご近所チップ +%d", payload.neighborhoodTip)
+		end
 		if (payload.shiftBonus or 0) > 0 then
 			extraText ..= string.format("  夜勤+%d", payload.shiftBonus)
 		end
