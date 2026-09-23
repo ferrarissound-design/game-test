@@ -20,6 +20,9 @@ local orderStartedAt = nil
 local orderExpiresAt = nil
 local currentModifier = nil
 local pendingRouteSerial = nil
+local eventObjectivePart = nil
+local eventObjectiveSerial = nil
+local eventObjectiveReady = false
 local resultSerial = 0
 local rumorSerial = 0
 
@@ -596,6 +599,111 @@ carefulEventButton.Activated:Connect(function()
 	submitDestinationEvent("careful")
 end)
 
+local eventObjectiveFrame = Instance.new("Frame")
+eventObjectiveFrame.Name = "DestinationEventObjective"
+eventObjectiveFrame.Size = UDim2.fromOffset(410, 116)
+eventObjectiveFrame.AnchorPoint = Vector2.new(0.5, 1)
+eventObjectiveFrame.Position = UDim2.new(0.5, 0, 1, -34)
+eventObjectiveFrame.BackgroundColor3 = Color3.fromRGB(22, 31, 38)
+eventObjectiveFrame.BackgroundTransparency = 0.05
+eventObjectiveFrame.Visible = false
+eventObjectiveFrame.ZIndex = 72
+eventObjectiveFrame.Parent = gui
+addCorner(eventObjectiveFrame, 13)
+addStroke(eventObjectiveFrame, Color3.fromRGB(126, 220, 178), 0.16, 1.4)
+
+local eventObjectiveTitle = makeLabel(eventObjectiveFrame, UDim2.new(1, -24, 0, 24), UDim2.fromOffset(12, 8), "届ける場所が変わった", 14, Enum.Font.GothamBold)
+eventObjectiveTitle.TextColor3 = Color3.fromRGB(151, 230, 193)
+eventObjectiveTitle.ZIndex = 73
+local eventObjectiveBody = makeLabel(eventObjectiveFrame, UDim2.new(1, -24, 0, 34), UDim2.fromOffset(12, 34), "", 12, Enum.Font.Gotham)
+eventObjectiveBody.TextWrapped = true
+eventObjectiveBody.ZIndex = 73
+
+local eventObjectiveButton = Instance.new("TextButton")
+eventObjectiveButton.Name = "CompleteEventObjective"
+eventObjectiveButton.Size = UDim2.new(1, -24, 0, 34)
+eventObjectiveButton.Position = UDim2.new(0, 12, 1, -42)
+eventObjectiveButton.BackgroundColor3 = Color3.fromRGB(54, 112, 91)
+eventObjectiveButton.TextColor3 = Color3.fromRGB(245, 248, 255)
+eventObjectiveButton.TextSize = 12
+eventObjectiveButton.Font = Enum.Font.GothamBold
+eventObjectiveButton.Text = "指定位置へ移動しよう"
+eventObjectiveButton.Active = false
+eventObjectiveButton.AutoButtonColor = false
+eventObjectiveButton.ZIndex = 73
+eventObjectiveButton.Parent = eventObjectiveFrame
+addCorner(eventObjectiveButton, 9)
+
+local function clearEventObjective()
+	if eventObjectivePart then
+		if currentTarget == eventObjectivePart then
+			currentTarget = nil
+		end
+		eventObjectivePart:Destroy()
+		eventObjectivePart = nil
+	end
+	eventObjectiveSerial = nil
+	eventObjectiveReady = false
+	eventObjectiveFrame.Visible = false
+end
+
+local function showEventObjective(payload)
+	clearEventObjective()
+	if typeof(payload.position) ~= "Vector3" then
+		return
+	end
+
+	eventObjectiveSerial = tonumber(payload.jobSerial)
+	local part = Instance.new("Part")
+	part.Name = "LocalDestinationEventObjective"
+	part.Size = Vector3.new(4.5, 0.28, 4.5)
+	part.Position = payload.position + Vector3.new(0, 0.14, 0)
+	part.Anchored = true
+	part.CanCollide = false
+	part.CanTouch = false
+	part.CanQuery = false
+	part.Material = Enum.Material.Neon
+	part.Color = Color3.fromRGB(111, 225, 170)
+	part.Transparency = 0.18
+	part.Parent = workspace
+	eventObjectivePart = part
+
+	local marker = Instance.new("BillboardGui")
+	marker.Name = "EventObjectiveMarker"
+	marker.Size = UDim2.fromOffset(190, 42)
+	marker.StudsOffset = Vector3.new(0, 3.2, 0)
+	marker.AlwaysOnTop = true
+	marker.Adornee = part
+	marker.Parent = part
+	local markerText = makeLabel(marker, UDim2.fromScale(1, 1), UDim2.fromOffset(0, 0), "ここに届ける", 13, Enum.Font.GothamBold)
+	markerText.TextXAlignment = Enum.TextXAlignment.Center
+	markerText.TextColor3 = Color3.fromRGB(236, 255, 246)
+
+	currentTarget = part
+	navTitle.Text = tostring(payload.label or "指定された場所へ届ける")
+	navFrame.Visible = true
+	eventObjectiveTitle.Text = tostring(payload.label or "届ける場所が変わった")
+	eventObjectiveBody.Text = (tonumber(payload.reward) or 0) > 0
+		and string.format("緑の目印まで移動して届けよう。成功で +%d Coins", tonumber(payload.reward) or 0)
+		or "緑の目印まで移動して、最後に荷物を置こう。"
+	eventObjectiveButton.Text = "指定位置へ移動しよう"
+	eventObjectiveButton.Active = false
+	eventObjectiveButton.AutoButtonColor = false
+	eventObjectiveFrame.Visible = true
+end
+
+eventObjectiveButton.Activated:Connect(function()
+	if not eventObjectiveSerial or not eventObjectiveReady then
+		return
+	end
+	eventObjectiveButton.Active = false
+	eventObjectiveButton.AutoButtonColor = false
+	eventObjectiveButton.Text = "配達を確認中..."
+	deliveryEvent:FireServer("CompleteDestinationEventObjective", {
+		jobSerial = eventObjectiveSerial,
+	})
+end)
+
 local sideOfferSerial = 0
 local sideOfferHouseName = nil
 local sideOfferFrame = Instance.new("Frame")
@@ -941,6 +1049,7 @@ deliveryEvent.OnClientEvent:Connect(function(action, payload)
 	payload = type(payload) == "table" and payload or {}
 
 	if action == "JobAssigned" then
+		clearEventObjective()
 		currentJobTypeId = payload.jobTypeId or "standard"
 		currentJobTypeName = payload.jobTypeName or "配達"
 		orderStartedAt = workspace:GetServerTimeNow()
@@ -975,6 +1084,7 @@ deliveryEvent.OnClientEvent:Connect(function(action, payload)
 			jobSerial = payload.jobSerial,
 		})
 	elseif action == "Delivered" then
+		clearEventObjective()
 		clearEventAppearance()
 		showResident(payload)
 		deliveryEvent:FireServer("PolishDeliveryComplete", {
@@ -1017,6 +1127,7 @@ deliveryEvent.OnClientEvent:Connect(function(action, payload)
 	elseif action == "NextStopOptions" then
 		showNextStops(payload)
 	elseif action == "DestinationEvent" then
+		clearEventObjective()
 		showEventAppearance(tostring(payload.id or ""))
 		destinationEventSerial = tonumber(payload.jobSerial)
 		destinationEventTitle.Text = tostring(payload.title or "配達先で小さな問題")
@@ -1026,6 +1137,9 @@ deliveryEvent.OnClientEvent:Connect(function(action, payload)
 		quickEventButton.Active = true
 		carefulEventButton.Active = true
 		destinationEventFrame.Visible = true
+	elseif action == "DestinationEventObjective" then
+		destinationEventFrame.Visible = false
+		showEventObjective(payload)
 	elseif action == "NightConditionChanged" then
 		nightBadge.Visible = true
 		nightName.Text = "今夜: " .. tostring(payload.name or "静かな夜")
@@ -1095,6 +1209,16 @@ RunService.RenderStepped:Connect(function()
 	end
 
 	local distance = (currentTarget.Position - root.Position).Magnitude
+	if eventObjectivePart and eventObjectiveFrame.Visible then
+		eventObjectiveReady = distance <= 9
+		eventObjectiveButton.Active = eventObjectiveReady
+		eventObjectiveButton.AutoButtonColor = eventObjectiveReady
+		if eventObjectiveReady then
+			eventObjectiveButton.Text = "ここに届ける"
+		else
+			eventObjectiveButton.Text = string.format("指定位置まであと %d studs", math.max(0, math.floor(distance)))
+		end
+	end
 	local navSoft = player:GetAttribute("NightDeliveryNavSoft") == true and distance > 70
 	navFrame.Visible = not navSoft
 	local angle = getFlatDirectionAngle(camera, currentTarget.Position, root.Position)
@@ -1136,6 +1260,7 @@ local function updateResponsiveScale()
 		modifierDescription.TextSize = 10
 		resultFrame.Size = UDim2.new(0.86, 0, 0, 180)
 		destinationEventFrame.Size = UDim2.new(0.92, 0, 0, 180)
+		eventObjectiveFrame.Size = UDim2.new(0.92, 0, 0, 116)
 		sideOfferFrame.Size = UDim2.new(0.92, 0, 0, 148)
 		nextStopFrame.Size = UDim2.new(0.92, 0, 0, 54 + (#nextStopButtons * 52))
 		quickEventButton.TextSize = 11
@@ -1169,6 +1294,7 @@ local function updateResponsiveScale()
 		modifierDescription.TextSize = 12
 		resultFrame.Size = UDim2.fromOffset(360, 190)
 		destinationEventFrame.Size = UDim2.fromOffset(430, 176)
+		eventObjectiveFrame.Size = UDim2.fromOffset(410, 116)
 		sideOfferFrame.Size = UDim2.fromOffset(420, 148)
 		nextStopFrame.Size = UDim2.fromOffset(420, 54 + (#nextStopButtons * 52))
 		quickEventButton.TextSize = 13
