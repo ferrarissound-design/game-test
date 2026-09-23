@@ -2168,6 +2168,12 @@ end
 
 local function applyWeather(weather)
 	currentWeather = weather
+	Lighting.Ambient = selectedWorldTheme.id == "harbor"
+		and Color3.fromRGB(53, 64, 76)
+		or Color3.fromRGB(67, 72, 96)
+	Lighting.OutdoorAmbient = selectedWorldTheme.id == "mountain"
+		and Color3.fromRGB(34, 42, 42)
+		or Color3.fromRGB(42, 47, 68)
 	local atmosphere = Lighting:FindFirstChild("NightDeliveryAtmosphere")
 
 	if weather.id == "rain" then
@@ -2215,6 +2221,9 @@ local function applyWeather(weather)
 		Lighting.Ambient = Color3.fromRGB(91, 77, 78)
 	end
 
+	for _, player in ipairs(Players:GetPlayers()) do
+		applyMovementSpeed(player)
+	end
 	deliveryEvent:FireAllClients("NightConditionChanged", {
 		id = currentNightRule.id,
 		name = currentNightRule.name,
