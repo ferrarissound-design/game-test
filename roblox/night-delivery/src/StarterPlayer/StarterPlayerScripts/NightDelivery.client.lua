@@ -594,12 +594,13 @@ deliveryEvent.OnClientEvent:Connect(function(action, payload)
 
 		targetLabel.Text = "配達先: " .. (currentDisplayName or currentHouseName)
 		jobLabel.Text = string.format(
-			"%s  •  %s  •  %s x%.2f  •  基本 %d",
+			"%s  •  %s  •  %s x%.2f  •  基本 %d  •  バッグ枠 %d",
 			currentDistrictName or "住宅街",
 			currentJobTypeName or "配達",
 			currentWeatherName,
 			currentWeatherMultiplier,
-			payload.baseReward or 0
+			payload.baseReward or 0,
+			payload.bagCapacity or 1
 		)
 		jobLabel.TextColor3 = currentJobTypeId == "special"
 			and Color3.fromRGB(214, 156, 255)
@@ -627,6 +628,12 @@ deliveryEvent.OnClientEvent:Connect(function(action, payload)
 
 		if (payload.routeBonus or 0) > 0 then
 			bonusText ..= string.format("  近道 +%d", payload.routeBonus)
+		end
+		if (payload.destinationEventBonus or 0) > 0 then
+			bonusText ..= string.format("  現場判断 +%d", payload.destinationEventBonus)
+		end
+		if (payload.sideRequestBonus or 0) > 0 then
+			bonusText ..= string.format("  追加便 +%d", payload.sideRequestBonus)
 		end
 
 		local unlockText = ""
@@ -701,9 +708,9 @@ deliveryEvent.OnClientEvent:Connect(function(action, payload)
 			speedButton.Text = "🚲 速度強化 MAX"
 		end
 		if payload.bagNextName then
-			bagButton.Text = string.format("📦 バッグ %s → %s  /  %d Coins", payload.bagStyleName or "-", payload.bagNextName, payload.bagCost or 0)
+			bagButton.Text = string.format("📦 バッグ %s → %s  /  %d Coins  ・  荷物枠 %d→%d", payload.bagStyleName or "-", payload.bagNextName, payload.bagCost or 0, payload.bagCapacity or 1, payload.bagNextCapacity or 1)
 		else
-			bagButton.Text = string.format("📦 バッグ %s  /  MAX", payload.bagStyleName or "-")
+			bagButton.Text = string.format("📦 バッグ %s  /  荷物枠 %d MAX", payload.bagStyleName or "-", payload.bagCapacity or 1)
 		end
 		if payload.bikeNextName then
 			bikeStyleButton.Text = string.format("🎨 自転車 %s → %s  /  %d Coins", payload.bikeStyleName or "-", payload.bikeNextName, payload.bikeCost or 0)
