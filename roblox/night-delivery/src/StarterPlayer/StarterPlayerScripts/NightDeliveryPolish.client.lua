@@ -24,6 +24,15 @@ local eventObjectivePart = nil
 local eventObjectiveSerial = nil
 local eventObjectiveReady = false
 local eventHazardTriggered = false
+local travelEventPart = nil
+local travelObstacle = nil
+local travelEventSerial = nil
+local travelEventBlocking = false
+local travelEventExpiresAt = nil
+local travelEventResolving = false
+local travelEventBaseBody = ""
+local travelEventReward = 0
+local travelEventMessageSerial = 0
 local resultSerial = 0
 local rumorSerial = 0
 
@@ -962,6 +971,186 @@ local function clearTarget()
 	navFrame.Visible = false
 end
 
+local travelEventFrame = Instance.new("Frame")
+travelEventFrame.Name = "TravelEvent"
+travelEventFrame.Size = UDim2.fromOffset(370, 92)
+travelEventFrame.AnchorPoint = Vector2.new(0.5, 0)
+travelEventFrame.Position = UDim2.new(0.5, 0, 0, 154)
+travelEventFrame.BackgroundColor3 = Color3.fromRGB(24, 31, 42)
+travelEventFrame.BackgroundTransparency = 0.04
+travelEventFrame.Visible = false
+travelEventFrame.ZIndex = 58
+travelEventFrame.Parent = gui
+addCorner(travelEventFrame, 13)
+local travelEventStroke = addStroke(travelEventFrame, Color3.fromRGB(237, 184, 94), 0.2, 1.4)
+
+local travelEventTitle = makeLabel(
+	travelEventFrame,
+	UDim2.new(1, -24, 0, 24),
+	UDim2.fromOffset(12, 8),
+	"道中イベント",
+	14,
+	Enum.Font.GothamBold
+)
+travelEventTitle.TextColor3 = Color3.fromRGB(255, 213, 130)
+travelEventTitle.ZIndex = 59
+
+local travelEventBody = makeLabel(
+	travelEventFrame,
+	UDim2.new(1, -24, 0, 48),
+	UDim2.fromOffset(12, 35),
+	"",
+	11,
+	Enum.Font.Gotham
+)
+travelEventBody.TextWrapped = true
+travelEventBody.TextYAlignment = Enum.TextYAlignment.Top
+travelEventBody.ZIndex = 59
+
+local function clearTravelEvent(restoreTarget, hideFrame)
+	if travelEventPart then
+		if currentTarget == travelEventPart then
+			currentTarget = nil
+		end
+		travelEventPart:Destroy()
+		travelEventPart = nil
+	end
+	if travelObstacle then
+		travelObstacle:Destroy()
+		travelObstacle = nil
+	end
+	travelEventSerial = nil
+	travelEventBlocking = false
+	travelEventExpiresAt = nil
+	travelEventResolving = false
+	travelEventBaseBody = ""
+	travelEventReward = 0
+	if hideFrame ~= false then
+		travelEventFrame.Visible = false
+	end
+	if restoreTarget and currentHouseName then
+		setTarget(currentHouseName, currentDisplayName)
+	end
+end
+
+local function makeTravelMarker(position, eventId)
+	local part = Instance.new("Part")
+	part.Name = "LocalTravelEventObjective"
+	part.Size = Vector3.new(4.4, 0.24, 4.4)
+	part.Position = position + Vector3.new(0, 0.12, 0)
+	part.Anchored = true
+	part.CanCollide = false
+	part.CanTouch = false
+	part.CanQuery = false
+	part.Material = Enum.Material.Neon
+	part.Transparency = 0.16
+	part.Color = eventId == "roadblock"
+		and Color3.fromRGB(244, 184, 76)
+		or (eventId == "lost_item" and Color3.fromRGB(103, 184, 235) or Color3.fromRGB(119, 224, 167))
+	part.Parent = workspace
+
+	local marker = Instance.new("BillboardGui")
+	marker.Name = "TravelEventMarker"
+	marker.Size = UDim2.fromOffset(190, 42)
+	marker.StudsOffset = Vector3.new(0, 3.0, 0)
+	marker.AlwaysOnTop = true
+	marker.Adornee = part
+	marker.Parent = part
+	local markerLabel = makeLabel(
+		marker,
+		UDim2.fromScale(1, 1),
+		UDim2.fromOffset(0, 0),
+		eventId == "roadblock" and "迂回ポイント" or (eventId == "lost_item" and "落とし物" or "手伝う"),
+		13,
+		Enum.Font.GothamBold
+	)
+	markerLabel.TextXAlignment = Enum.TextXAlignment.Center
+	markerLabel.TextColor3 = Color3.fromRGB(247, 251, 255)
+	return part
+end
+
+local function showTravelEvent(payload)
+	clearTravelEvent(false, true)
+	if typeof(payload.position) ~= "Vector3" then
+		return
+	end
+
+	local eventId = tostring(payload.id or "")
+	travelEventSerial = tonumber(payload.jobSerial)
+	travelEventBlocking = payload.blocking == true
+	travelEventExpiresAt = tonumber(payload.expiresAt)
+	travelEventResolving = false
+	travelEventBaseBody = tostring(payload.body or "")
+	travelEventReward = math.max(0, tonumber(payload.reward) or 0)
+	travelEventPart = makeTravelMarker(payload.position, eventId)
+
+	if travelEventBlocking and typeof(payload.obstaclePosition) == "Vector3" then
+		local character = player.Character
+		local root = character and character:FindFirstChild("HumanoidRootPart")
+		local targetPosition = currentTarget and currentTarget.Position or payload.position
+		local origin = root and root.Position or payload.obstaclePosition
+		local direction = targetPosition - origin
+		local flatDirection = Vector3.new(direction.X, 0, direction.Z)
+		if flatDirection.Magnitude < 0.01 then
+			flatDirection = Vector3.new(0, 0, -1)
+		else
+			flatDirection = flatDirection.Unit
+		end
+
+		local barrier = Instance.new("Part")
+		barrier.Name = "LocalTravelRoadblock"
+		barrier.Size = Vector3.new(12, 2.5, 0.8)
+		barrier.Anchored = true
+		barrier.CanCollide = true
+		barrier.CanTouch = false
+		barrier.CanQuery = false
+		barrier.Material = Enum.Material.Metal
+		barrier.Color = Color3.fromRGB(224, 137, 58)
+		barrier.CFrame = CFrame.lookAt(
+			payload.obstaclePosition + Vector3.new(0, 1.25, 0),
+			payload.obstaclePosition + Vector3.new(0, 1.25, 0) + flatDirection
+		)
+		barrier.Parent = workspace
+		travelObstacle = barrier
+
+		local warning = Instance.new("BillboardGui")
+		warning.Size = UDim2.fromOffset(180, 38)
+		warning.StudsOffset = Vector3.new(0, 2.4, 0)
+		warning.AlwaysOnTop = true
+		warning.Adornee = barrier
+		warning.Parent = barrier
+		local warningLabel = makeLabel(warning, UDim2.fromScale(1, 1), UDim2.fromOffset(0, 0), "通行止め", 13, Enum.Font.GothamBold)
+		warningLabel.TextXAlignment = Enum.TextXAlignment.Center
+		warningLabel.TextColor3 = Color3.fromRGB(255, 226, 168)
+
+		currentTarget = travelEventPart
+		navTitle.Text = "迂回ポイントへ"
+		navFrame.Visible = true
+	end
+
+	travelEventTitle.Text = tostring(payload.title or "道中イベント")
+	if travelEventBlocking then
+		travelEventBody.Text = string.format("%s  解決すると +%d Coins", travelEventBaseBody, travelEventReward)
+	else
+		travelEventBody.Text = string.format("%s  寄り道成功で +%d Coins", travelEventBaseBody, travelEventReward)
+	end
+	travelEventFrame.Visible = true
+end
+
+local function showTravelEventOutcome(titleText, bodyText, restoreTarget)
+	travelEventMessageSerial += 1
+	local serial = travelEventMessageSerial
+	clearTravelEvent(restoreTarget, false)
+	travelEventTitle.Text = titleText
+	travelEventBody.Text = bodyText
+	travelEventFrame.Visible = true
+	task.delay(1.7, function()
+		if serial == travelEventMessageSerial then
+			travelEventFrame.Visible = false
+		end
+	end)
+end
+
 local function updateMissionCard(missions)
 	if type(missions) ~= "table" then
 		return
@@ -1108,6 +1297,7 @@ deliveryEvent.OnClientEvent:Connect(function(action, payload)
 	payload = type(payload) == "table" and payload or {}
 
 	if action == "JobAssigned" then
+		clearTravelEvent(false, true)
 		clearEventObjective()
 		currentJobTypeId = payload.jobTypeId or "standard"
 		currentJobTypeName = payload.jobTypeName or "配達"
@@ -1143,6 +1333,7 @@ deliveryEvent.OnClientEvent:Connect(function(action, payload)
 			jobSerial = payload.jobSerial,
 		})
 	elseif action == "Delivered" then
+		clearTravelEvent(false, true)
 		clearEventObjective()
 		clearEventAppearance()
 		showResident(payload)
@@ -1162,6 +1353,26 @@ deliveryEvent.OnClientEvent:Connect(function(action, payload)
 		orderExpiresAt = nil
 		pendingRouteSerial = nil
 		routeChoiceFrame.Visible = false
+	elseif action == "TravelEventStarted" then
+		if tonumber(payload.jobSerial) == tonumber(pendingRouteSerial) then
+			showTravelEvent(payload)
+		end
+	elseif action == "TravelEventResolved" then
+		if tonumber(payload.jobSerial) == tonumber(travelEventSerial) then
+			showTravelEventOutcome(
+				"道中イベント解決",
+				string.format("+%d Coins  配達を続けよう。", tonumber(payload.reward) or 0),
+				true
+			)
+		end
+	elseif action == "TravelEventExpired" then
+		if tonumber(payload.jobSerial) == tonumber(travelEventSerial) then
+			showTravelEventOutcome(
+				"寄り道を見送った",
+				"配達を優先。目的地へ向かおう。",
+				true
+			)
+		end
 	elseif action == "SideJobOffer" then
 		sideOfferSerial += 1
 		local serial = sideOfferSerial
@@ -1277,6 +1488,22 @@ RunService.RenderStepped:Connect(function()
 		return
 	end
 
+	if travelEventPart and travelEventPart.Parent and travelEventSerial and not travelEventResolving then
+		local travelDistance = (travelEventPart.Position - root.Position).Magnitude
+		if travelDistance <= 8 then
+			travelEventResolving = true
+			deliveryEvent:FireServer("ResolveTravelEvent", {
+				jobSerial = travelEventSerial,
+			})
+		end
+	end
+	if travelEventFrame.Visible and travelEventExpiresAt and travelEventSerial then
+		local eventRemaining = math.max(0, math.ceil(travelEventExpiresAt - workspace:GetServerTimeNow()))
+		if travelEventBaseBody ~= "" then
+			travelEventBody.Text = string.format("%s  +%d Coins  残り%d秒", travelEventBaseBody, travelEventReward, eventRemaining)
+		end
+	end
+
 	local distance = (currentTarget.Position - root.Position).Magnitude
 	if eventObjectivePart and eventObjectiveFrame.Visible then
 		eventObjectiveReady = distance <= 9
@@ -1319,6 +1546,7 @@ local function updateResponsiveScale()
 		nightBadge.Size = UDim2.new(0, 205, 0, 48)
 		nightBadge.Position = UDim2.new(1, -10, 0, 78)
 		sideOfferFrame.Position = UDim2.new(0.5, 0, 0, 132)
+		travelEventFrame.Position = UDim2.new(0.5, 0, 0, 204)
 		nightName.TextSize = 11
 		nightDescription.TextSize = 9
 		missionFrame.Size = UDim2.fromOffset(210, 76)
@@ -1330,6 +1558,7 @@ local function updateResponsiveScale()
 		resultFrame.Size = UDim2.new(0.86, 0, 0, 180)
 		destinationEventFrame.Size = UDim2.new(0.92, 0, 0, 180)
 		eventObjectiveFrame.Size = UDim2.new(0.92, 0, 0, 116)
+		travelEventFrame.Size = UDim2.new(0.92, 0, 0, 96)
 		sideOfferFrame.Size = UDim2.new(0.92, 0, 0, 148)
 		nextStopFrame.Size = UDim2.new(0.92, 0, 0, 54 + (#nextStopButtons * 52))
 		quickEventButton.TextSize = 11
@@ -1353,6 +1582,7 @@ local function updateResponsiveScale()
 		nightBadge.Size = UDim2.fromOffset(250, 52)
 		nightBadge.Position = UDim2.new(1, -14, 0, 12)
 		sideOfferFrame.Position = UDim2.new(0.5, 0, 0, 86)
+		travelEventFrame.Position = UDim2.new(0.5, 0, 0, 154)
 		nightName.TextSize = 12
 		nightDescription.TextSize = 10
 		missionFrame.Size = UDim2.fromOffset(255, 82)
@@ -1364,6 +1594,7 @@ local function updateResponsiveScale()
 		resultFrame.Size = UDim2.fromOffset(360, 190)
 		destinationEventFrame.Size = UDim2.fromOffset(430, 176)
 		eventObjectiveFrame.Size = UDim2.fromOffset(410, 116)
+		travelEventFrame.Size = UDim2.fromOffset(370, 92)
 		sideOfferFrame.Size = UDim2.fromOffset(420, 148)
 		nextStopFrame.Size = UDim2.fromOffset(420, 54 + (#nextStopButtons * 52))
 		quickEventButton.TextSize = 13

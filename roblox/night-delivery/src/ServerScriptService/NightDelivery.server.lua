@@ -151,6 +151,7 @@ local playerJobs = {}
 local playerLastHouse = {}
 local playerResidentVisits = {}
 local playerLastDestinationEvent = {}
+local playerLastTravelEvent = {}
 local currentNightRule = RULES.NightConditions[1]
 local playerStreak = {}
 local playerShiftProgress = {}
@@ -1591,6 +1592,12 @@ local function assignJob(player)
 		destinationEventHazardPosition = nil,
 		destinationEventHazardRadius = nil,
 		destinationEventHazardTriggered = false,
+		travelEventStarted = false,
+		travelEventActive = false,
+		travelEventResolved = false,
+		travelEventBlocking = false,
+		travelEventObjectivePosition = nil,
+		travelEventId = nil,
 		isAnomaly = isAnomaly,
 	}
 
@@ -1692,6 +1699,104 @@ local function startDestinationEventHazardMonitor(player, job)
 	end)
 end
 
+local function scheduleTravelEvent(player, jobSerial)
+	task.delay(math.random(4, 7), function()
+		local job = playerJobs[player]
+		if not player.Parent
+			or not job
+			or job.jobSerial ~= jobSerial
+			or not job.houseName
+			or not job.routeChoice
+			or job.travelEventStarted then
+			return
+		end
+		job.travelEventStarted = true
+
+		if math.random() > RULES.TravelEventChance then
+			return
+		end
+
+		local house = housesFolder:FindFirstChild(job.houseName)
+		local destination = house and house:FindFirstChild("DeliveryPoint")
+		local character = player.Character
+		local root = character and character:FindFirstChild("HumanoidRootPart")
+		if not destination or not root then
+			return
+		end
+
+		local toDestination = destination.Position - root.Position
+		local flatDirection = Vector3.new(toDestination.X, 0, toDestination.Z)
+		if flatDirection.Magnitude < 55 then
+			return
+		end
+		flatDirection = flatDirection.Unit
+		local right = Vector3.new(-flatDirection.Z, 0, flatDirection.X)
+
+		local event = RULES.chooseWeighted(RULES.TravelEvents, playerLastTravelEvent[player])
+		if not event then
+			return
+		end
+		playerLastTravelEvent[player] = event.id
+
+		local side = math.random(0, 1) == 0 and -1 or 1
+		local objectivePosition
+		local obstaclePosition = nil
+		if event.id == "roadblock" then
+			obstaclePosition = root.Position + flatDirection * 10
+			objectivePosition = obstaclePosition + right * (8 * side) + flatDirection * 3
+		elseif event.id == "lost_item" then
+			objectivePosition = root.Position + flatDirection * 6 + right * (7 * side)
+		else
+			objectivePosition = root.Position + flatDirection * 7 + right * (8 * side)
+		end
+
+		local lifetime = math.max(0, tonumber(event.lifetime) or 0)
+		local expiresAt = lifetime > 0 and (workspace:GetServerTimeNow() + lifetime) or nil
+		job.travelEventActive = true
+		job.travelEventResolved = false
+		job.travelEventBlocking = event.blocking == true
+		job.travelEventObjectivePosition = objectivePosition
+		job.travelEventId = event.id
+		job.travelEventReward = event.reward or 0
+		job.travelEventExpiresAt = expiresAt
+
+		sendStatus(player, "TravelEventStarted", {
+			jobSerial = job.jobSerial,
+			id = event.id,
+			title = event.title,
+			body = event.body,
+			position = objectivePosition,
+			obstaclePosition = obstaclePosition,
+			blocking = event.blocking == true,
+			reward = event.reward or 0,
+			expiresAt = expiresAt,
+		})
+
+		if lifetime > 0 then
+			task.delay(lifetime, function()
+				local currentJob = playerJobs[player]
+				if currentJob ~= job
+					or currentJob.jobSerial ~= jobSerial
+					or not currentJob.travelEventActive
+					or currentJob.travelEventResolved
+					or currentJob.travelEventId ~= event.id then
+					return
+				end
+				currentJob.travelEventActive = false
+				currentJob.travelEventBlocking = false
+				currentJob.travelEventObjectivePosition = nil
+				currentJob.travelEventId = nil
+				currentJob.travelEventExpiresAt = nil
+				sendStatus(player, "TravelEventExpired", {
+					jobSerial = currentJob.jobSerial,
+					id = event.id,
+					title = event.title,
+				})
+			end)
+		end
+	end)
+end
+
 local function completeDelivery(player, houseName)
 	if not requirePlayerReady(player) then
 		return
@@ -1713,6 +1818,12 @@ local function completeDelivery(player, houseName)
 	if not job.routeChoice or not job.expiresAt then
 		sendStatus(player, "Message", {
 			text = "先に配達ルートを選ぼう。",
+		})
+		return
+	end
+	if job.travelEventActive and job.travelEventBlocking and not job.travelEventResolved then
+		sendStatus(player, "Message", {
+			text = "道が塞がれている。先に黄色い迂回ポイントを通ろう。",
 		})
 		return
 	end
@@ -1930,7 +2041,8 @@ local function sendSideRequestOffer(player, jobSerial)
 		job.sideOffer = nil
 	end
 	if not job or job.jobSerial ~= jobSerial or not job.houseName
-		or job.sideOffer or #job.extraStops >= (job.bagCapacity - 1)
+		or job.sideOffer or job.travelEventActive
+		or #job.extraStops >= (job.bagCapacity - 1)
 		or math.random() > 0.38 then
 		return
 	end
@@ -2007,6 +2119,14 @@ local function startNextStop(player, job, stopIndex)
 	job.destinationEventHazardPosition = nil
 	job.destinationEventHazardRadius = nil
 	job.destinationEventHazardTriggered = false
+	job.travelEventStarted = false
+	job.travelEventActive = false
+	job.travelEventResolved = false
+	job.travelEventBlocking = false
+	job.travelEventObjectivePosition = nil
+	job.travelEventId = nil
+	job.travelEventReward = 0
+	job.travelEventExpiresAt = nil
 	job.routeReward = 0
 	job.routeTitle = nil
 	job.isAnomaly = math.random() <= RULES.RareAnomalyChance
@@ -2411,6 +2531,7 @@ deliveryEvent.OnServerEvent:Connect(function(player, action, payload)
 		ChooseRoute = true,
 		ResolveDestinationEvent = true,
 		CompleteDestinationEventObjective = true,
+		ResolveTravelEvent = true,
 		AcceptSideJob = true,
 		IgnoreSideJob = true,
 		ChooseNextStop = true,
@@ -2541,6 +2662,46 @@ deliveryEvent.OnServerEvent:Connect(function(player, action, payload)
 		end
 		job.destinationEventObjectiveComplete = true
 		completeDelivery(player, job.houseName)
+	elseif action == "ResolveTravelEvent" then
+		local job = playerJobs[player]
+		if not requirePlayerReady(player)
+			or not job
+			or not job.travelEventActive
+			or job.travelEventResolved
+			or typeof(job.travelEventObjectivePosition) ~= "Vector3"
+			or type(payload) ~= "table"
+			or tonumber(payload.jobSerial) ~= job.jobSerial then
+			return
+		end
+		if job.travelEventExpiresAt and workspace:GetServerTimeNow() > job.travelEventExpiresAt then
+			return
+		end
+
+		local character = player.Character
+		local root = character and character:FindFirstChild("HumanoidRootPart")
+		if not root or (root.Position - job.travelEventObjectivePosition).Magnitude > 9 then
+			return
+		end
+
+		local resolvedId = job.travelEventId
+		local reward = math.max(0, tonumber(job.travelEventReward) or 0)
+		job.travelEventResolved = true
+		job.travelEventActive = false
+		job.travelEventBlocking = false
+		job.travelEventObjectivePosition = nil
+		job.travelEventId = nil
+		job.travelEventExpiresAt = nil
+
+		local stats = getStats(player)
+		if reward > 0 and stats and stats.coins then
+			stats.coins.Value += reward
+		end
+
+		sendStatus(player, "TravelEventResolved", {
+			jobSerial = job.jobSerial,
+			id = resolvedId,
+			reward = reward,
+		})
 	elseif action == "ChooseRoute" then
 		local job = playerJobs[player]
 		local routeId = type(payload) == "table" and tostring(payload.routeId or "") or ""
@@ -2574,6 +2735,7 @@ deliveryEvent.OnServerEvent:Connect(function(player, action, payload)
 			reward = job.routeReward,
 		})
 		local jobSerial = job.jobSerial
+		scheduleTravelEvent(player, jobSerial)
 		task.delay(8, function()
 			local currentJob = playerJobs[player]
 			if currentJob and currentJob.jobSerial == jobSerial and currentJob.houseName then
@@ -2712,6 +2874,7 @@ Players.PlayerRemoving:Connect(function(player)
 	playerLastHouse[player] = nil
 	playerResidentVisits[player] = nil
 	playerLastDestinationEvent[player] = nil
+	playerLastTravelEvent[player] = nil
 	playerStreak[player] = nil
 	playerShiftProgress[player] = nil
 	remoteLastAction[player] = nil
