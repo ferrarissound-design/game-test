@@ -219,9 +219,13 @@ local function beginTrackedOrder(player, payload)
 		minGrade = modifier.minGrade,
 	}
 
+	local authoritativeLimit = tonumber(player:GetAttribute("NightDeliveryTimeLimit")) or JOB_LIMITS[jobTypeId]
+	local authoritativeStart = tonumber(player:GetAttribute("NightDeliveryOrderStartedAt")) or os.clock()
+
 	state.activeOrder = {
 		baselineDeliveries = deliveries.Value,
-		startedAt = os.clock(),
+		startedAt = authoritativeStart,
+		timeLimit = authoritativeLimit,
 		jobTypeId = jobTypeId,
 		houseName = tostring(payload.houseName or ""),
 		modifier = modifier,
@@ -248,7 +252,7 @@ local function finishTrackedOrder(player)
 	end
 
 	local elapsed = math.max(0, os.clock() - order.startedAt)
-	local timeLimit = JOB_LIMITS[order.jobTypeId] or JOB_LIMITS.standard
+	local timeLimit = order.timeLimit or JOB_LIMITS[order.jobTypeId] or JOB_LIMITS.standard
 	local grade = calculateGrade(elapsed, timeLimit)
 	local gradeBonus = GRADE_BONUS[grade] or 0
 	local modifierBonus = modifierSucceeded(order.modifier, grade) and order.modifier.reward or 0
