@@ -28,6 +28,7 @@ local expiresAt = nil
 local currentHighlight = nil
 local currentBillboard = nil
 local currentTargetPart = nil
+local eventObjectiveActive = false
 local bikeActive = false
 
 local gui = Instance.new("ScreenGui")
@@ -582,6 +583,7 @@ task.spawn(connectStats)
 
 deliveryEvent.OnClientEvent:Connect(function(action, payload)
 	if action == "JobAssigned" then
+		eventObjectiveActive = false
 		currentHouseName = payload.houseName
 		currentDisplayName = payload.displayName
 		currentDistrictName = payload.districtName
@@ -667,6 +669,7 @@ deliveryEvent.OnClientEvent:Connect(function(action, payload)
 		showToast(string.format("配達完了！ +%d Coins%s%s%s", payload.reward or 0, bonusText, extraText, unlockText))
 		updateStats()
 
+		eventObjectiveActive = false
 		currentHouseName = nil
 		currentDisplayName = nil
 		currentDistrictName = nil
@@ -691,6 +694,10 @@ deliveryEvent.OnClientEvent:Connect(function(action, payload)
 		showToast(string.format("速度Lv.%d に強化！", payload.level or 0))
 	elseif action == "AssistReward" then
 		showToast(string.format("🤝 %s の配達を手伝った！ +%d Coins", payload.playerName or "誰か", payload.reward or 0))
+	elseif action == "DestinationEventObjective" then
+		eventObjectiveActive = true
+		if currentHighlight then currentHighlight.Enabled = false end
+		if currentBillboard then currentBillboard.Enabled = false end
 	elseif action == "WeatherChanged" then
 		currentWeatherName = payload.weatherName or "晴れ"
 		currentWeatherMultiplier = payload.rewardMultiplier or 1
@@ -759,7 +766,10 @@ RunService.RenderStepped:Connect(function()
 		local character = player.Character
 		local root = character and character:FindFirstChild("HumanoidRootPart")
 		local distance = root and currentTargetPart and math.floor((root.Position - currentTargetPart.Position).Magnitude) or nil
-		if distance and player:GetAttribute("NightDeliveryNavSoft") == true then
+		if eventObjectiveActive then
+			if currentHighlight then currentHighlight.Enabled = false end
+			if currentBillboard then currentBillboard.Enabled = false end
+		elseif distance and player:GetAttribute("NightDeliveryNavSoft") == true then
 			local visible = distance <= 70
 			if currentHighlight then currentHighlight.Enabled = visible end
 			if currentBillboard then currentBillboard.Enabled = visible end
@@ -767,7 +777,7 @@ RunService.RenderStepped:Connect(function()
 			if currentHighlight then currentHighlight.Enabled = true end
 			if currentBillboard then currentBillboard.Enabled = true end
 		end
-		local distanceText = distance and string.format("  •  距離 %d", distance) or ""
+		local distanceText = (not eventObjectiveActive and distance) and string.format("  •  距離 %d", distance) or ""
 
 		timerLabel.Text = string.format("残り %d秒%s", remaining, distanceText)
 
