@@ -687,6 +687,9 @@ deliveryEvent.OnClientEvent:Connect(function(action, payload)
 		if (payload.weatherBonus or 0) > 0 then
 			extraText ..= string.format("  天候+%d", payload.weatherBonus)
 		end
+		if (payload.nightConditionBonus or 0) > 0 then
+			extraText ..= string.format("  🎆 今夜+%d", payload.nightConditionBonus)
+		end
 		if (payload.coopBonus or 0) > 0 then
 			extraText ..= string.format("  協力+%d", payload.coopBonus)
 		end
