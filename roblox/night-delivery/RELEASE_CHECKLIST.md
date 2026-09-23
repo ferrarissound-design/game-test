@@ -13,6 +13,18 @@ GitHub側の静的監査と修正を終えた後に、Roblox Studioで実機挙�
 
 FAILやWARNが出た場合は、その行をそのままChatGPTへ渡せば原因を追いやすくなります。
 
+### Studio限定: ランダム待ちを飛ばす
+
+Play中に Explorer → `NightDeliveryWorld` → Attributes から次を変更できます。空文字 `""` に戻すと通常抽選です。
+
+- `QAForceDestinationEventId`: `absent` / `dog` / `work`
+- `QAForceTravelEventId`: `roadblock` / `lost_item` / `help_request`
+- `QAForceModifierId`: `none` / `fragile` / `premium` / `tip` / `mystery` / `frozen` / `oversized` / `hot` / `secret`
+- `QAForceWeatherId`: `clear` / `rain` / `fog`
+- `QAForceNightConditionId`: `quiet` / `fog` / `blackout` / `festival` / `tip` / `roadwork`
+
+天候と夜ルールは属性を変更した瞬間に反映。玄関・道中・荷物は次に受ける依頼で反映します。これらの強制処理はStudioでのみ有効です。
+
 ## 1. まず普通に1配達
 
 - 黄色い配達所で受注
