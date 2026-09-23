@@ -557,8 +557,8 @@ destinationEventBody.ZIndex = 71
 local function makeEventChoiceButton(name, xOffset, color)
 	local button = Instance.new("TextButton")
 	button.Name = name
-	button.Size = UDim2.new(0.5, -18, 0, 44)
-	button.Position = UDim2.new(0, xOffset, 1, -54)
+	button.Size = UDim2.new(0.46, 0, 0, 44)
+	button.Position = UDim2.new(xOffset, 0, 1, -54)
 	button.BackgroundColor3 = color
 	button.TextColor3 = Color3.fromRGB(245, 248, 255)
 	button.TextSize = 13
@@ -570,8 +570,8 @@ local function makeEventChoiceButton(name, xOffset, color)
 	return button
 end
 
-local quickEventButton = makeEventChoiceButton("QuickChoice", 12, Color3.fromRGB(57, 86, 113))
-local carefulEventButton = makeEventChoiceButton("CarefulChoice", 218, Color3.fromRGB(54, 112, 91))
+local quickEventButton = makeEventChoiceButton("QuickChoice", 0.04, Color3.fromRGB(57, 86, 113))
+local carefulEventButton = makeEventChoiceButton("CarefulChoice", 0.50, Color3.fromRGB(54, 112, 91))
 local destinationEventSerial = nil
 
 local function submitDestinationEvent(choice)
@@ -613,10 +613,10 @@ sideOfferTitle.ZIndex = 61
 local sideOfferBody = makeLabel(sideOfferFrame, UDim2.new(1, -24, 0, 44), UDim2.fromOffset(12, 34), "", 12, Enum.Font.Gotham)
 sideOfferBody.TextWrapped = true
 sideOfferBody.ZIndex = 61
-local sideOfferAccept = makeEventChoiceButton("AcceptSideJob", 12, Color3.fromRGB(54, 112, 91))
+local sideOfferAccept = makeEventChoiceButton("AcceptSideJob", 0.04, Color3.fromRGB(54, 112, 91))
 sideOfferAccept.Parent = sideOfferFrame
 sideOfferAccept.Text = "受ける"
-local sideOfferIgnore = makeEventChoiceButton("IgnoreSideJob", 218, Color3.fromRGB(57, 67, 82))
+local sideOfferIgnore = makeEventChoiceButton("IgnoreSideJob", 0.50, Color3.fromRGB(57, 67, 82))
 sideOfferIgnore.Parent = sideOfferFrame
 sideOfferIgnore.Text = "見送る"
 
@@ -1039,7 +1039,7 @@ local function updateResponsiveScale()
 		resultFrame.Size = UDim2.new(0.86, 0, 0, 180)
 		destinationEventFrame.Size = UDim2.new(0.92, 0, 0, 180)
 		sideOfferFrame.Size = UDim2.new(0.92, 0, 0, 148)
-		nextStopFrame.Size = UDim2.new(0.92, 0, 0, 220)
+		nextStopFrame.Size = UDim2.new(0.92, 0, 0, 54 + (#nextStopButtons * 52))
 		quickEventButton.TextSize = 11
 		carefulEventButton.TextSize = 11
 		residentFrame.Size = UDim2.new(0.92, 0, 0, 92)
@@ -1070,7 +1070,7 @@ local function updateResponsiveScale()
 		resultFrame.Size = UDim2.fromOffset(360, 190)
 		destinationEventFrame.Size = UDim2.fromOffset(430, 176)
 		sideOfferFrame.Size = UDim2.fromOffset(420, 148)
-		nextStopFrame.Size = UDim2.fromOffset(420, nextStopFrame.Size.Y.Offset)
+		nextStopFrame.Size = UDim2.fromOffset(420, 54 + (#nextStopButtons * 52))
 		quickEventButton.TextSize = 13
 		carefulEventButton.TextSize = 13
 		residentFrame.Size = UDim2.fromOffset(420, 94)
