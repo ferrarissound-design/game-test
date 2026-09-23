@@ -521,6 +521,64 @@ local function showResident(payload)
 	end)
 end
 
+local destinationEventFrame = Instance.new("Frame")
+destinationEventFrame.Name = "DestinationEventChoice"
+destinationEventFrame.Size = UDim2.fromOffset(430, 176)
+destinationEventFrame.AnchorPoint = Vector2.new(0.5, 0.5)
+destinationEventFrame.Position = UDim2.new(0.5, 0, 0.52, 0)
+destinationEventFrame.BackgroundColor3 = Color3.fromRGB(25, 31, 42)
+destinationEventFrame.Visible = false
+destinationEventFrame.ZIndex = 70
+destinationEventFrame.Parent = gui
+addCorner(destinationEventFrame, 14)
+addStroke(destinationEventFrame, Color3.fromRGB(255, 205, 119), 0.18, 1.5)
+local destinationEventTitle = makeLabel(destinationEventFrame, UDim2.new(1, -24, 0, 28), UDim2.fromOffset(12, 10), "", 16, Enum.Font.GothamBold)
+destinationEventTitle.ZIndex = 71
+local destinationEventBody = makeLabel(destinationEventFrame, UDim2.new(1, -24, 0, 48), UDim2.fromOffset(12, 40), "", 13, Enum.Font.Gotham)
+destinationEventBody.TextWrapped = true
+destinationEventBody.TextYAlignment = Enum.TextYAlignment.Top
+destinationEventBody.ZIndex = 71
+
+local function makeEventChoiceButton(name, xOffset, color)
+	local button = Instance.new("TextButton")
+	button.Name = name
+	button.Size = UDim2.new(0.5, -18, 0, 44)
+	button.Position = UDim2.new(0, xOffset, 1, -54)
+	button.BackgroundColor3 = color
+	button.TextColor3 = Color3.fromRGB(245, 248, 255)
+	button.TextSize = 13
+	button.Font = Enum.Font.GothamBold
+	button.TextWrapped = true
+	button.ZIndex = 71
+	button.Parent = destinationEventFrame
+	addCorner(button, 10)
+	return button
+end
+
+local quickEventButton = makeEventChoiceButton("QuickChoice", 12, Color3.fromRGB(57, 86, 113))
+local carefulEventButton = makeEventChoiceButton("CarefulChoice", 218, Color3.fromRGB(54, 112, 91))
+local destinationEventSerial = nil
+
+local function submitDestinationEvent(choice)
+	if not destinationEventSerial then
+		return
+	end
+	quickEventButton.Active = false
+	carefulEventButton.Active = false
+	deliveryEvent:FireServer("ResolveDestinationEvent", {
+		jobSerial = destinationEventSerial,
+		choice = choice,
+	})
+	destinationEventFrame.Visible = false
+end
+
+quickEventButton.Activated:Connect(function()
+	submitDestinationEvent("quick")
+end)
+carefulEventButton.Activated:Connect(function()
+	submitDestinationEvent("careful")
+end)
+
 local function setTarget(houseName, displayName)
 	currentTarget = nil
 	currentHouseName = houseName
@@ -737,6 +795,26 @@ deliveryEvent.OnClientEvent:Connect(function(action, payload)
 		orderExpiresAt = nil
 		pendingRouteSerial = nil
 		routeChoiceFrame.Visible = false
+	elseif action == "DestinationEvent" then
+		destinationEventSerial = tonumber(payload.jobSerial)
+		destinationEventTitle.Text = tostring(payload.title or "配達先で小さな問題")
+		destinationEventBody.Text = tostring(payload.body or "届け方を選ぼう。")
+		quickEventButton.Text = tostring(payload.quickLabel or "そのまま届ける")
+		carefulEventButton.Text = tostring(payload.carefulLabel or "丁寧に届ける")
+		quickEventButton.Active = true
+		carefulEventButton.Active = true
+		destinationEventFrame.Visible = true
+	elseif action == "NightConditionChanged" then
+		modifierTitle.Text = "今夜: " .. tostring(payload.name or "静かな夜")
+		modifierDescription.Text = tostring(payload.description or "")
+		if not currentHouseName then
+			modifierFrame.Visible = true
+			task.delay(5, function()
+				if not currentHouseName then
+					modifierFrame.Visible = false
+				end
+			end)
+		end
 	elseif action == "Welcome" then
 		showTownReveal()
 		if (payload.deliveries or 0) == 0 then
@@ -809,6 +887,9 @@ local function updateResponsiveScale()
 		modifierTitle.TextSize = 12
 		modifierDescription.TextSize = 10
 		resultFrame.Size = UDim2.new(0.86, 0, 0, 180)
+		destinationEventFrame.Size = UDim2.new(0.92, 0, 0, 180)
+		quickEventButton.TextSize = 11
+		carefulEventButton.TextSize = 11
 		residentFrame.Size = UDim2.new(0.92, 0, 0, 92)
 		residentLineLabel.TextSize = 12
 		routeChoiceFrame.Size = UDim2.new(0.92, 0, 0, 200)
@@ -832,6 +913,9 @@ local function updateResponsiveScale()
 		modifierTitle.TextSize = 14
 		modifierDescription.TextSize = 12
 		resultFrame.Size = UDim2.fromOffset(360, 190)
+		destinationEventFrame.Size = UDim2.fromOffset(430, 176)
+		quickEventButton.TextSize = 13
+		carefulEventButton.TextSize = 13
 		residentFrame.Size = UDim2.fromOffset(420, 94)
 		residentLineLabel.TextSize = 13
 		routeChoiceFrame.Size = UDim2.fromOffset(430, 190)
