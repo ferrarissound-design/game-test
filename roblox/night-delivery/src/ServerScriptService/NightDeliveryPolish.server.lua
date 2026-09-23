@@ -43,46 +43,15 @@ local SESSION_MISSIONS = {
 }
 
 local ORDER_MODIFIERS = {
-	{
-		id = "none",
-		weight = 56,
-		title = "通常依頼",
-		description = "落ち着いて届けよう。",
-		reward = 0,
-		minGrade = "C",
-	},
-	{
-		id = "fragile",
-		weight = 18,
-		title = "ワレモノ注意",
-		description = "A評価以上で丁寧配達ボーナス。",
-		reward = 80,
-		minGrade = "A",
-	},
-	{
-		id = "priority",
-		weight = 12,
-		title = "最優先便",
-		description = "S評価で緊急ボーナス。",
-		reward = 140,
-		minGrade = "S",
-	},
-	{
-		id = "tip",
-		weight = 10,
-		title = "常連さん",
-		description = "届ければチップ確定。",
-		reward = 55,
-		minGrade = "C",
-	},
-	{
-		id = "mystery",
-		weight = 4,
-		title = "宛名の薄い荷物",
-		description = "なぜか高額。A評価以上で追加報酬。",
-		reward = 180,
-		minGrade = "A",
-	},
+	{id = "none", weight = 36, title = "通常便", description = "いつもの配達。自分に合うルートを選ぼう。", reward = 0, minGrade = "C"},
+	{id = "fragile", weight = 12, title = "ワレモノ注意", description = "ジャンプや落下で荷物が傷む。地面を安定して走ろう。", reward = 110, minGrade = "A"},
+	{id = "priority", weight = 10, title = "最優先便", description = "制限時間が短い代わりに高報酬。", reward = 140, minGrade = "S"},
+	{id = "tip", weight = 8, title = "常連さん", description = "受け取ってもらえればチップ確定。", reward = 55, minGrade = "C"},
+	{id = "mystery", weight = 5, title = "宛名の薄い荷物", description = "近くで住所を確認。遠くではナビが弱くなる。", reward = 180, minGrade = "A"},
+	{id = "frozen", weight = 9, title = "冷凍便", description = "35秒を超えると品質が下がる。寄り道は慎重に。", reward = 100, minGrade = "C"},
+	{id = "oversized", weight = 8, title = "大型荷物", description = "自転車は使えない。徒歩で安定して運ぼう。", reward = 90, minGrade = "B"},
+	{id = "hot", weight = 7, title = "温かい料理", description = "30秒以内に届けると追加報酬。", reward = 100, minGrade = "C"},
+	{id = "secret", weight = 5, title = "秘密便", description = "遠くでは方角ナビが表示されない。街の目印を使おう。", reward = 125, minGrade = "B"},
 }
 
 local playerState = {}
@@ -128,8 +97,15 @@ local function calculateGrade(elapsed, timeLimit)
 	return "C"
 end
 
-local function modifierSucceeded(modifier, grade)
+local function modifierSucceeded(modifier, grade, elapsed, order)
 	if not modifier or modifier.reward <= 0 then
+		return false
+	end
+	if modifier.id == "fragile" and order.jumpDamaged then
+		return false
+	elseif modifier.id == "frozen" and elapsed > 35 then
+		return false
+	elseif modifier.id == "hot" and elapsed > 30 then
 		return false
 	end
 	return (GRADE_ORDER[grade] or 1) >= (GRADE_ORDER[modifier.minGrade] or 1)
@@ -223,6 +199,17 @@ local function beginTrackedOrder(player, payload)
 	end
 
 	local modifier = chooseModifier()
+	player:SetAttribute("NightDeliveryBikeBlocked", modifier.id == "oversized")
+	player:SetAttribute("NightDeliveryNavSoft", modifier.id == "secret" or modifier.id == "mystery")
+	if modifier.id == "oversized" and player:GetAttribute("BikeActive") == true then
+		player:SetAttribute("BikeActive", false)
+		local character = player.Character
+		local bike = character and character:FindFirstChild("DeliveryBikeVisual")
+		if bike then bike:Destroy() end
+		local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+		if humanoid then humanoid.WalkSpeed = 20 + ((player:GetAttribute("SpeedLevel") or 0) * 2) end
+		deliveryEvent:FireClient(player, "BikeMode", {active = false, speedLevel = player:GetAttribute("SpeedLevel") or 0})
+	end
 	local publicModifier = {
 		id = modifier.id,
 		title = modifier.title,
@@ -243,7 +230,20 @@ local function beginTrackedOrder(player, payload)
 		houseName = tostring(payload.houseName or ""),
 		modifier = modifier,
 		publicModifier = publicModifier,
+		jumpDamaged = false,
 	}
+	if modifier.id == "fragile" then
+		local humanoid = player.Character and player.Character:FindFirstChildOfClass("Humanoid")
+		if humanoid then
+			state.activeOrder.jumpConnection = humanoid.StateChanged:Connect(function(_, newState)
+				if newState == Enum.HumanoidStateType.Jumping or newState == Enum.HumanoidStateType.Freefall then
+					if state.activeOrder then
+						state.activeOrder.jumpDamaged = true
+					end
+				end
+			end)
+		end
+	end
 
 	deliveryEvent:FireClient(player, "PolishOrderModifier", publicModifier)
 end
@@ -274,7 +274,10 @@ local function finishTrackedOrder(player)
 	local timeLimit = order.timeLimit or JOB_LIMITS[order.jobTypeId] or JOB_LIMITS.standard
 	local grade = calculateGrade(elapsed, timeLimit)
 	local gradeBonus = GRADE_BONUS[grade] or 0
-	local modifierBonus = modifierSucceeded(order.modifier, grade) and order.modifier.reward or 0
+	if order.modifier.id == "fragile" and order.jumpDamaged then
+		grade = "C"
+	end
+	local modifierBonus = modifierSucceeded(order.modifier, grade, elapsed, order) and order.modifier.reward or 0
 
 	state.sessionDeliveries += 1
 	local missionBonus, completedMissions = awardMissionRewards(player, state)
