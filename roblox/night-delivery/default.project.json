@@ -7,6 +7,9 @@
       "NightDelivery": {
         "$path": "src/ServerScriptService/NightDelivery.server.lua"
       },
+      "NightDeliveryRules": {
+        "$path": "src/ServerScriptService/NightDeliveryRules.lua"
+      },
       "NightDeliveryPolish": {
         "$path": "src/ServerScriptService/NightDeliveryPolish.server.lua"
       }
