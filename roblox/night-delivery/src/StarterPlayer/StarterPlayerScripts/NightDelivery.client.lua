@@ -21,6 +21,8 @@ local currentJobTypeName = nil
 local currentJobTypeId = nil
 local currentWeatherName = "晴れ"
 local currentWeatherMultiplier = 1
+local activeJobWeatherName = nil
+local activeJobWeatherMultiplier = nil
 local currentRankName = "新人"
 local shiftProgress = 0
 local shiftTarget = 5
@@ -28,7 +30,8 @@ local expiresAt = nil
 local currentHighlight = nil
 local currentBillboard = nil
 local currentTargetPart = nil
-local eventObjectiveActive = false
+local blockingTravelObjectiveActive = false
+local destinationEventObjectiveActive = false
 local bikeActive = false
 
 local gui = Instance.new("ScreenGui")
@@ -536,11 +539,18 @@ local function updateStats()
 
 	statsLabel.Text = string.format("Coins %d  •  配達 %d  •  %s", coinText, deliveryText, bikeText)
 	shiftLabel.Text = string.format("%s  •  夜勤 %d/%d", currentRankName, shiftProgress, shiftTarget)
-	weatherLabel.Text = string.format("%s %s  •  報酬 x%.2f",
-		currentWeatherName == "雨" and "🌧" or (currentWeatherName == "濃霧" and "🌫" or "☀"),
-		currentWeatherName,
-		currentWeatherMultiplier
-	)
+	local weatherIcon = currentWeatherName == "雨" and "🌧" or (currentWeatherName == "濃霧" and "🌫" or "☀")
+	if currentHouseName and activeJobWeatherName and activeJobWeatherMultiplier then
+		weatherLabel.Text = string.format(
+			"%s 現在 %s  •  この依頼 %s x%.2f",
+			weatherIcon,
+			currentWeatherName,
+			activeJobWeatherName,
+			activeJobWeatherMultiplier
+		)
+	else
+		weatherLabel.Text = string.format("%s %s  •  次の依頼 x%.2f", weatherIcon, currentWeatherName, currentWeatherMultiplier)
+	end
 
 	if deliveryText < RIVERSIDE_UNLOCK_DELIVERIES then
 		local remaining = RIVERSIDE_UNLOCK_DELIVERIES - deliveryText
@@ -583,14 +593,15 @@ task.spawn(connectStats)
 
 deliveryEvent.OnClientEvent:Connect(function(action, payload)
 	if action == "JobAssigned" then
-		eventObjectiveActive = false
+		blockingTravelObjectiveActive = false
+		destinationEventObjectiveActive = false
 		currentHouseName = payload.houseName
 		currentDisplayName = payload.displayName
 		currentDistrictName = payload.districtName
 		currentJobTypeName = payload.jobTypeName
 		currentJobTypeId = payload.jobTypeId
-		currentWeatherName = payload.weatherName or currentWeatherName
-		currentWeatherMultiplier = payload.weatherMultiplier or currentWeatherMultiplier
+		activeJobWeatherName = payload.weatherName or currentWeatherName
+		activeJobWeatherMultiplier = payload.weatherMultiplier or currentWeatherMultiplier
 		updateWeatherVisual()
 		expiresAt = payload.expiresAt
 
@@ -599,8 +610,8 @@ deliveryEvent.OnClientEvent:Connect(function(action, payload)
 			"%s  •  %s  •  %s x%.2f  •  基本 %d  •  バッグ枠 %d",
 			currentDistrictName or "住宅街",
 			currentJobTypeName or "配達",
-			currentWeatherName,
-			currentWeatherMultiplier,
+			activeJobWeatherName or currentWeatherName,
+			activeJobWeatherMultiplier or currentWeatherMultiplier,
 			payload.baseReward or 0,
 			payload.bagCapacity or 1
 		)
@@ -622,21 +633,26 @@ deliveryEvent.OnClientEvent:Connect(function(action, payload)
 		expiresAt = payload.expiresAt
 		jobLabel.Text ..= "  •  " .. (payload.routeTitle or "選択ルート")
 		if payload.routeId == "shortcut" then
-			showToast("裏路地の近道を選択。時間内なら追加 +80 Coins！")
+			showToast(string.format(
+				"裏路地の近道を選択。時間内なら追加 +%d Coins！",
+				tonumber(payload.reward) or 0
+			))
 		else
 			showToast("街灯の道を選択。時間に余裕を持って配達しよう。")
 		end
 	elseif action == "TravelEventStarted" then
 		if payload.blocking == true then
-			eventObjectiveActive = true
+			blockingTravelObjectiveActive = true
 			targetLabel.Text = "道中イベント: " .. tostring(payload.title or "通行止め")
 			if currentHighlight then currentHighlight.Enabled = false end
 			if currentBillboard then currentBillboard.Enabled = false end
 		end
 	elseif action == "TravelEventResolved" or action == "TravelEventExpired" then
-		if eventObjectiveActive and currentHouseName then
-			eventObjectiveActive = false
-			targetLabel.Text = "配達先: " .. (currentDisplayName or currentHouseName)
+		if payload.blocking == true and blockingTravelObjectiveActive and currentHouseName then
+			blockingTravelObjectiveActive = false
+			if not destinationEventObjectiveActive then
+				targetLabel.Text = "配達先: " .. (currentDisplayName or currentHouseName)
+			end
 		end
 	elseif action == "Delivered" then
 		local bonusText = ""
@@ -693,7 +709,10 @@ deliveryEvent.OnClientEvent:Connect(function(action, payload)
 		showToast(string.format("配達完了！ +%d Coins%s%s%s", payload.reward or 0, bonusText, extraText, unlockText))
 		updateStats()
 
-		eventObjectiveActive = false
+		blockingTravelObjectiveActive = false
+		destinationEventObjectiveActive = false
+		activeJobWeatherName = nil
+		activeJobWeatherMultiplier = nil
 		currentHouseName = nil
 		currentDisplayName = nil
 		currentDistrictName = nil
@@ -719,7 +738,8 @@ deliveryEvent.OnClientEvent:Connect(function(action, payload)
 	elseif action == "AssistReward" then
 		showToast(string.format("🤝 %s の配達を手伝った！ +%d Coins", payload.playerName or "誰か", payload.reward or 0))
 	elseif action == "DestinationEventObjective" then
-		eventObjectiveActive = true
+		destinationEventObjectiveActive = true
+		targetLabel.Text = "指定された場所へ届ける"
 		if currentHighlight then currentHighlight.Enabled = false end
 		if currentBillboard then currentBillboard.Enabled = false end
 	elseif action == "WeatherChanged" then
@@ -790,7 +810,8 @@ RunService.RenderStepped:Connect(function()
 		local character = player.Character
 		local root = character and character:FindFirstChild("HumanoidRootPart")
 		local distance = root and currentTargetPart and math.floor((root.Position - currentTargetPart.Position).Magnitude) or nil
-		if eventObjectiveActive then
+		local objectiveActive = blockingTravelObjectiveActive or destinationEventObjectiveActive
+		if objectiveActive then
 			if currentHighlight then currentHighlight.Enabled = false end
 			if currentBillboard then currentBillboard.Enabled = false end
 		elseif distance and player:GetAttribute("NightDeliveryNavSoft") == true then
@@ -801,7 +822,7 @@ RunService.RenderStepped:Connect(function()
 			if currentHighlight then currentHighlight.Enabled = true end
 			if currentBillboard then currentBillboard.Enabled = true end
 		end
-		local distanceText = (not eventObjectiveActive and distance) and string.format("  •  距離 %d", distance) or ""
+		local distanceText = (not objectiveActive and distance) and string.format("  •  距離 %d", distance) or ""
 
 		timerLabel.Text = string.format("残り %d秒%s", remaining, distanceText)
 
