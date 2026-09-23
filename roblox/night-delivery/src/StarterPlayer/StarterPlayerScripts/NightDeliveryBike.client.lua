@@ -13,6 +13,9 @@ local function cacheCharacter(player, character)
 			return
 		end
 		task.wait()
+		if player.Character ~= character or not character.Parent then
+			return
+		end
 
 		local joints = {}
 		for _, object in ipairs(character:GetDescendants()) do
@@ -21,6 +24,9 @@ local function cacheCharacter(player, character)
 			end
 		end
 
+		if player.Character ~= character or not character.Parent then
+			return
+		end
 		characterStates[player] = {
 			character = character,
 			humanoid = humanoid,
