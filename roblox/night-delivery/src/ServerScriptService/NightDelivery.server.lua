@@ -1398,6 +1398,11 @@ local JOB_TIME_PROFILES = {
 	special = {paceMultiplier = 1.65, setupSeconds = 5, minimum = 16, maximum = 38},
 }
 
+local ROUTE_CHOICES = {
+	lantern = {title = "街灯の道", timeMultiplier = 1.35, reward = 0},
+	shortcut = {title = "裏路地の近道", timeMultiplier = 0.78, reward = 80},
+}
+
 local function getDeliveryDistance(house)
 	local depot = world:FindFirstChild("Depot")
 	local counter = depot and depot:FindFirstChild("JobCounter")
@@ -1463,14 +1468,11 @@ local function assignJob(player)
 	local districtId = target:GetAttribute("DistrictId") or "central"
 	local districtName = target:GetAttribute("DistrictName") or DISTRICT_NAMES[districtId] or districtId
 	local weather = currentWeather
-	local now = workspace:GetServerTimeNow()
-	local timeLimit = getJobTimeLimit(jobType, target)
-	local orderStartedAt = os.clock()
-	local expiresAt = now + timeLimit
+	local baseTimeLimit = getJobTimeLimit(jobType, target)
 	local jobSerial = (player:GetAttribute("NightDeliveryJobSerial") or 0) + 1
 
-	player:SetAttribute("NightDeliveryTimeLimit", timeLimit)
-	player:SetAttribute("NightDeliveryOrderStartedAt", orderStartedAt)
+	player:SetAttribute("NightDeliveryTimeLimit", nil)
+	player:SetAttribute("NightDeliveryOrderStartedAt", nil)
 	player:SetAttribute("NightDeliveryJobSerial", jobSerial)
 	player:SetAttribute("NightDeliveryJobType", jobType.id)
 	player:SetAttribute("NightDeliveryHouseName", target.Name)
@@ -1484,9 +1486,9 @@ local function assignJob(player)
 		weatherId = weather.id,
 		weatherName = weather.name,
 		weatherMultiplier = weather.rewardMultiplier,
-		expiresAt = expiresAt,
-		timeLimit = timeLimit,
-		startedAt = orderStartedAt,
+		baseTimeLimit = baseTimeLimit,
+		routeChoice = nil,
+		routeReward = 0,
 	}
 
 	playerLastHouse[player] = target.Name
@@ -1503,8 +1505,7 @@ local function assignJob(player)
 		weatherId = weather.id,
 		weatherName = weather.name,
 		weatherMultiplier = weather.rewardMultiplier,
-		expiresAt = expiresAt,
-		timeLimit = timeLimit,
+		baseTimeLimit = baseTimeLimit,
 		baseReward = jobType.baseReward,
 	})
 end
@@ -1524,6 +1525,12 @@ local function completeDelivery(player, houseName)
 	if job.houseName ~= houseName then
 		sendStatus(player, "Message", {
 			text = "ここじゃない。黄色く光っている配達先を確認しよう。",
+		})
+		return
+	end
+	if not job.routeChoice or not job.expiresAt then
+		sendStatus(player, "Message", {
+			text = "先に配達ルートを選ぼう。",
 		})
 		return
 	end
@@ -1550,6 +1557,8 @@ local function completeDelivery(player, houseName)
 	local weatherMultiplier = job.weatherMultiplier or 1
 	local weatherBonus = math.max(0, math.floor(rawReward * (weatherMultiplier - 1)))
 	local reward = math.floor(rawReward * weatherMultiplier)
+	local routeBonus = job.routeChoice == "shortcut" and remaining > 0 and (job.routeReward or 0) or 0
+	reward += routeBonus
 
 	local targetHouse = housesFolder:FindFirstChild(houseName)
 	local targetPart = targetHouse and targetHouse:FindFirstChild("DeliveryPoint")
@@ -1640,6 +1649,8 @@ local function completeDelivery(player, houseName)
 		timeRemaining = remaining,
 		streak = streak,
 		streakBonus = streakBonus,
+		routeTitle = job.routeTitle,
+		routeBonus = routeBonus,
 		weatherName = job.weatherName or "晴れ",
 		weatherBonus = weatherBonus,
 		coopBonus = coopBonus,
@@ -1967,19 +1978,48 @@ depotPrompt.Triggered:Connect(assignJob)
 bikePrompt.Triggered:Connect(toggleBike)
 shopPrompt.Triggered:Connect(openShop)
 
-deliveryEvent.OnServerEvent:Connect(function(player, action)
+deliveryEvent.OnServerEvent:Connect(function(player, action, payload)
 	if type(action) ~= "string" then
 		return
 	end
 
 	local now = os.clock()
 	local lastAction = remoteLastAction[player] or 0
-	if now - lastAction < REMOTE_COOLDOWN_SECONDS then
+	if action ~= "ChooseRoute" and now - lastAction < REMOTE_COOLDOWN_SECONDS then
 		return
 	end
 	remoteLastAction[player] = now
 
-	if action == "RequestState" then
+	if action == "ChooseRoute" then
+		local job = playerJobs[player]
+		local routeId = type(payload) == "table" and tostring(payload.routeId or "") or ""
+		local route = ROUTE_CHOICES[routeId]
+		if not requirePlayerReady(player)
+			or not job
+			or job.routeChoice
+			or not route
+			or type(payload) ~= "table"
+			or tonumber(payload.jobSerial) ~= job.jobSerial then
+			return
+		end
+
+		job.routeChoice = routeId
+		job.routeTitle = route.title
+		job.routeReward = route.reward
+		job.timeLimit = math.clamp(math.ceil(job.baseTimeLimit * route.timeMultiplier), 10, 90)
+		job.startedAt = os.clock()
+		job.expiresAt = workspace:GetServerTimeNow() + job.timeLimit
+		player:SetAttribute("NightDeliveryTimeLimit", job.timeLimit)
+		player:SetAttribute("NightDeliveryOrderStartedAt", job.startedAt)
+		sendStatus(player, "JobRouteChosen", {
+			jobSerial = job.jobSerial,
+			routeId = routeId,
+			routeTitle = route.title,
+			timeLimit = job.timeLimit,
+			expiresAt = job.expiresAt,
+			reward = route.reward,
+		})
+	elseif action == "RequestState" then
 		if player:GetAttribute("NightDeliveryReady") == true then
 			sendPlayerState(player)
 		else
