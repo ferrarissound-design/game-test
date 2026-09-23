@@ -98,6 +98,15 @@ local JOB_TYPES = {
 		minDeliveries = 0,
 	},
 	{
+		id = "rush",
+		name = "急ぎ便",
+		weight = 8,
+		timeLimit = 26,
+		baseReward = 150,
+		timeBonusPerSecond = 4,
+		minDeliveries = 0,
+	},
+	{
 		id = "long",
 		name = "遠距離便",
 		weight = 15,
@@ -1466,6 +1475,7 @@ local ROUTE_DISTANCE_FACTOR = 1.15
 local JOB_TIME_PROFILES = {
 	standard = {paceMultiplier = 1.75, setupSeconds = 5, minimum = 16, maximum = 40},
 	express = {paceMultiplier = 1.25, setupSeconds = 4, minimum = 12, maximum = 28},
+	rush = {paceMultiplier = 1.15, setupSeconds = 2, minimum = 10, maximum = 24},
 	long = {paceMultiplier = 3.1, setupSeconds = 7, minimum = 24, maximum = 72},
 	special = {paceMultiplier = 1.65, setupSeconds = 5, minimum = 16, maximum = 38},
 }
@@ -1520,7 +1530,7 @@ local function assignJob(player)
 		if isHouseUnlocked(player, house) and (house.Name ~= lastHouse or #houses == 1) then
 			table.insert(fallbackCandidates, house)
 			local distance = getDeliveryDistance(house)
-			local matchesRoute = jobType.id == "express" and distance <= 210
+			local matchesRoute = (jobType.id == "express" or jobType.id == "rush") and distance <= 210
 				or jobType.id == "long" and distance >= 185
 				or jobType.id ~= "express" and jobType.id ~= "long"
 			if matchesRoute then
