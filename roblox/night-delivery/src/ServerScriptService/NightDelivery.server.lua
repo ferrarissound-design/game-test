@@ -1658,6 +1658,7 @@ local function assignJob(player)
 		residentReturnLine = target:GetAttribute("ResidentReturnLine") or "今夜もありがとう。",
 		routeChoice = nil,
 		routeReward = 0,
+		shortcutReward = ROUTE_CHOICES.shortcut.reward + (currentNightRule.id == "roadwork" and 40 or 0),
 		destinationEvent = destinationEvent,
 		destinationEventPrompted = false,
 		destinationEventReward = 0,
@@ -1694,7 +1695,7 @@ local function assignJob(player)
 		baseReward = jobType.baseReward,
 		bagCapacity = playerJobs[player].bagCapacity,
 		nightCondition = currentNightRule.name,
-		shortcutReward = ROUTE_CHOICES.shortcut.reward + (currentNightRule.id == "roadwork" and 40 or 0),
+		shortcutReward = playerJobs[player].shortcutReward,
 		neighborhoodThreadTitle = neighborhoodCallback and neighborhoodCallback.title or nil,
 		neighborhoodKindness = player:GetAttribute("NeighborhoodKindness") or 0,
 	})
@@ -2285,6 +2286,7 @@ local function startNextStop(player, job, stopIndex)
 	job.travelEventExpiresAt = nil
 	job.routeReward = 0
 	job.routeTitle = nil
+	job.shortcutReward = ROUTE_CHOICES.shortcut.reward + (currentNightRule.id == "roadwork" and 40 or 0)
 	job.isAnomaly = math.random() <= RULES.RareAnomalyChance
 	job.isSideRequest = true
 	job.baseTimeLimit = math.min(getJobTimeLimit(findJobType(job.jobTypeId), target), stop.timeLimit or 35)
@@ -2318,7 +2320,7 @@ local function startNextStop(player, job, stopIndex)
 		baseReward = findJobType(job.jobTypeId).baseReward + job.currentStopBonus,
 		bagCapacity = job.bagCapacity,
 		orderModifierId = job.forcedModifierId,
-		shortcutReward = ROUTE_CHOICES.shortcut.reward + (currentNightRule.id == "roadwork" and 40 or 0),
+		shortcutReward = job.shortcutReward,
 		sideRequest = true,
 	})
 	if job.isAnomaly then
@@ -2902,13 +2904,12 @@ deliveryEvent.OnServerEvent:Connect(function(player, action, payload)
 
 		job.routeChoice = routeId
 		job.routeTitle = route.title
-		job.routeReward = route.reward
+		job.routeReward = routeId == "shortcut"
+			and (job.shortcutReward or route.reward)
+			or route.reward
 		job.timeLimit = math.clamp(math.ceil(job.baseTimeLimit * route.timeMultiplier), 10, 90)
 		job.startedAt = os.clock()
 		job.expiresAt = workspace:GetServerTimeNow() + job.timeLimit
-		if currentNightRule.id == "roadwork" and routeId == "shortcut" then
-			job.routeReward += 40
-		end
 		player:SetAttribute("NightDeliveryTimeLimit", job.timeLimit)
 		player:SetAttribute("NightDeliveryOrderStartedAt", job.startedAt)
 		sendStatus(player, "JobRouteChosen", {
