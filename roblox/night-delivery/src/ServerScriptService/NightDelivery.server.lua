@@ -151,6 +151,7 @@ housesFolder.Parent = world
 if RunService:IsStudio() then
 	world:SetAttribute("QAForceDestinationEventId", "")
 	world:SetAttribute("QAForceTravelEventId", "")
+	world:SetAttribute("QAForceModifierId", "")
 	world:SetAttribute("QAForceWeatherId", "")
 	world:SetAttribute("QAForceNightConditionId", "")
 end
