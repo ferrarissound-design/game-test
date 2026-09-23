@@ -620,6 +620,7 @@ deliveryEvent.OnClientEvent:Connect(function(action, payload)
 			or (currentJobTypeId == "rush" and Color3.fromRGB(255, 207, 110) or Color3.fromRGB(157, 190, 225))
 
 		setWaypoint(currentHouseName)
+		updateStats()
 		if payload.neighborhoodThreadTitle then
 			showToast("🧩 街のつながり: " .. tostring(payload.neighborhoodThreadTitle))
 		elseif currentJobTypeId == "special" then
@@ -707,7 +708,6 @@ deliveryEvent.OnClientEvent:Connect(function(action, payload)
 		shiftTarget = payload.shiftTarget or shiftTarget
 		currentRankName = payload.rankName or currentRankName
 		showToast(string.format("配達完了！ +%d Coins%s%s%s", payload.reward or 0, bonusText, extraText, unlockText))
-		updateStats()
 
 		blockingTravelObjectiveActive = false
 		destinationEventObjectiveActive = false
@@ -725,6 +725,7 @@ deliveryEvent.OnClientEvent:Connect(function(action, payload)
 		jobLabel.TextColor3 = Color3.fromRGB(157, 190, 225)
 		timerLabel.Text = ""
 		clearWaypoint()
+		updateStats()
 	elseif action == "BikeMode" then
 		bikeActive = payload.active == true
 		updateStats()
@@ -747,8 +748,14 @@ deliveryEvent.OnClientEvent:Connect(function(action, payload)
 		currentWeatherMultiplier = payload.rewardMultiplier or 1
 		updateWeatherVisual()
 		updateStats()
-		if currentWeatherMultiplier > 1 then
-			showToast(string.format("%sになった。配達報酬 x%.2f", currentWeatherName, currentWeatherMultiplier))
+		if currentHouseName then
+			showToast(string.format(
+				"%sになった。今の依頼は受注時倍率のまま。次の依頼は x%.2f",
+				currentWeatherName,
+				currentWeatherMultiplier
+			))
+		elseif currentWeatherMultiplier > 1 then
+			showToast(string.format("%sになった。次の依頼は報酬 x%.2f", currentWeatherName, currentWeatherMultiplier))
 		end
 	elseif action == "ShopOpened" then
 		shopFrame.Visible = true
