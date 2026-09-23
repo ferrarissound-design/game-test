@@ -1530,10 +1530,21 @@ local function queueNeighborhoodStory(player, sourceId)
 	end
 
 	local candidates = {}
-	local currentHouseName = playerJobs[player] and playerJobs[player].houseName or nil
+	local activeJob = playerJobs[player]
+	local currentHouseName = activeJob and activeJob.houseName or nil
+	local excludedHouses = {}
+	if activeJob then
+		for _, stop in ipairs(activeJob.extraStops or {}) do
+			excludedHouses[stop.houseName] = true
+		end
+		for completedHouseName in pairs(activeJob.completedHouseNames or {}) do
+			excludedHouses[completedHouseName] = true
+		end
+	end
 	for _, house in ipairs(housesFolder:GetChildren()) do
 		if house.Name ~= currentHouseName
 			and house.Name ~= playerLastHouse[player]
+			and not excludedHouses[house.Name]
 			and house:GetAttribute("DistrictId") ~= "warehouse"
 			and isHouseUnlocked(player, house) then
 			table.insert(candidates, house)
@@ -1542,6 +1553,7 @@ local function queueNeighborhoodStory(player, sourceId)
 	if #candidates == 0 then
 		for _, house in ipairs(housesFolder:GetChildren()) do
 			if house.Name ~= currentHouseName
+				and not excludedHouses[house.Name]
 				and house:GetAttribute("DistrictId") ~= "warehouse"
 				and isHouseUnlocked(player, house) then
 				table.insert(candidates, house)
@@ -1657,6 +1669,7 @@ local function assignJob(player)
 		baseTimeLimit = baseTimeLimit,
 		bagCapacity = math.clamp(1 + (player:GetAttribute("BagStyleLevel") or 0), 1, 3),
 		extraStops = {},
+		completedHouseNames = {},
 		residentName = target:GetAttribute("ResidentName") or "住人",
 		residentFirstLine = target:GetAttribute("ResidentFirstLine") or "配達ありがとう。",
 		residentReturnLine = target:GetAttribute("ResidentReturnLine") or "今夜もありがとう。",
@@ -1821,11 +1834,6 @@ local function findSafeTravelPoint(player, origin, flatDirection, right, forward
 		end
 	end
 	return nil
-end
-
-local function horizontalDistance(a, b)
-	local delta = a - b
-	return Vector3.new(delta.X, 0, delta.Z).Magnitude
 end
 
 local function scheduleTravelEvent(player, jobSerial)
@@ -2133,6 +2141,8 @@ local function completeDelivery(player, houseName)
 	local specialJobsUnlocked = deliveriesAfter == SPECIAL_JOB_UNLOCK_DELIVERIES
 	local warehouseUnlocked = deliveriesAfter == WAREHOUSE_UNLOCK_DELIVERIES
 
+	job.completedHouseNames = job.completedHouseNames or {}
+	job.completedHouseNames[houseName] = true
 	local hasNextStops = type(job.extraStops) == "table" and #job.extraStops > 0
 	job.sideOffer = nil
 	if hasNextStops then
@@ -2233,6 +2243,9 @@ local function sendSideRequestOffer(player, jobSerial)
 	end
 	local used = {[job.houseName] = true}
 	for _, stop in ipairs(job.extraStops) do used[stop.houseName] = true end
+	for completedHouseName in pairs(job.completedHouseNames or {}) do
+		used[completedHouseName] = true
+	end
 	local candidates = {}
 	for _, house in ipairs(housesFolder:GetChildren()) do
 		local point = house:FindFirstChild("DeliveryPoint")
