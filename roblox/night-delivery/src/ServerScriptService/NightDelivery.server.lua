@@ -1565,6 +1565,8 @@ local function assignJob(player)
 		weatherName = weather.name,
 		weatherMultiplier = weather.rewardMultiplier,
 		baseTimeLimit = baseTimeLimit,
+		bagCapacity = math.clamp(1 + (player:GetAttribute("BagStyleLevel") or 0), 1, 3),
+		extraStops = {},
 		residentName = target:GetAttribute("ResidentName") or "住人",
 		residentFirstLine = target:GetAttribute("ResidentFirstLine") or "配達ありがとう。",
 		residentReturnLine = target:GetAttribute("ResidentReturnLine") or "今夜もありがとう。",
@@ -1596,6 +1598,7 @@ local function assignJob(player)
 		weatherMultiplier = weather.rewardMultiplier,
 		baseTimeLimit = baseTimeLimit,
 		baseReward = jobType.baseReward,
+		bagCapacity = playerJobs[player].bagCapacity,
 		nightCondition = currentNightRule.name,
 	})
 end
@@ -1671,6 +1674,8 @@ local function completeDelivery(player, houseName)
 	local routeBonus = job.routeChoice == "shortcut" and remaining > 0 and (job.routeReward or 0) or 0
 	reward += routeBonus
 	local destinationEventBonus = job.destinationEventReward or 0
+	local sideRequestBonus = job.currentStopBonus or 0
+	reward += sideRequestBonus
 	if currentNightRule.id == "festival" then
 		reward = math.floor(reward * 1.1)
 	end
@@ -1755,7 +1760,13 @@ local function completeDelivery(player, houseName)
 	local specialJobsUnlocked = deliveriesAfter == SPECIAL_JOB_UNLOCK_DELIVERIES
 	local warehouseUnlocked = deliveriesAfter == WAREHOUSE_UNLOCK_DELIVERIES
 
-	playerJobs[player] = nil
+	local hasNextStops = type(job.extraStops) == "table" and #job.extraStops > 0
+	if hasNextStops then
+		job.houseName = nil
+	end
+	if not hasNextStops then
+		playerJobs[player] = nil
+	end
 	player:SetAttribute("NightDeliveryTimeLimit", nil)
 	player:SetAttribute("NightDeliveryOrderStartedAt", nil)
 	player:SetAttribute("NightDeliveryJobType", nil)
@@ -1775,6 +1786,7 @@ local function completeDelivery(player, houseName)
 		routeTitle = job.routeTitle,
 		routeBonus = routeBonus,
 		destinationEventBonus = destinationEventBonus,
+		sideRequestBonus = sideRequestBonus,
 		destinationEventId = job.destinationEvent and job.destinationEvent.id or nil,
 		isAnomaly = job.isAnomaly == true,
 		weatherName = job.weatherName or "晴れ",
@@ -1789,10 +1801,125 @@ local function completeDelivery(player, houseName)
 		districtUnlocked = districtUnlocked,
 		specialJobsUnlocked = specialJobsUnlocked,
 		warehouseUnlocked = warehouseUnlocked,
+		hasNextStops = hasNextStops,
 	})
+	if hasNextStops then
+		local options = {}
+		for _, stop in ipairs(job.extraStops) do
+			local house = housesFolder:FindFirstChild(stop.houseName)
+			local point = house and house:FindFirstChild("DeliveryPoint")
+			local root = getRootPart(player)
+			table.insert(options, {
+				houseName = stop.houseName,
+				displayName = stop.displayName,
+				distance = root and point and math.floor((root.Position - point.Position).Magnitude) or 0,
+				reward = stop.reward or 0,
+			})
+		end
+		sendStatus(player, "NextStopOptions", {
+			jobSerial = job.jobSerial,
+			stops = options,
+			bagCapacity = job.bagCapacity,
+		})
+	end
+	if job.isAnomaly then
+		sendStatus(player, "RareAnomaly", {title = "配達済みの家から、もう一度お礼が聞こえた"})
+	end
 	if rumorUnlocked then
 		sendStatus(player, "RumorUnlocked", rumorUnlocked)
 	end
+end
+
+local function sendSideRequestOffer(player, jobSerial)
+	local job = playerJobs[player]
+	if not job or job.jobSerial ~= jobSerial or not job.houseName
+		or job.sideOffer or #job.extraStops >= (job.bagCapacity - 1)
+		or math.random() > 0.38 then
+		return
+	end
+
+	local root = getRootPart(player)
+	if not root then
+		return
+	end
+	local used = {[job.houseName] = true}
+	for _, stop in ipairs(job.extraStops) do used[stop.houseName] = true end
+	local candidates = {}
+	for _, house in ipairs(housesFolder:GetChildren()) do
+		local point = house:FindFirstChild("DeliveryPoint")
+		if point and isHouseUnlocked(player, house) and not used[house.Name] then
+			local distance = (root.Position - point.Position).Magnitude
+			if distance <= 220 then
+				table.insert(candidates, {house = house, distance = distance})
+			end
+		end
+	end
+	if #candidates == 0 then
+		return
+	end
+	table.sort(candidates, function(a, b) return a.distance < b.distance end)
+	local shortlist = {}
+	for index = 1, math.min(3, #candidates) do
+		table.insert(shortlist, candidates[index])
+	end
+	local chosen = shortlist[math.random(1, #shortlist)]
+	local expiresAt = os.clock() + 35
+	job.sideOffer = {houseName = chosen.house.Name, expiresAt = expiresAt, reward = 180}
+	sendStatus(player, "SideJobOffer", {
+		jobSerial = job.jobSerial,
+		houseName = chosen.house.Name,
+		displayName = chosen.house:GetAttribute("DisplayName") or chosen.house.Name,
+		distance = math.floor(chosen.distance),
+		reward = 180,
+		expiresIn = 35,
+		cargoType = "追加の通常便",
+	})
+end
+
+local function startNextStop(player, job, stopIndex)
+	local stop = job.extraStops[stopIndex]
+	if not stop then return end
+	table.remove(job.extraStops, stopIndex)
+	local target = housesFolder:FindFirstChild(stop.houseName)
+	if not target then return end
+
+	job.jobSerial = (player:GetAttribute("NightDeliveryJobSerial") or 0) + 1
+	job.houseName = target.Name
+	job.displayName = target:GetAttribute("DisplayName") or target.Name
+	job.residentName = target:GetAttribute("ResidentName") or "住人"
+	job.residentFirstLine = target:GetAttribute("ResidentFirstLine") or "配達ありがとう。"
+	job.residentReturnLine = target:GetAttribute("ResidentReturnLine") or "今夜もありがとう。"
+	job.currentStopBonus = stop.reward or 0
+	job.isSideRequest = true
+	job.baseTimeLimit = getJobTimeLimit(findJobType(job.jobTypeId), target)
+	job.routeChoice = nil
+	job.expiresAt = nil
+	job.startedAt = nil
+	job.destinationEvent = math.random() <= RULES.DestinationEventChance
+		and RULES.chooseWeighted(RULES.DestinationEvents, playerLastDestinationEvent[player]) or nil
+	if job.destinationEvent then playerLastDestinationEvent[player] = job.destinationEvent.id end
+	player:SetAttribute("NightDeliveryJobSerial", job.jobSerial)
+	player:SetAttribute("NightDeliveryTimeLimit", nil)
+	player:SetAttribute("NightDeliveryOrderStartedAt", nil)
+	player:SetAttribute("NightDeliveryJobType", job.jobTypeId)
+	player:SetAttribute("NightDeliveryHouseName", target.Name)
+	player:SetAttribute("NightDeliveryBikeBlocked", false)
+	addParcelVisual(player, job.jobTypeId)
+	sendStatus(player, "JobAssigned", {
+		houseName = target.Name,
+		jobSerial = job.jobSerial,
+		displayName = job.displayName,
+		districtId = target:GetAttribute("DistrictId") or "central",
+		districtName = target:GetAttribute("DistrictName") or "住宅街",
+		jobTypeId = job.jobTypeId,
+		jobTypeName = "追加依頼",
+		weatherId = currentWeather.id,
+		weatherName = currentWeather.name,
+		weatherMultiplier = currentWeather.rewardMultiplier,
+		baseTimeLimit = job.baseTimeLimit,
+		baseReward = findJobType(job.jobTypeId).baseReward + job.currentStopBonus,
+		sideRequest = true,
+	})
 end
 
 local function toggleBike(player)
@@ -2134,7 +2261,53 @@ deliveryEvent.OnServerEvent:Connect(function(player, action, payload)
 	end
 	remoteLastAction[player] = now
 
-	if action == "ResolveDestinationEvent" then
+	if action == "AcceptSideJob" or action == "IgnoreSideJob" then
+		local job = playerJobs[player]
+		if not job or type(payload) ~= "table"
+			or tonumber(payload.jobSerial) ~= job.jobSerial
+			or not job.sideOffer or os.clock() > job.sideOffer.expiresAt then
+			return
+		end
+		if action == "IgnoreSideJob" then
+			job.sideOffer = nil
+			sendStatus(player, "Message", {text = "追加依頼を見送った。今の配達を続けよう。"})
+			return
+		end
+		if #job.extraStops >= (job.bagCapacity - 1)
+			or tostring(payload.houseName or "") ~= job.sideOffer.houseName then
+			return
+		end
+		local sideHouse = housesFolder:FindFirstChild(job.sideOffer.houseName)
+		if not sideHouse or not isHouseUnlocked(player, sideHouse) then
+			job.sideOffer = nil
+			return
+		end
+		table.insert(job.extraStops, {
+			houseName = sideHouse.Name,
+			displayName = sideHouse:GetAttribute("DisplayName") or sideHouse.Name,
+			reward = job.sideOffer.reward,
+		})
+		job.sideOffer = nil
+		sendStatus(player, "SideJobAccepted", {
+			displayName = sideHouse:GetAttribute("DisplayName") or sideHouse.Name,
+			reward = 180,
+			queuedStops = #job.extraStops,
+			bagCapacity = job.bagCapacity,
+		})
+	elseif action == "ChooseNextStop" then
+		local job = playerJobs[player]
+		if not job or job.houseName or type(payload) ~= "table"
+			or tonumber(payload.jobSerial) ~= job.jobSerial then
+			return
+		end
+		local houseName = tostring(payload.houseName or "")
+		for index, stop in ipairs(job.extraStops) do
+			if stop.houseName == houseName then
+				startNextStop(player, job, index)
+				return
+			end
+		end
+	elseif action == "ResolveDestinationEvent" then
 		local job = playerJobs[player]
 		if not requirePlayerReady(player)
 			or not job
@@ -2186,8 +2359,15 @@ deliveryEvent.OnServerEvent:Connect(function(player, action, payload)
 			routeTitle = route.title,
 			timeLimit = job.timeLimit,
 			expiresAt = job.expiresAt,
-			reward = route.reward,
+			reward = job.routeReward,
 		})
+		local jobSerial = job.jobSerial
+		task.delay(8, function()
+			local currentJob = playerJobs[player]
+			if currentJob and currentJob.jobSerial == jobSerial and currentJob.houseName then
+				sendSideRequestOffer(player, jobSerial)
+			end
+		end)
 	elseif action == "RequestState" then
 		if player:GetAttribute("NightDeliveryReady") == true then
 			sendPlayerState(player)
