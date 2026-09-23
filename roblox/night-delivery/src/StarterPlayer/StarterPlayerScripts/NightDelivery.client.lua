@@ -750,6 +750,14 @@ RunService.RenderStepped:Connect(function()
 		local character = player.Character
 		local root = character and character:FindFirstChild("HumanoidRootPart")
 		local distance = root and currentTargetPart and math.floor((root.Position - currentTargetPart.Position).Magnitude) or nil
+		if distance and player:GetAttribute("NightDeliveryNavSoft") == true then
+			local visible = distance <= 70
+			if currentHighlight then currentHighlight.Enabled = visible end
+			if currentBillboard then currentBillboard.Enabled = visible end
+		elseif distance then
+			if currentHighlight then currentHighlight.Enabled = true end
+			if currentBillboard then currentBillboard.Enabled = true end
+		end
 		local distanceText = distance and string.format("  •  距離 %d", distance) or ""
 
 		timerLabel.Text = string.format("残り %d秒%s", remaining, distanceText)
