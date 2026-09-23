@@ -2865,6 +2865,7 @@ deliveryEvent.OnServerEvent:Connect(function(player, action, payload)
 
 		local resolvedId = job.travelEventId
 		local reward = math.max(0, tonumber(job.travelEventReward) or 0)
+		local wasBlocking = job.travelEventBlocking == true
 		local followUpStory = queueNeighborhoodStory(player, resolvedId)
 		job.travelEventResolved = true
 		job.travelEventActive = false
@@ -2882,6 +2883,7 @@ deliveryEvent.OnServerEvent:Connect(function(player, action, payload)
 			jobSerial = job.jobSerial,
 			id = resolvedId,
 			reward = reward,
+			blocking = wasBlocking,
 			followUpText = followUpStory and followUpStory.threadStartedText or nil,
 			followUpTitle = followUpStory and followUpStory.title or nil,
 		})
