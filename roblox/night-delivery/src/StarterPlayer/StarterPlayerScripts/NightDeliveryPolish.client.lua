@@ -470,6 +470,57 @@ local function showRumor(payload)
 	end)
 end
 
+local residentSerial = 0
+local residentFrame = Instance.new("Frame")
+residentFrame.Name = "ResidentDialogue"
+residentFrame.Size = UDim2.fromOffset(420, 94)
+residentFrame.AnchorPoint = Vector2.new(0.5, 1)
+residentFrame.Position = UDim2.new(0.5, 0, 1, -22)
+residentFrame.BackgroundColor3 = Color3.fromRGB(20, 29, 35)
+residentFrame.BackgroundTransparency = 1
+residentFrame.Visible = false
+residentFrame.ZIndex = 45
+residentFrame.Parent = gui
+addCorner(residentFrame, 13)
+local residentStroke = addStroke(residentFrame, Color3.fromRGB(131, 205, 174), 1, 1.3)
+local residentNameLabel = makeLabel(residentFrame, UDim2.new(1, -26, 0, 24), UDim2.fromOffset(14, 10), "", 14, Enum.Font.GothamBold)
+residentNameLabel.TextColor3 = Color3.fromRGB(154, 220, 185)
+residentNameLabel.ZIndex = 46
+local residentLineLabel = makeLabel(residentFrame, UDim2.new(1, -28, 0, 44), UDim2.fromOffset(14, 38), "", 13, Enum.Font.Gotham)
+residentLineLabel.TextWrapped = true
+residentLineLabel.TextYAlignment = Enum.TextYAlignment.Top
+residentLineLabel.ZIndex = 46
+
+local function showResident(payload)
+	residentSerial += 1
+	local serial = residentSerial
+	residentNameLabel.Text = tostring(payload.residentName or "住人")
+	residentLineLabel.Text = tostring(payload.residentReaction or "配達ありがとう。")
+	residentFrame.Visible = true
+	residentFrame.BackgroundTransparency = 1
+	residentStroke.Transparency = 1
+	TweenService:Create(residentFrame, TweenInfo.new(0.2), {BackgroundTransparency = 0.06}):Play()
+	TweenService:Create(residentStroke, TweenInfo.new(0.2), {Transparency = 0.18}):Play()
+	for _, label in ipairs({residentNameLabel, residentLineLabel}) do
+		label.TextTransparency = 1
+		TweenService:Create(label, TweenInfo.new(0.2), {TextTransparency = 0}):Play()
+	end
+	task.delay(5, function()
+		if serial ~= residentSerial then
+			return
+		end
+		TweenService:Create(residentFrame, TweenInfo.new(0.25), {BackgroundTransparency = 1}):Play()
+		TweenService:Create(residentStroke, TweenInfo.new(0.25), {Transparency = 1}):Play()
+		for _, label in ipairs({residentNameLabel, residentLineLabel}) do
+			TweenService:Create(label, TweenInfo.new(0.25), {TextTransparency = 1}):Play()
+		end
+		task.wait(0.27)
+		if serial == residentSerial then
+			residentFrame.Visible = false
+		end
+	end)
+end
+
 local function setTarget(houseName, displayName)
 	currentTarget = nil
 	currentHouseName = houseName
@@ -674,6 +725,7 @@ deliveryEvent.OnClientEvent:Connect(function(action, payload)
 			jobSerial = payload.jobSerial,
 		})
 	elseif action == "Delivered" then
+		showResident(payload)
 		deliveryEvent:FireServer("PolishDeliveryComplete", {
 			houseName = currentHouseName,
 		})
@@ -757,6 +809,8 @@ local function updateResponsiveScale()
 		modifierTitle.TextSize = 12
 		modifierDescription.TextSize = 10
 		resultFrame.Size = UDim2.new(0.86, 0, 0, 180)
+		residentFrame.Size = UDim2.new(0.92, 0, 0, 92)
+		residentLineLabel.TextSize = 12
 		routeChoiceFrame.Size = UDim2.new(0.92, 0, 0, 200)
 		lanternRouteButton.TextSize = 12
 		shortcutRouteButton.TextSize = 12
@@ -778,6 +832,8 @@ local function updateResponsiveScale()
 		modifierTitle.TextSize = 14
 		modifierDescription.TextSize = 12
 		resultFrame.Size = UDim2.fromOffset(360, 190)
+		residentFrame.Size = UDim2.fromOffset(420, 94)
+		residentLineLabel.TextSize = 13
 		routeChoiceFrame.Size = UDim2.fromOffset(430, 190)
 		lanternRouteButton.TextSize = 14
 		shortcutRouteButton.TextSize = 14
