@@ -1671,6 +1671,8 @@ local function assignJob(player)
 		weatherId = weather.id,
 		weatherName = weather.name,
 		weatherMultiplier = weather.rewardMultiplier,
+		nightConditionId = currentNightRule.id,
+		nightConditionName = currentNightRule.name,
 		baseTimeLimit = baseTimeLimit,
 		bagCapacity = math.clamp(1 + (player:GetAttribute("BagStyleLevel") or 0), 1, 3),
 		extraStops = {},
@@ -1716,7 +1718,8 @@ local function assignJob(player)
 		baseTimeLimit = baseTimeLimit,
 		baseReward = jobType.baseReward,
 		bagCapacity = playerJobs[player].bagCapacity,
-		nightCondition = currentNightRule.name,
+		nightCondition = playerJobs[player].nightConditionName,
+		nightConditionId = playerJobs[player].nightConditionId,
 		shortcutReward = playerJobs[player].shortcutReward,
 		neighborhoodThreadTitle = neighborhoodCallback and neighborhoodCallback.title or nil,
 		neighborhoodKindness = player:GetAttribute("NeighborhoodKindness") or 0,
@@ -2066,8 +2069,12 @@ local function completeDelivery(player, houseName)
 	local destinationEventBonus = job.destinationEventReward or 0
 	local sideRequestBonus = job.currentStopBonus or 0
 	reward += sideRequestBonus
-	if currentNightRule.id == "festival" then
+	local nightConditionId = job.nightConditionId or "quiet"
+	local nightConditionBonus = 0
+	if nightConditionId == "festival" then
+		local beforeFestival = reward
 		reward = math.floor(reward * 1.1)
+		nightConditionBonus = math.max(0, reward - beforeFestival)
 	end
 
 	local targetHouse = housesFolder:FindFirstChild(houseName)
@@ -2097,10 +2104,10 @@ local function completeDelivery(player, houseName)
 	reward += coopBonus + destinationEventBonus + neighborhoodCallbackBonus
 
 	-- A small chance of a grateful resident tipping the courier keeps ordinary jobs surprising.
-	local tipChance = currentNightRule.id == "tip" and 30 or 14
+	local tipChance = nightConditionId == "tip" and 30 or 14
 	local neighborhoodTip = 0
 	if math.random(1, 100) <= tipChance then
-		neighborhoodTip = math.random(40, 90) + (currentNightRule.id == "tip" and 40 or 0)
+		neighborhoodTip = math.random(40, 90) + (nightConditionId == "tip" and 40 or 0)
 		reward += neighborhoodTip
 	end
 
@@ -2187,6 +2194,9 @@ local function completeDelivery(player, houseName)
 		isAnomaly = job.isAnomaly == true,
 		weatherName = job.weatherName or "晴れ",
 		weatherBonus = weatherBonus,
+		nightConditionId = nightConditionId,
+		nightConditionName = job.nightConditionName or "静かな夜",
+		nightConditionBonus = nightConditionBonus,
 		coopBonus = coopBonus,
 		neighborhoodTip = neighborhoodTip,
 		helperCount = helperCount,
@@ -2307,6 +2317,8 @@ local function startNextStop(player, job, stopIndex)
 	job.weatherId = currentWeather.id
 	job.weatherName = currentWeather.name
 	job.weatherMultiplier = currentWeather.rewardMultiplier
+	job.nightConditionId = currentNightRule.id
+	job.nightConditionName = currentNightRule.name
 	job.currentStopBonus = stop.reward or 0
 	job.forcedModifierId = stop.cargoRuleId
 	job.destinationEventChoice = nil
@@ -2370,6 +2382,8 @@ local function startNextStop(player, job, stopIndex)
 		baseReward = findJobType(job.jobTypeId).baseReward,
 		bagCapacity = job.bagCapacity,
 		orderModifierId = job.forcedModifierId,
+		nightCondition = job.nightConditionName,
+		nightConditionId = job.nightConditionId,
 		shortcutReward = job.shortcutReward,
 		sideRequest = true,
 	})
