@@ -1679,10 +1679,6 @@ local function completeDelivery(player, houseName)
 	if currentNightRule.id == "festival" then
 		reward = math.floor(reward * 1.1)
 	end
-	if currentNightRule.id == "tip" and neighborhoodTip > 0 then
-		neighborhoodTip += 40
-		reward += 40
-	end
 
 	local targetHouse = housesFolder:FindFirstChild(houseName)
 	local targetPart = targetHouse and targetHouse:FindFirstChild("DeliveryPoint")
@@ -1889,7 +1885,15 @@ local function startNextStop(player, job, stopIndex)
 	job.residentName = target:GetAttribute("ResidentName") or "住人"
 	job.residentFirstLine = target:GetAttribute("ResidentFirstLine") or "配達ありがとう。"
 	job.residentReturnLine = target:GetAttribute("ResidentReturnLine") or "今夜もありがとう。"
+	job.weatherId = currentWeather.id
+	job.weatherName = currentWeather.name
+	job.weatherMultiplier = currentWeather.rewardMultiplier
 	job.currentStopBonus = stop.reward or 0
+	job.destinationEventChoice = nil
+	job.destinationEventPrompted = false
+	job.destinationEventReward = 0
+	job.routeReward = 0
+	job.routeTitle = nil
 	job.isSideRequest = true
 	job.baseTimeLimit = getJobTimeLimit(findJobType(job.jobTypeId), target)
 	job.routeChoice = nil
@@ -2294,6 +2298,15 @@ deliveryEvent.OnServerEvent:Connect(function(player, action, payload)
 			queuedStops = #job.extraStops,
 			bagCapacity = job.bagCapacity,
 		})
+		if #job.extraStops < (job.bagCapacity - 1) then
+			local jobSerial = job.jobSerial
+			task.delay(16, function()
+				local currentJob = playerJobs[player]
+				if currentJob and currentJob.jobSerial == jobSerial and currentJob.houseName then
+					sendSideRequestOffer(player, jobSerial)
+				end
+			end)
+		end
 	elseif action == "ChooseNextStop" then
 		local job = playerJobs[player]
 		if not job or job.houseName or type(payload) ~= "table"
