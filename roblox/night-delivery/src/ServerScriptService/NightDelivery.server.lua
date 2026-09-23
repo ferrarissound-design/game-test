@@ -1588,6 +1588,9 @@ local function assignJob(player)
 		destinationEventReward = 0,
 		destinationEventObjectivePosition = nil,
 		destinationEventObjectiveComplete = false,
+		destinationEventHazardPosition = nil,
+		destinationEventHazardRadius = nil,
+		destinationEventHazardTriggered = false,
 		isAnomaly = isAnomaly,
 	}
 
@@ -1627,10 +1630,13 @@ local DESTINATION_EVENT_OBJECTIVES = {
 		careful = {offset = Vector3.new(-4.5, 0, -2.0), label = "犬を避けて静かに横から届ける"},
 	},
 	work = {
-		quick = {offset = Vector3.new(-4.5, 0, -1.5), label = "工事柵の切れ目から近道する"},
-		careful = {offset = Vector3.new(-10.0, 0, 1.5), label = "脇道を回って安全な入口へ向かう"},
+		quick = {offset = Vector3.new(-5.5, 0, -4.0), label = "工事柵の切れ目から近道する"},
+		careful = {offset = Vector3.new(-10.0, 0, 2.0), label = "脇道を回って安全な入口へ向かう"},
 	},
 }
+
+local DOG_ALERT_OFFSET = Vector3.new(6.5, 0, 0)
+local DOG_ALERT_RADIUS = 3.0
 
 local function getDestinationEventObjective(eventId, choice, deliveryPoint)
 	local eventObjectives = DESTINATION_EVENT_OBJECTIVES[eventId]
@@ -1639,6 +1645,51 @@ local function getDestinationEventObjective(eventId, choice, deliveryPoint)
 		return nil, nil
 	end
 	return deliveryPoint.Position + objective.offset, objective.label
+end
+
+local function startDestinationEventHazardMonitor(player, job)
+	if not job or not job.destinationEvent or job.destinationEvent.id ~= "dog"
+		or typeof(job.destinationEventHazardPosition) ~= "Vector3" then
+		return
+	end
+
+	local jobSerial = job.jobSerial
+	local startingRoot = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
+	local startingPosition = startingRoot and startingRoot.Position or nil
+	task.spawn(function()
+		local armed = startingPosition == nil
+		while player.Parent do
+			local currentJob = playerJobs[player]
+			if currentJob ~= job
+				or currentJob.jobSerial ~= jobSerial
+				or currentJob.destinationEventObjectiveComplete == true then
+				return
+			end
+
+			local character = player.Character
+			local root = character and character:FindFirstChild("HumanoidRootPart")
+			if root then
+				if not armed and (root.Position - startingPosition).Magnitude >= 2.5 then
+					armed = true
+				end
+				local delta = root.Position - job.destinationEventHazardPosition
+				local horizontalDistance = Vector3.new(delta.X, 0, delta.Z).Magnitude
+				if armed and horizontalDistance <= (job.destinationEventHazardRadius or DOG_ALERT_RADIUS) then
+					if not job.destinationEventHazardTriggered then
+						job.destinationEventHazardTriggered = true
+						job.destinationEventReward = 0
+						sendStatus(player, "DestinationEventHazard", {
+							jobSerial = job.jobSerial,
+							eventId = "dog",
+							text = "犬に近づきすぎて吠えられた。現場判断ボーナスは失われた。",
+						})
+					end
+					return
+				end
+			end
+			task.wait(0.12)
+		end
+	end)
 end
 
 local function completeDelivery(player, houseName)
@@ -1829,6 +1880,7 @@ local function completeDelivery(player, houseName)
 		destinationEventBonus = destinationEventBonus,
 		sideRequestBonus = sideRequestBonus,
 		destinationEventId = job.destinationEvent and job.destinationEvent.id or nil,
+		destinationEventHazardTriggered = job.destinationEventHazardTriggered == true,
 		isAnomaly = job.isAnomaly == true,
 		weatherName = job.weatherName or "晴れ",
 		weatherBonus = weatherBonus,
@@ -1952,6 +2004,9 @@ local function startNextStop(player, job, stopIndex)
 	job.destinationEventReward = 0
 	job.destinationEventObjectivePosition = nil
 	job.destinationEventObjectiveComplete = false
+	job.destinationEventHazardPosition = nil
+	job.destinationEventHazardRadius = nil
+	job.destinationEventHazardTriggered = false
 	job.routeReward = 0
 	job.routeTitle = nil
 	job.isAnomaly = math.random() <= RULES.RareAnomalyChance
@@ -2449,6 +2504,11 @@ deliveryEvent.OnServerEvent:Connect(function(player, action, payload)
 		job.destinationEventReward = choice == "careful" and job.destinationEvent.carefulBonus or job.destinationEvent.quickBonus
 		job.destinationEventObjectivePosition = objectivePosition
 		job.destinationEventObjectiveComplete = false
+		if job.destinationEvent.id == "dog" then
+			job.destinationEventHazardPosition = point.Position + DOG_ALERT_OFFSET
+			job.destinationEventHazardRadius = DOG_ALERT_RADIUS
+			job.destinationEventHazardTriggered = false
+		end
 		sendStatus(player, "DestinationEventObjective", {
 			jobSerial = job.jobSerial,
 			eventId = job.destinationEvent.id,
@@ -2456,7 +2516,12 @@ deliveryEvent.OnServerEvent:Connect(function(player, action, payload)
 			position = objectivePosition,
 			label = objectiveLabel,
 			reward = job.destinationEventReward,
+			hazardPosition = job.destinationEventHazardPosition,
+			hazardRadius = job.destinationEventHazardRadius,
 		})
+		if job.destinationEvent.id == "dog" then
+			startDestinationEventHazardMonitor(player, job)
+		end
 	elseif action == "CompleteDestinationEventObjective" then
 		local job = playerJobs[player]
 		if not requirePlayerReady(player)
