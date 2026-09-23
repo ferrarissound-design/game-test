@@ -295,7 +295,7 @@ shortcutRouteButton.Parent = routeChoiceFrame
 addCorner(shortcutRouteButton, 10)
 
 local function submitRouteChoice(routeId)
-	if not routeChoiceFrame.Visible or not pendingRouteSerial then
+	if not routeChoiceFrame.Visible or not pendingRouteSerial or not currentModifier then
 		return
 	end
 	lanternRouteButton.Active = false
