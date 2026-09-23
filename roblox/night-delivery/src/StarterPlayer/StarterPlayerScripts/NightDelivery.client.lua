@@ -487,7 +487,7 @@ local function setWaypoint(houseName)
 	if not body then
 		return
 	end
-	currentTargetPart = body
+	currentTargetPart = house:FindFirstChild("DeliveryPoint") or body
 
 	local highlight = Instance.new("Highlight")
 	highlight.Name = "LocalDeliveryHighlight"
