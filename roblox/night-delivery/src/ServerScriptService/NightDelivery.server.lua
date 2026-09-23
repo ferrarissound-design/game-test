@@ -116,6 +116,14 @@ local JOB_TYPES = {
 	},
 }
 
+-- Persistent story clues make repeated deliveries reveal a small neighborhood mystery.
+local RUMOR_CLUES = {
+	{deliveries = 3, title = "灯りのついた青い家", text = "誰も住んでいないはずの青い家で、今夜も玄関灯が点いている。", reward = 0},
+	{deliveries = 8, title = "宛名のない荷物", text = "差出人の欄は空白。でも、古い配達員名簿と同じ名字が受取人に書かれていた。", reward = 0},
+	{deliveries = 15, title = "最後の配達記録", text = "配達所の古い帳簿に、青い家を最後に訪ねた配達員の記録が残っていた。", reward = 0},
+	{deliveries = 25, title = "夜の配達員", text = "荷物の中には「毎晩ありがとう」の手紙。青い家の灯りは、帰りを待つ人の目印だった。", reward = 500},
+}
+
 local oldWorld = workspace:FindFirstChild(WORLD_NAME)
 if oldWorld then
 	oldWorld:Destroy()
@@ -1589,11 +1597,29 @@ local function completeDelivery(player, houseName)
 
 	local stats = getStats(player)
 	local deliveriesAfter = nil
+	local rumorUnlocked = nil
 	if stats and stats.coins and stats.deliveries then
 		stats.coins.Value += reward
 		stats.deliveries.Value += 1
 		deliveriesAfter = stats.deliveries.Value
 		player:SetAttribute("NightDeliveryCompletedJobSerial", job.jobSerial)
+
+		local clueLevel = player:GetAttribute("NightDeliveryRumorClueLevel") or 0
+		local nextClue = RUMOR_CLUES[clueLevel + 1]
+		if nextClue and deliveriesAfter >= nextClue.deliveries then
+			clueLevel += 1
+			player:SetAttribute("NightDeliveryRumorClueLevel", clueLevel)
+			if nextClue.reward > 0 then
+				stats.coins.Value += nextClue.reward
+			end
+			rumorUnlocked = {
+				chapter = clueLevel,
+				total = #RUMOR_CLUES,
+				title = nextClue.title,
+				text = nextClue.text,
+				reward = nextClue.reward,
+			}
+		end
 	end
 
 	local districtUnlocked = deliveriesAfter == RIVERSIDE_UNLOCK_DELIVERIES
@@ -1627,6 +1653,9 @@ local function completeDelivery(player, houseName)
 		specialJobsUnlocked = specialJobsUnlocked,
 		warehouseUnlocked = warehouseUnlocked,
 	})
+	if rumorUnlocked then
+		sendStatus(player, "RumorUnlocked", rumorUnlocked)
+	end
 end
 
 local function toggleBike(player)
@@ -1692,6 +1721,7 @@ local function loadData(player)
 		bagStyleLevel = 0,
 		bikeStyleLevel = 0,
 		shiftWins = 0,
+		rumorClueLevel = 0,
 	}
 	if not DELIVERY_STORE then
 		return defaultData, false
@@ -1718,6 +1748,7 @@ local function loadData(player)
 		defaultData.bagStyleLevel = math.clamp(tonumber(data.bagStyleLevel) or 0, 0, #BAG_STYLES - 1)
 		defaultData.bikeStyleLevel = math.clamp(tonumber(data.bikeStyleLevel) or 0, 0, #BIKE_STYLES - 1)
 		defaultData.shiftWins = math.max(0, tonumber(data.shiftWins) or 0)
+		defaultData.rumorClueLevel = math.clamp(tonumber(data.rumorClueLevel) or 0, 0, #RUMOR_CLUES)
 	elseif not success then
 		warn("Night Delivery: DataStore load failed after retries for", player.Name)
 	end
@@ -1750,6 +1781,7 @@ local function saveData(player)
 		bagStyleLevel = player:GetAttribute("BagStyleLevel") or 0,
 		bikeStyleLevel = player:GetAttribute("BikeStyleLevel") or 0,
 		shiftWins = player:GetAttribute("ShiftWins") or 0,
+		rumorClueLevel = player:GetAttribute("NightDeliveryRumorClueLevel") or 0,
 	}
 
 	local success = false
@@ -2022,6 +2054,7 @@ local function setupPlayer(player)
 	player:SetAttribute("BagStyleLevel", data.bagStyleLevel)
 	player:SetAttribute("BikeStyleLevel", data.bikeStyleLevel)
 	player:SetAttribute("ShiftWins", data.shiftWins)
+	player:SetAttribute("NightDeliveryRumorClueLevel", data.rumorClueLevel)
 	playerStreak[player] = 0
 	playerShiftProgress[player] = 0
 
