@@ -1865,7 +1865,14 @@ local function sendSideRequestOffer(player, jobSerial)
 	end
 	local chosen = shortlist[math.random(1, #shortlist)]
 	local expiresAt = os.clock() + 35
-	job.sideOffer = {houseName = chosen.house.Name, expiresAt = expiresAt, reward = 180}
+	local cargoType = RULES.SideCargoTypes[math.random(1, #RULES.SideCargoTypes)]
+	job.sideOffer = {
+		houseName = chosen.house.Name,
+		expiresAt = expiresAt,
+		reward = 180,
+		cargoRuleId = cargoType.id,
+		cargoTitle = cargoType.title,
+	}
 	sendStatus(player, "SideJobOffer", {
 		jobSerial = job.jobSerial,
 		houseName = chosen.house.Name,
@@ -1873,7 +1880,7 @@ local function sendSideRequestOffer(player, jobSerial)
 		distance = math.floor(chosen.distance),
 		reward = 180,
 		expiresIn = 35,
-		cargoType = "追加の通常便",
+		cargoType = cargoType.title,
 	})
 end
 
@@ -1894,6 +1901,7 @@ local function startNextStop(player, job, stopIndex)
 	job.weatherName = currentWeather.name
 	job.weatherMultiplier = currentWeather.rewardMultiplier
 	job.currentStopBonus = stop.reward or 0
+	job.forcedModifierId = stop.cargoRuleId
 	job.destinationEventChoice = nil
 	job.destinationEventPrompted = false
 	job.destinationEventReward = 0
@@ -1929,6 +1937,7 @@ local function startNextStop(player, job, stopIndex)
 		baseTimeLimit = job.baseTimeLimit,
 		baseReward = findJobType(job.jobTypeId).baseReward + job.currentStopBonus,
 		bagCapacity = job.bagCapacity,
+		orderModifierId = job.forcedModifierId,
 		sideRequest = true,
 	})
 end
@@ -2328,6 +2337,7 @@ deliveryEvent.OnServerEvent:Connect(function(player, action, payload)
 			houseName = sideHouse.Name,
 			displayName = sideHouse:GetAttribute("DisplayName") or sideHouse.Name,
 			reward = job.sideOffer.reward,
+			cargoRuleId = job.sideOffer.cargoRuleId,
 		})
 		job.sideOffer = nil
 		sendStatus(player, "SideJobAccepted", {
