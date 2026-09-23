@@ -578,10 +578,12 @@ local function submitDestinationEvent(choice)
 	if not destinationEventSerial then
 		return
 	end
+	local jobSerial = destinationEventSerial
+	destinationEventSerial = nil
 	quickEventButton.Active = false
 	carefulEventButton.Active = false
 	deliveryEvent:FireServer("ResolveDestinationEvent", {
-		jobSerial = destinationEventSerial,
+		jobSerial = jobSerial,
 		choice = choice,
 	})
 	destinationEventFrame.Visible = false
