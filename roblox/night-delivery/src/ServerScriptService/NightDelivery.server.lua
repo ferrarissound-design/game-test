@@ -1564,6 +1564,7 @@ local function assignJob(player)
 	player:SetAttribute("NightDeliveryJobSerial", jobSerial)
 	player:SetAttribute("NightDeliveryJobType", jobType.id)
 	player:SetAttribute("NightDeliveryHouseName", target.Name)
+	player:SetAttribute("NightDeliveryNavSoft", false)
 	playerJobs[player] = {
 		jobSerial = jobSerial,
 		houseName = target.Name,
@@ -1585,6 +1586,8 @@ local function assignJob(player)
 		destinationEvent = destinationEvent,
 		destinationEventPrompted = false,
 		destinationEventReward = 0,
+		destinationEventObjectivePosition = nil,
+		destinationEventObjectiveComplete = false,
 		isAnomaly = isAnomaly,
 	}
 
@@ -1614,6 +1617,30 @@ local function assignJob(player)
 	end
 end
 
+local DESTINATION_EVENT_OBJECTIVES = {
+	absent = {
+		quick = {offset = Vector3.new(-3.5, 0, 1.5), label = "玄関脇の安全な場所に置く"},
+		careful = {offset = Vector3.new(5.0, 0, -0.5), label = "雨よけの置き配場所まで運ぶ"},
+	},
+	dog = {
+		quick = {offset = Vector3.new(-5.0, 0, 3.0), label = "犬から離れた場所に置く"},
+		careful = {offset = Vector3.new(-4.5, 0, -2.0), label = "犬を避けて静かに横から届ける"},
+	},
+	work = {
+		quick = {offset = Vector3.new(-4.5, 0, -1.5), label = "工事柵の切れ目から近道する"},
+		careful = {offset = Vector3.new(-8.0, 0, 6.0), label = "脇道を回って安全な入口へ向かう"},
+	},
+}
+
+local function getDestinationEventObjective(eventId, choice, deliveryPoint)
+	local eventObjectives = DESTINATION_EVENT_OBJECTIVES[eventId]
+	local objective = eventObjectives and eventObjectives[choice]
+	if not objective or not deliveryPoint then
+		return nil, nil
+	end
+	return deliveryPoint.Position + objective.offset, objective.label
+end
+
 local function completeDelivery(player, houseName)
 	if not requirePlayerReady(player) then
 		return
@@ -1641,7 +1668,11 @@ local function completeDelivery(player, houseName)
 
 	local targetHouse = housesFolder:FindFirstChild(job.houseName)
 	local deliveryPoint = targetHouse and targetHouse:FindFirstChild("DeliveryPoint")
-	if not isNearPart(player, deliveryPoint, 13) then
+	if job.destinationEvent and job.destinationEventChoice then
+		if job.destinationEventObjectiveComplete ~= true then
+			return
+		end
+	elseif not isNearPart(player, deliveryPoint, 13) then
 		return
 	end
 
@@ -1780,6 +1811,7 @@ local function completeDelivery(player, houseName)
 	player:SetAttribute("NightDeliveryJobType", nil)
 	player:SetAttribute("NightDeliveryHouseName", nil)
 	player:SetAttribute("NightDeliveryBikeBlocked", false)
+	player:SetAttribute("NightDeliveryNavSoft", false)
 	player:SetAttribute("NightDeliveryRequestedModifier", nil)
 	clearParcelVisual(player)
 
@@ -1918,6 +1950,8 @@ local function startNextStop(player, job, stopIndex)
 	job.destinationEventChoice = nil
 	job.destinationEventPrompted = false
 	job.destinationEventReward = 0
+	job.destinationEventObjectivePosition = nil
+	job.destinationEventObjectiveComplete = false
 	job.routeReward = 0
 	job.routeTitle = nil
 	job.isAnomaly = math.random() <= RULES.RareAnomalyChance
@@ -1935,6 +1969,7 @@ local function startNextStop(player, job, stopIndex)
 	player:SetAttribute("NightDeliveryJobType", job.jobTypeId)
 	player:SetAttribute("NightDeliveryHouseName", target.Name)
 	player:SetAttribute("NightDeliveryBikeBlocked", false)
+	player:SetAttribute("NightDeliveryNavSoft", false)
 	player:SetAttribute("NightDeliveryRequestedModifier", job.forcedModifierId)
 	addParcelVisual(player, job.jobTypeId)
 	sendStatus(player, "JobAssigned", {
@@ -2320,6 +2355,7 @@ deliveryEvent.OnServerEvent:Connect(function(player, action, payload)
 	local immediateActions = {
 		ChooseRoute = true,
 		ResolveDestinationEvent = true,
+		CompleteDestinationEventObjective = true,
 		AcceptSideJob = true,
 		IgnoreSideJob = true,
 		ChooseNextStop = true,
@@ -2405,8 +2441,40 @@ deliveryEvent.OnServerEvent:Connect(function(player, action, payload)
 		if choice ~= "quick" and choice ~= "careful" then
 			return
 		end
+		local objectivePosition, objectiveLabel = getDestinationEventObjective(job.destinationEvent.id, choice, point)
+		if not objectivePosition then
+			return
+		end
 		job.destinationEventChoice = choice
 		job.destinationEventReward = choice == "careful" and job.destinationEvent.carefulBonus or job.destinationEvent.quickBonus
+		job.destinationEventObjectivePosition = objectivePosition
+		job.destinationEventObjectiveComplete = false
+		sendStatus(player, "DestinationEventObjective", {
+			jobSerial = job.jobSerial,
+			eventId = job.destinationEvent.id,
+			choice = choice,
+			position = objectivePosition,
+			label = objectiveLabel,
+			reward = job.destinationEventReward,
+		})
+	elseif action == "CompleteDestinationEventObjective" then
+		local job = playerJobs[player]
+		if not requirePlayerReady(player)
+			or not job
+			or not job.destinationEvent
+			or not job.destinationEventChoice
+			or job.destinationEventObjectiveComplete == true
+			or typeof(job.destinationEventObjectivePosition) ~= "Vector3"
+			or type(payload) ~= "table"
+			or tonumber(payload.jobSerial) ~= job.jobSerial then
+			return
+		end
+		local character = player.Character
+		local root = character and character:FindFirstChild("HumanoidRootPart")
+		if not root or (root.Position - job.destinationEventObjectivePosition).Magnitude > 9 then
+			return
+		end
+		job.destinationEventObjectiveComplete = true
 		completeDelivery(player, job.houseName)
 	elseif action == "ChooseRoute" then
 		local job = playerJobs[player]
