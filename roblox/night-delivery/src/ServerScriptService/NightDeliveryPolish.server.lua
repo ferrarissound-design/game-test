@@ -175,9 +175,121 @@ local function awardMissionRewards(player, state)
 	return total, completedNow
 end
 
-local function beginTrackedOrder(player, payload)
+local function disconnectJumpMonitor(order)
+	if order and order.jumpConnection then
+		order.jumpConnection:Disconnect()
+		order.jumpConnection = nil
+	end
+end
+
+local function attachFragileMonitor(player, order)
+	disconnectJumpMonitor(order)
+	if not order or not order.modifier or order.modifier.id ~= "fragile" then
+		return
+	end
+	local humanoid = player.Character and player.Character:FindFirstChildOfClass("Humanoid")
+	if not humanoid then
+		return
+	end
+	order.jumpConnection = humanoid.StateChanged:Connect(function(_, newState)
+		local state = playerState[player]
+		if not state or state.activeOrder ~= order then
+			return
+		end
+		if newState == Enum.HumanoidStateType.Jumping or newState == Enum.HumanoidStateType.Freefall then
+			order.jumpDamaged = true
+		end
+	end)
+end
+
+local function applyModifierSideEffects(player, modifier)
+	local oversized = modifier and modifier.id == "oversized"
+	local softNav = modifier and (modifier.id == "secret" or modifier.id == "mystery")
+	player:SetAttribute("NightDeliveryBikeBlocked", oversized == true)
+	player:SetAttribute("NightDeliveryNavSoft", softNav == true)
+
+	if oversized and player:GetAttribute("BikeActive") == true then
+		player:SetAttribute("BikeActive", false)
+		local character = player.Character
+		local bike = character and character:FindFirstChild("DeliveryBikeVisual")
+		if bike then
+			bike:Destroy()
+		end
+		local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+		if humanoid then
+			humanoid.WalkSpeed = 20 + ((player:GetAttribute("SpeedLevel") or 0) * 2)
+		end
+		deliveryEvent:FireClient(player, "BikeMode", {
+			active = false,
+			speedLevel = player:GetAttribute("SpeedLevel") or 0,
+		})
+	end
+end
+
+local function prepareOrderFromAttributes(player)
 	local state = playerState[player]
-	if not state or type(payload) ~= "table" then
+	if not state then
+		return nil
+	end
+
+	local jobSerial = tonumber(player:GetAttribute("NightDeliveryJobSerial"))
+	local jobTypeId = tostring(player:GetAttribute("NightDeliveryJobType") or "")
+	local houseName = tostring(player:GetAttribute("NightDeliveryHouseName") or "")
+	if not jobSerial or jobSerial <= 0 or houseName == "" or not JOB_LIMITS[jobTypeId] then
+		return nil
+	end
+
+	if state.preparedOrder and state.preparedOrder.jobSerial == jobSerial then
+		return state.preparedOrder
+	end
+
+	if state.activeOrder and state.activeOrder.jobSerial ~= jobSerial then
+		disconnectJumpMonitor(state.activeOrder)
+		state.activeOrder = nil
+	end
+
+	local requestedModifierId = player:GetAttribute("NightDeliveryRequestedModifier")
+	local modifier = findModifier(requestedModifierId) or chooseModifier()
+	local publicModifier = {
+		jobSerial = jobSerial,
+		id = modifier.id,
+		title = modifier.title,
+		description = modifier.description,
+		reward = modifier.reward,
+		minGrade = modifier.minGrade,
+	}
+
+	state.preparedOrder = {
+		jobSerial = jobSerial,
+		jobTypeId = jobTypeId,
+		houseName = houseName,
+		modifier = modifier,
+		publicModifier = publicModifier,
+	}
+	applyModifierSideEffects(player, modifier)
+	return state.preparedOrder
+end
+
+local function startPreparedOrder(player)
+	local state = playerState[player]
+	if not state then
+		return
+	end
+	local jobSerial = tonumber(player:GetAttribute("NightDeliveryJobSerial"))
+	local prepared = state.preparedOrder
+	if not prepared or prepared.jobSerial ~= jobSerial then
+		prepared = prepareOrderFromAttributes(player)
+	end
+	if not prepared then
+		return
+	end
+
+	local timeLimit = tonumber(player:GetAttribute("NightDeliveryTimeLimit"))
+	local startedAt = tonumber(player:GetAttribute("NightDeliveryOrderStartedAt"))
+	if not timeLimit or not startedAt then
+		return
+	end
+	if state.activeOrder and state.activeOrder.jobSerial == prepared.jobSerial then
 		return
 	end
 
@@ -186,84 +298,36 @@ local function beginTrackedOrder(player, payload)
 		return
 	end
 
-	if state.activeOrder and state.activeOrder.baselineDeliveries == deliveries.Value then
-		deliveryEvent:FireClient(player, "PolishOrderModifier", state.activeOrder.publicModifier)
-		return
+	if state.activeOrder then
+		disconnectJumpMonitor(state.activeOrder)
 	end
-
-	local jobTypeId = tostring(payload.jobTypeId or "standard")
-	if not JOB_LIMITS[jobTypeId] then
-		return
-	end
-
-	local jobSerial = tonumber(player:GetAttribute("NightDeliveryJobSerial"))
-	local timeLimit = tonumber(player:GetAttribute("NightDeliveryTimeLimit"))
-	local startedAt = tonumber(player:GetAttribute("NightDeliveryOrderStartedAt"))
-	if not jobSerial or not timeLimit or not startedAt then
-		return
-	end
-	if tonumber(payload.jobSerial) ~= jobSerial
-		or tostring(payload.houseName or "") ~= tostring(player:GetAttribute("NightDeliveryHouseName") or "")
-		or jobTypeId ~= tostring(player:GetAttribute("NightDeliveryJobType") or "") then
-		return
-	end
-
-	local requestedModifierId = player:GetAttribute("NightDeliveryRequestedModifier")
-	local modifier = findModifier(requestedModifierId) or chooseModifier()
-	player:SetAttribute("NightDeliveryBikeBlocked", modifier.id == "oversized")
-	player:SetAttribute("NightDeliveryNavSoft", modifier.id == "secret" or modifier.id == "mystery")
-	if modifier.id == "oversized" and player:GetAttribute("BikeActive") == true then
-		player:SetAttribute("BikeActive", false)
-		local character = player.Character
-		local bike = character and character:FindFirstChild("DeliveryBikeVisual")
-		if bike then bike:Destroy() end
-		local humanoid = character and character:FindFirstChildOfClass("Humanoid")
-		if humanoid then humanoid.WalkSpeed = 20 + ((player:GetAttribute("SpeedLevel") or 0) * 2) end
-		deliveryEvent:FireClient(player, "BikeMode", {active = false, speedLevel = player:GetAttribute("SpeedLevel") or 0})
-	end
-	local publicModifier = {
-		id = modifier.id,
-		title = modifier.title,
-		description = modifier.description,
-		reward = modifier.reward,
-		minGrade = modifier.minGrade,
-	}
-
-	local authoritativeLimit = tonumber(player:GetAttribute("NightDeliveryTimeLimit")) or JOB_LIMITS[jobTypeId]
-	local authoritativeStart = tonumber(player:GetAttribute("NightDeliveryOrderStartedAt")) or os.clock()
-
-	if state.activeOrder and state.activeOrder.jumpConnection then
-		state.activeOrder.jumpConnection:Disconnect()
-	end
-
-	state.activeOrder = {
+	local order = {
 		baselineDeliveries = deliveries.Value,
-		startedAt = authoritativeStart,
-		timeLimit = authoritativeLimit,
-		jobSerial = jobSerial,
-		jobTypeId = jobTypeId,
-		houseName = tostring(payload.houseName or ""),
-		modifier = modifier,
-		publicModifier = publicModifier,
+		startedAt = startedAt,
+		timeLimit = timeLimit,
+		jobSerial = prepared.jobSerial,
+		jobTypeId = prepared.jobTypeId,
+		houseName = prepared.houseName,
+		modifier = prepared.modifier,
+		publicModifier = prepared.publicModifier,
 		jumpDamaged = false,
 	}
-	if modifier.id == "fragile" then
-		local humanoid = player.Character and player.Character:FindFirstChildOfClass("Humanoid")
-		if humanoid then
-			state.activeOrder.jumpConnection = humanoid.StateChanged:Connect(function(_, newState)
-				if newState == Enum.HumanoidStateType.Jumping or newState == Enum.HumanoidStateType.Freefall then
-					if state.activeOrder then
-						state.activeOrder.jumpDamaged = true
-					end
-				end
-			end)
-		end
-	end
-
-	deliveryEvent:FireClient(player, "PolishOrderModifier", publicModifier)
+	state.activeOrder = order
+	attachFragileMonitor(player, order)
 end
 
-local function finishTrackedOrder(player)
+local function sendPreparedModifier(player, requestedSerial)
+	local prepared = prepareOrderFromAttributes(player)
+	if not prepared then
+		return
+	end
+	if requestedSerial and tonumber(requestedSerial) ~= prepared.jobSerial then
+		return
+	end
+	deliveryEvent:FireClient(player, "PolishOrderModifier", prepared.publicModifier)
+end
+
+local function finishTrackedOrder(player)local function finishTrackedOrder(player)
 	local state = playerState[player]
 	if not state or not state.activeOrder then
 		return
@@ -284,12 +348,16 @@ local function finishTrackedOrder(player)
 			order.jumpConnection:Disconnect()
 		end
 		state.activeOrder = nil
+		if state.preparedOrder and state.preparedOrder.jobSerial == order.jobSerial then
+			state.preparedOrder = nil
+		end
 		return
 	end
-	if order.jumpConnection then
-		order.jumpConnection:Disconnect()
-	end
+	disconnectJumpMonitor(order)
 	state.activeOrder = nil
+	if state.preparedOrder and state.preparedOrder.jobSerial == order.jobSerial then
+		state.preparedOrder = nil
+	end
 
 	local elapsed = math.max(0, os.clock() - order.startedAt)
 	local timeLimit = order.timeLimit or JOB_LIMITS[order.jobTypeId] or JOB_LIMITS.standard
@@ -338,9 +406,49 @@ local function initializePlayer(player)
 	playerState[player] = {
 		sessionDeliveries = 0,
 		completedMissions = {},
+		preparedOrder = nil,
 		activeOrder = nil,
 		lastRemoteAt = 0,
 	}
+
+	player:GetAttributeChangedSignal("NightDeliveryJobSerial"):Connect(function()
+		task.defer(function()
+			if player.Parent then
+				prepareOrderFromAttributes(player)
+			end
+		end)
+	end)
+	player:GetAttributeChangedSignal("NightDeliveryOrderStartedAt"):Connect(function()
+		task.defer(function()
+			if player.Parent then
+				startPreparedOrder(player)
+			end
+		end)
+	end)
+	player:GetAttributeChangedSignal("NightDeliveryCompletedJobSerial"):Connect(function()
+		task.defer(function()
+			if player.Parent then
+				finishTrackedOrder(player)
+			end
+		end)
+	end)
+	player.CharacterAdded:Connect(function(character)
+		task.spawn(function()
+			character:WaitForChild("Humanoid", 10)
+			local state = playerState[player]
+			local order = state and state.activeOrder
+			if order and order.modifier and order.modifier.id == "fragile" then
+				attachFragileMonitor(player, order)
+			end
+		end)
+	end)
+
+	task.defer(function()
+		if player.Parent then
+			prepareOrderFromAttributes(player)
+			startPreparedOrder(player)
+		end
+	end)
 end
 
 for _, player in ipairs(Players:GetPlayers()) do
@@ -350,9 +458,8 @@ end
 Players.PlayerAdded:Connect(initializePlayer)
 Players.PlayerRemoving:Connect(function(player)
 	local state = playerState[player]
-	local order = state and state.activeOrder
-	if order and order.jumpConnection then
-		order.jumpConnection:Disconnect()
+	if state and state.activeOrder then
+		disconnectJumpMonitor(state.activeOrder)
 	end
 	playerState[player] = nil
 end)
@@ -367,23 +474,19 @@ deliveryEvent.OnServerEvent:Connect(function(player, action, payload)
 	if action == "PolishRequestState" then
 		sendSessionState(player)
 		return
-	end
-
-	local now = os.clock()
-	if action ~= "PolishJobSeen" and action ~= "PolishDeliveryComplete"
-		and now - state.lastRemoteAt < 0.08 then
+	elseif action == "PolishRequestOrderModifier" then
+		local now = os.clock()
+		if now - state.lastRemoteAt < 0.08 then
+			return
+		end
+		state.lastRemoteAt = now
+		local requestedSerial = type(payload) == "table" and payload.jobSerial or nil
+		sendPreparedModifier(player, requestedSerial)
 		return
-	end
-	state.lastRemoteAt = now
-
-	if action == "PolishJobSeen" then
-		beginTrackedOrder(player, payload)
-	elseif action == "PolishDeliveryComplete" then
-		finishTrackedOrder(player)
 	end
 end)
 
--- Decorative release-candidate pass. Everything is generated from primitives,
+-- Decorative release-candidate pass.-- Decorative release-candidate pass. Everything is generated from primitives,
 -- so the project stays portable and needs no external assets.
 local function makePart(parent, name, size, cframe, color, material)
 	local part = Instance.new("Part")
