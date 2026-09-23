@@ -1454,8 +1454,6 @@ local function assignJob(player)
 	player:SetAttribute("NightDeliveryHouseName", target.Name)
 	playerJobs[player] = {
 		jobSerial = jobSerial,
-		houseName = target.Name,
-		jobSerial = jobSerial,
 		displayName = target:GetAttribute("DisplayName") or target.Name,
 		districtId = districtId,
 		districtName = districtName,
@@ -1473,6 +1471,7 @@ local function assignJob(player)
 
 	sendStatus(player, "JobAssigned", {
 		houseName = target.Name,
+		jobSerial = jobSerial,
 		displayName = target:GetAttribute("DisplayName") or target.Name,
 		districtId = districtId,
 		districtName = districtName,
