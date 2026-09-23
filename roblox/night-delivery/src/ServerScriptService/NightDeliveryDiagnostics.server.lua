@@ -2,6 +2,11 @@
 -- Read-only structural checks that make Studio QA faster after Rojo sync.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local RunService = game:GetService("RunService")
+
+if not RunService:IsStudio() then
+	return
+end
 
 local REMOTE_NAME = "NightDeliveryEvent"
 local WORLD_NAME = "NightDeliveryWorld"
