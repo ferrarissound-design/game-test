@@ -31,6 +31,7 @@ local travelEventBlocking = false
 local travelEventExpiresAt = nil
 local travelEventResolving = false
 local travelEventBaseBody = ""
+local travelEventReward = 0
 local travelEventMessageSerial = 0
 local resultSerial = 0
 local rumorSerial = 0
@@ -974,7 +975,7 @@ local travelEventFrame = Instance.new("Frame")
 travelEventFrame.Name = "TravelEvent"
 travelEventFrame.Size = UDim2.fromOffset(370, 92)
 travelEventFrame.AnchorPoint = Vector2.new(0.5, 0)
-travelEventFrame.Position = UDim2.new(0.5, 0, 0, 84)
+travelEventFrame.Position = UDim2.new(0.5, 0, 0, 154)
 travelEventFrame.BackgroundColor3 = Color3.fromRGB(24, 31, 42)
 travelEventFrame.BackgroundTransparency = 0.04
 travelEventFrame.Visible = false
@@ -1023,6 +1024,7 @@ local function clearTravelEvent(restoreTarget, hideFrame)
 	travelEventExpiresAt = nil
 	travelEventResolving = false
 	travelEventBaseBody = ""
+	travelEventReward = 0
 	if hideFrame ~= false then
 		travelEventFrame.Visible = false
 	end
@@ -1079,6 +1081,7 @@ local function showTravelEvent(payload)
 	travelEventExpiresAt = tonumber(payload.expiresAt)
 	travelEventResolving = false
 	travelEventBaseBody = tostring(payload.body or "")
+	travelEventReward = math.max(0, tonumber(payload.reward) or 0)
 	travelEventPart = makeTravelMarker(payload.position, eventId)
 
 	if travelEventBlocking and typeof(payload.obstaclePosition) == "Vector3" then
@@ -1126,11 +1129,10 @@ local function showTravelEvent(payload)
 	end
 
 	travelEventTitle.Text = tostring(payload.title or "道中イベント")
-	local reward = math.max(0, tonumber(payload.reward) or 0)
 	if travelEventBlocking then
-		travelEventBody.Text = string.format("%s  解決すると +%d Coins", travelEventBaseBody, reward)
+		travelEventBody.Text = string.format("%s  解決すると +%d Coins", travelEventBaseBody, travelEventReward)
 	else
-		travelEventBody.Text = string.format("%s  寄り道成功で +%d Coins", travelEventBaseBody, reward)
+		travelEventBody.Text = string.format("%s  寄り道成功で +%d Coins", travelEventBaseBody, travelEventReward)
 	end
 	travelEventFrame.Visible = true
 end
@@ -1498,7 +1500,7 @@ RunService.RenderStepped:Connect(function()
 	if travelEventFrame.Visible and travelEventExpiresAt and travelEventSerial then
 		local eventRemaining = math.max(0, math.ceil(travelEventExpiresAt - workspace:GetServerTimeNow()))
 		if travelEventBaseBody ~= "" then
-			travelEventBody.Text = string.format("%s  残り%d秒", travelEventBaseBody, eventRemaining)
+			travelEventBody.Text = string.format("%s  +%d Coins  残り%d秒", travelEventBaseBody, travelEventReward, eventRemaining)
 		end
 	end
 
@@ -1544,6 +1546,7 @@ local function updateResponsiveScale()
 		nightBadge.Size = UDim2.new(0, 205, 0, 48)
 		nightBadge.Position = UDim2.new(1, -10, 0, 78)
 		sideOfferFrame.Position = UDim2.new(0.5, 0, 0, 132)
+		travelEventFrame.Position = UDim2.new(0.5, 0, 0, 204)
 		nightName.TextSize = 11
 		nightDescription.TextSize = 9
 		missionFrame.Size = UDim2.fromOffset(210, 76)
@@ -1579,6 +1582,7 @@ local function updateResponsiveScale()
 		nightBadge.Size = UDim2.fromOffset(250, 52)
 		nightBadge.Position = UDim2.new(1, -14, 0, 12)
 		sideOfferFrame.Position = UDim2.new(0.5, 0, 0, 86)
+		travelEventFrame.Position = UDim2.new(0.5, 0, 0, 154)
 		nightName.TextSize = 12
 		nightDescription.TextSize = 10
 		missionFrame.Size = UDim2.fromOffset(255, 82)
