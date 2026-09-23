@@ -1470,8 +1470,6 @@ deliveryEvent.OnClientEvent:Connect(function(action, payload)
 					modifierFrame.Visible = false
 				end
 			end)
-		elseif currentModifier then
-			showModifier(currentModifier)
 		end
 	elseif action == "RareAnomaly" then
 		showRareAnomaly(payload)
