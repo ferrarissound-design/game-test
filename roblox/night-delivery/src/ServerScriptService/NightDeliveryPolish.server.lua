@@ -327,7 +327,7 @@ local function sendPreparedModifier(player, requestedSerial)
 	deliveryEvent:FireClient(player, "PolishOrderModifier", prepared.publicModifier)
 end
 
-local function finishTrackedOrder(player)local function finishTrackedOrder(player)
+local function finishTrackedOrder(player)
 	local state = playerState[player]
 	if not state or not state.activeOrder then
 		return
@@ -486,7 +486,7 @@ deliveryEvent.OnServerEvent:Connect(function(player, action, payload)
 	end
 end)
 
--- Decorative release-candidate pass.-- Decorative release-candidate pass. Everything is generated from primitives,
+-- Decorative release-candidate pass. Everything is generated from primitives,
 -- so the project stays portable and needs no external assets.
 local function makePart(parent, name, size, cframe, color, material)
 	local part = Instance.new("Part")
