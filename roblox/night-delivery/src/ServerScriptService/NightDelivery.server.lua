@@ -1603,7 +1603,7 @@ local function assignJob(player)
 	local callbackHouse = neighborhoodCallback
 		and housesFolder:FindFirstChild(neighborhoodCallback.targetHouseName)
 		or nil
-	if callbackHouse and not isHouseUnlocked(player, callbackHouse) then
+	if neighborhoodCallback and (not callbackHouse or not isHouseUnlocked(player, callbackHouse)) then
 		callbackHouse = nil
 		playerPendingNeighborhoodStory[player] = nil
 		neighborhoodCallback = nil
