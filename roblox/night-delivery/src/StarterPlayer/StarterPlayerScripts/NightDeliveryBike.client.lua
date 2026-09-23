@@ -26,6 +26,7 @@ local function cacheCharacter(player, character)
 			humanoid = humanoid,
 			joints = joints,
 			phase = 0,
+			wasBikeActive = false,
 		}
 	end)
 end
@@ -61,15 +62,29 @@ local function poseJoint(joints, name, pitch, yaw, roll)
 	end
 end
 
+local function resetBikePose(state)
+	for _, joint in pairs(state.joints) do
+		if joint and joint.Parent and joint:IsA("Motor6D") then
+			joint.Transform = CFrame.identity
+		end
+	end
+end
+
 RunService.PreSimulation:Connect(function(deltaTime)
 	for player, state in pairs(characterStates) do
 		if not state.character.Parent or not state.humanoid.Parent then
 			characterStates[player] = nil
 			continue
 		end
-		if player:GetAttribute("BikeActive") ~= true then
+		local bikeActive = player:GetAttribute("BikeActive") == true
+		if not bikeActive then
+			if state.wasBikeActive then
+				resetBikePose(state)
+				state.wasBikeActive = false
+			end
 			continue
 		end
+		state.wasBikeActive = true
 
 		local isMoving = state.humanoid.MoveDirection.Magnitude > 0.05
 		state.phase += deltaTime * (isMoving and 9 or 0.25)
