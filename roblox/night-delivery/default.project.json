@@ -20,6 +20,9 @@
         },
         "NightDeliveryPolishClient": {
           "$path": "src/StarterPlayer/StarterPlayerScripts/NightDeliveryPolish.client.lua"
+        },
+        "NightDeliveryBikeClient": {
+          "$path": "src/StarterPlayer/StarterPlayerScripts/NightDeliveryBike.client.lua"
         }
       }
     }
