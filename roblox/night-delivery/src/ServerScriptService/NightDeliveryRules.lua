@@ -44,6 +44,23 @@ Rules.TravelEvents = {
 	},
 }
 
+Rules.NeighborhoodCallbacks = {
+	lost_item = {
+		title = "拾った落とし物の行き先",
+		threadStartedText = "落とし物に名前があった。この街の誰かの物らしい。",
+		reaction = "それ、うちの家族が探していた物です！ 拾ってくれて本当にありがとう。",
+		reward = 90,
+		kindness = 1,
+	},
+	help_request = {
+		title = "さっき助けた人とのつながり",
+		threadStartedText = "さっき助けた人が、この近所の家族の話をしていた。",
+		reaction = "さっき家族を助けてくれた配達員さんですよね？ ありがとう、助かりました。",
+		reward = 70,
+		kindness = 1,
+	},
+}
+
 Rules.DestinationEvents = {
 	{
 		id = "absent",
