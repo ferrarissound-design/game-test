@@ -476,6 +476,7 @@ deliveryEvent.OnClientEvent:Connect(function(action, payload)
 		deliveryEvent:FireServer("PolishJobSeen", {
 			jobTypeId = currentJobTypeId,
 			houseName = payload.houseName,
+			jobSerial = payload.jobSerial,
 		})
 
 		if introFrame.Visible then
