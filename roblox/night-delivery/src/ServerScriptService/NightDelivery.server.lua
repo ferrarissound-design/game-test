@@ -1768,6 +1768,7 @@ local function completeDelivery(player, houseName)
 	local warehouseUnlocked = deliveriesAfter == WAREHOUSE_UNLOCK_DELIVERIES
 
 	local hasNextStops = type(job.extraStops) == "table" and #job.extraStops > 0
+	job.sideOffer = nil
 	if hasNextStops then
 		job.houseName = nil
 	end
