@@ -604,11 +604,13 @@ deliveryEvent.OnClientEvent:Connect(function(action, payload)
 		)
 		jobLabel.TextColor3 = currentJobTypeId == "special"
 			and Color3.fromRGB(214, 156, 255)
-			or Color3.fromRGB(157, 190, 225)
+			or (currentJobTypeId == "rush" and Color3.fromRGB(255, 207, 110) or Color3.fromRGB(157, 190, 225))
 
 		setWaypoint(currentHouseName)
 		if currentJobTypeId == "special" then
 			showToast("🟣 深夜特別便！ 高報酬のレア依頼だ。")
+		elseif currentJobTypeId == "rush" then
+			showToast("⚡ 急ぎ便！ 短い制限時間で届けよう。")
 		else
 			showToast("荷物を受け取った。黄色く光る家へ届けよう。")
 		end
