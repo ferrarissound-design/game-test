@@ -5,6 +5,7 @@
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Lighting = game:GetService("Lighting")
+local RunService = game:GetService("RunService")
 
 local REMOTE_NAME = "NightDeliveryEvent"
 local WORLD_NAME = "NightDeliveryWorld"
@@ -65,7 +66,27 @@ local function getStats(player)
 	return leaderstats:FindFirstChild("Coins"), leaderstats:FindFirstChild("Deliveries")
 end
 
+local function findModifier(id)
+	for _, modifier in ipairs(ORDER_MODIFIERS) do
+		if modifier.id == id then
+			return modifier
+		end
+	end
+	return nil
+end
+
 local function chooseModifier()
+	if RunService:IsStudio() then
+		local world = workspace:FindFirstChild(WORLD_NAME)
+		local forcedId = world and tostring(world:GetAttribute("QAForceModifierId") or "") or ""
+		if forcedId ~= "" then
+			local forced = findModifier(forcedId)
+			if forced then
+				return forced
+			end
+		end
+	end
+
 	local totalWeight = 0
 	for _, modifier in ipairs(ORDER_MODIFIERS) do
 		totalWeight += modifier.weight
@@ -80,15 +101,6 @@ local function chooseModifier()
 		end
 	end
 	return ORDER_MODIFIERS[1]
-end
-
-local function findModifier(id)
-	for _, modifier in ipairs(ORDER_MODIFIERS) do
-		if modifier.id == id then
-			return modifier
-		end
-	end
-	return nil
 end
 
 local function calculateGrade(elapsed, timeLimit)
