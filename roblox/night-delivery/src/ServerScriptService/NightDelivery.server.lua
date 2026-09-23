@@ -158,6 +158,7 @@ local playerStreak = {}
 local playerShiftProgress = {}
 local remoteLastAction = {}
 local playerDataLoadSucceeded = {}
+local playerSaveInProgress = {}
 local currentWeather = WEATHER_TYPES[1]
 local shopPadRef = nil
 local jobCounterRef = nil
@@ -1497,11 +1498,15 @@ local function getDeliveryDistance(house)
 	return (deliveryPoint.Position - counter.Position).Magnitude
 end
 
-local function getJobTimeLimit(jobType, house)
+local function getJobTimeLimitForDistance(jobType, distance)
 	local profile = JOB_TIME_PROFILES[jobType.id] or JOB_TIME_PROFILES.standard
-	local estimatedWalkingTime = getDeliveryDistance(house) * ROUTE_DISTANCE_FACTOR / BASE_WALK_SPEED
+	local estimatedWalkingTime = math.max(0, tonumber(distance) or 0) * ROUTE_DISTANCE_FACTOR / BASE_WALK_SPEED
 	local seconds = estimatedWalkingTime * profile.paceMultiplier + profile.setupSeconds
 	return math.clamp(math.ceil(seconds), profile.minimum, profile.maximum)
+end
+
+local function getJobTimeLimit(jobType, house)
+	return getJobTimeLimitForDistance(jobType, getDeliveryDistance(house))
 end
 
 local function buildNeighborhoodStory(sourceId, targetHouseName)
@@ -1530,10 +1535,21 @@ local function queueNeighborhoodStory(player, sourceId)
 	end
 
 	local candidates = {}
-	local currentHouseName = playerJobs[player] and playerJobs[player].houseName or nil
+	local activeJob = playerJobs[player]
+	local currentHouseName = activeJob and activeJob.houseName or nil
+	local excludedHouses = {}
+	if activeJob then
+		for _, stop in ipairs(activeJob.extraStops or {}) do
+			excludedHouses[stop.houseName] = true
+		end
+		for completedHouseName in pairs(activeJob.completedHouseNames or {}) do
+			excludedHouses[completedHouseName] = true
+		end
+	end
 	for _, house in ipairs(housesFolder:GetChildren()) do
 		if house.Name ~= currentHouseName
 			and house.Name ~= playerLastHouse[player]
+			and not excludedHouses[house.Name]
 			and house:GetAttribute("DistrictId") ~= "warehouse"
 			and isHouseUnlocked(player, house) then
 			table.insert(candidates, house)
@@ -1542,6 +1558,7 @@ local function queueNeighborhoodStory(player, sourceId)
 	if #candidates == 0 then
 		for _, house in ipairs(housesFolder:GetChildren()) do
 			if house.Name ~= currentHouseName
+				and not excludedHouses[house.Name]
 				and house:GetAttribute("DistrictId") ~= "warehouse"
 				and isHouseUnlocked(player, house) then
 				table.insert(candidates, house)
@@ -1657,6 +1674,7 @@ local function assignJob(player)
 		baseTimeLimit = baseTimeLimit,
 		bagCapacity = math.clamp(1 + (player:GetAttribute("BagStyleLevel") or 0), 1, 3),
 		extraStops = {},
+		completedHouseNames = {},
 		residentName = target:GetAttribute("ResidentName") or "住人",
 		residentFirstLine = target:GetAttribute("ResidentFirstLine") or "配達ありがとう。",
 		residentReturnLine = target:GetAttribute("ResidentReturnLine") or "今夜もありがとう。",
@@ -1823,11 +1841,6 @@ local function findSafeTravelPoint(player, origin, flatDirection, right, forward
 	return nil
 end
 
-local function horizontalDistance(a, b)
-	local delta = a - b
-	return Vector3.new(delta.X, 0, delta.Z).Magnitude
-end
-
 local function scheduleTravelEvent(player, jobSerial)
 	task.delay(math.random(4, 7), function()
 		local job = playerJobs[player]
@@ -1836,7 +1849,8 @@ local function scheduleTravelEvent(player, jobSerial)
 			or job.jobSerial ~= jobSerial
 			or not job.houseName
 			or not job.routeChoice
-			or job.travelEventStarted then
+			or job.travelEventStarted
+			or playerPendingNeighborhoodStory[player] then
 			return
 		end
 		job.travelEventStarted = true
@@ -1983,6 +1997,22 @@ local function completeDelivery(player, houseName)
 
 	if job.destinationEvent and not job.destinationEventChoice then
 		if not job.destinationEventPrompted then
+			if job.travelEventActive and not job.travelEventBlocking then
+				local skippedTravelId = job.travelEventId
+				job.travelEventActive = false
+				job.travelEventBlocking = false
+				job.travelEventObjectivePosition = nil
+				job.travelEventId = nil
+				job.travelEventExpiresAt = nil
+				sendStatus(player, "TravelEventExpired", {
+					jobSerial = job.jobSerial,
+					id = skippedTravelId,
+					title = "目的地に到着",
+					blocking = false,
+					reason = "destination_reached",
+				})
+			end
+			job.sideOffer = nil
 			job.destinationEventPrompted = true
 			sendStatus(player, "DestinationEvent", {
 				jobSerial = job.jobSerial,
@@ -2116,6 +2146,8 @@ local function completeDelivery(player, houseName)
 	local specialJobsUnlocked = deliveriesAfter == SPECIAL_JOB_UNLOCK_DELIVERIES
 	local warehouseUnlocked = deliveriesAfter == WAREHOUSE_UNLOCK_DELIVERIES
 
+	job.completedHouseNames = job.completedHouseNames or {}
+	job.completedHouseNames[houseName] = true
 	local hasNextStops = type(job.extraStops) == "table" and #job.extraStops > 0
 	job.sideOffer = nil
 	if hasNextStops then
@@ -2202,6 +2234,7 @@ local function sendSideRequestOffer(player, jobSerial)
 	end
 	if not job or job.jobSerial ~= jobSerial or not job.houseName
 		or job.sideOffer or job.travelEventActive or job.neighborhoodCallback
+		or job.destinationEventPrompted or job.destinationEventChoice
 		or playerPendingNeighborhoodStory[player]
 		or #job.extraStops >= (job.bagCapacity - 1)
 		or math.random() > 0.38 then
@@ -2215,6 +2248,9 @@ local function sendSideRequestOffer(player, jobSerial)
 	end
 	local used = {[job.houseName] = true}
 	for _, stop in ipairs(job.extraStops) do used[stop.houseName] = true end
+	for completedHouseName in pairs(job.completedHouseNames or {}) do
+		used[completedHouseName] = true
+	end
 	local candidates = {}
 	for _, house in ipairs(housesFolder:GetChildren()) do
 		local point = house:FindFirstChild("DeliveryPoint")
@@ -2294,7 +2330,16 @@ local function startNextStop(player, job, stopIndex)
 	job.shortcutReward = ROUTE_CHOICES.shortcut.reward + (currentNightRule.id == "roadwork" and 40 or 0)
 	job.isAnomaly = math.random() <= RULES.RareAnomalyChance
 	job.isSideRequest = true
-	job.baseTimeLimit = math.min(getJobTimeLimit(findJobType(job.jobTypeId), target), stop.timeLimit or 35)
+	local targetPoint = target:FindFirstChild("DeliveryPoint")
+	local character = player.Character
+	local root = character and character:FindFirstChild("HumanoidRootPart")
+	local sideDistance = root and targetPoint
+		and (root.Position - targetPoint.Position).Magnitude
+		or getDeliveryDistance(target)
+	job.baseTimeLimit = math.min(
+		getJobTimeLimitForDistance(findJobType(job.jobTypeId), sideDistance),
+		stop.timeLimit or 35
+	)
 	job.routeChoice = nil
 	job.expiresAt = nil
 	job.startedAt = nil
@@ -2463,9 +2508,18 @@ local function saveData(player)
 		return false
 	end
 
+	while playerSaveInProgress[player] do
+		task.wait(0.05)
+	end
+	if playerDataLoadSucceeded[player] ~= true then
+		return false
+	end
+	playerSaveInProgress[player] = true
+
 	local stats = getStats(player)
 	if not stats or not stats.coins or not stats.deliveries then
-		return
+		playerSaveInProgress[player] = nil
+		return false
 	end
 
 	local pendingNeighborhoodStory = playerPendingNeighborhoodStory[player]
@@ -2493,6 +2547,7 @@ local function saveData(player)
 			end)
 		end)
 		if success then
+			playerSaveInProgress[player] = nil
 			return true
 		end
 		warn("Night Delivery: DataStore save attempt failed for", player.Name, attempt, err)
@@ -2500,6 +2555,7 @@ local function saveData(player)
 	end
 
 	warn("Night Delivery: DataStore save failed after retries for", player.Name, err)
+	playerSaveInProgress[player] = nil
 	return false
 end
 
@@ -2575,6 +2631,7 @@ local function buyNextStyle(player, kind)
 	player:SetAttribute(attributeName, nextLevel)
 
 	if kind == "bag" and playerJobs[player] then
+		playerJobs[player].bagCapacity = math.clamp(1 + nextLevel, 1, 3)
 		addParcelVisual(player, playerJobs[player].jobTypeId)
 	elseif kind == "bike" then
 		addBikeVisual(player)
@@ -2587,7 +2644,7 @@ local function buyNextStyle(player, kind)
 	sendShopState(player)
 end
 
-local function applyWeather(weather)
+local function applyWeather(weather, announceWeather, announceNightCondition)
 	currentWeather = weather
 	Lighting.Ambient = selectedWorldTheme.id == "harbor"
 		and Color3.fromRGB(53, 64, 76)
@@ -2643,18 +2700,26 @@ local function applyWeather(weather)
 	end
 
 	for _, player in ipairs(Players:GetPlayers()) do
+		player:SetAttribute(
+			"NightDeliveryNightNavSoft",
+			currentNightRule.id == "fog" or currentNightRule.id == "blackout"
+		)
 		applyMovementSpeed(player)
 	end
-	deliveryEvent:FireAllClients("NightConditionChanged", {
-		id = currentNightRule.id,
-		name = currentNightRule.name,
-		description = currentNightRule.description,
-	})
-	deliveryEvent:FireAllClients("WeatherChanged", {
-		weatherId = weather.id,
-		weatherName = weather.name,
-		rewardMultiplier = weather.rewardMultiplier,
-	})
+	if announceNightCondition == true then
+		deliveryEvent:FireAllClients("NightConditionChanged", {
+			id = currentNightRule.id,
+			name = currentNightRule.name,
+			description = currentNightRule.description,
+		})
+	end
+	if announceWeather == true then
+		deliveryEvent:FireAllClients("WeatherChanged", {
+			weatherId = weather.id,
+			weatherName = weather.name,
+			rewardMultiplier = weather.rewardMultiplier,
+		})
+	end
 end
 
 local function startWeatherLoop()
@@ -2667,7 +2732,7 @@ local function startWeatherLoop()
 					table.insert(candidates, weather)
 				end
 			end
-			applyWeather(candidates[math.random(1, #candidates)])
+			applyWeather(candidates[math.random(1, #candidates)], true, false)
 		end
 	end)
 end
@@ -2844,7 +2909,7 @@ deliveryEvent.OnServerEvent:Connect(function(player, action, payload)
 		end
 		local character = player.Character
 		local root = character and character:FindFirstChild("HumanoidRootPart")
-		if not root or horizontalDistance(root.Position, job.destinationEventObjectivePosition) > 9 then
+		if not root or (root.Position - job.destinationEventObjectivePosition).Magnitude > 10 then
 			return
 		end
 		job.destinationEventObjectiveComplete = true
@@ -2866,7 +2931,7 @@ deliveryEvent.OnServerEvent:Connect(function(player, action, payload)
 
 		local character = player.Character
 		local root = character and character:FindFirstChild("HumanoidRootPart")
-		if not root or horizontalDistance(root.Position, job.travelEventObjectivePosition) > 9 then
+		if not root or (root.Position - job.travelEventObjectivePosition).Magnitude > 10 then
 			return
 		end
 
@@ -2968,7 +3033,7 @@ end)
 
 currentNightRule = RULES.chooseWeighted(RULES.NightConditions)
 world:SetAttribute("NightConditionId", currentNightRule.id)
-applyWeather(currentWeather)
+applyWeather(currentWeather, false, false)
 startWeatherLoop()
 
 task.spawn(function()
@@ -2976,7 +3041,7 @@ task.spawn(function()
 		task.wait(240)
 		currentNightRule = RULES.chooseWeighted(RULES.NightConditions, currentNightRule.id)
 		world:SetAttribute("NightConditionId", currentNightRule.id)
-		applyWeather(currentWeather)
+		applyWeather(currentWeather, false, true)
 	end
 end)
 
@@ -3017,6 +3082,10 @@ local function setupPlayer(player)
 	player:SetAttribute("NightDeliveryJobType", nil)
 	player:SetAttribute("NightDeliveryHouseName", nil)
 	player:SetAttribute("NightDeliveryBikeBlocked", false)
+	player:SetAttribute(
+		"NightDeliveryNightNavSoft",
+		currentNightRule.id == "fog" or currentNightRule.id == "blackout"
+	)
 	player:SetAttribute("NightDeliveryRequestedModifier", nil)
 	player:SetAttribute("BagStyleLevel", data.bagStyleLevel)
 	player:SetAttribute("BikeStyleLevel", data.bikeStyleLevel)

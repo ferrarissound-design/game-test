@@ -1391,7 +1391,9 @@ deliveryEvent.OnClientEvent:Connect(function(action, payload)
 		end
 	elseif action == "TravelEventExpired" then
 		if tonumber(payload.jobSerial) == tonumber(travelEventSerial) then
-			if payload.blocking == true then
+			if payload.reason == "destination_reached" then
+				clearTravelEvent(true, true)
+			elseif payload.blocking == true then
 				showTravelEventOutcome(
 					"通行止め解除",
 					"工事車両が移動した。通常ルートで配達を続けよう。",
@@ -1429,6 +1431,9 @@ deliveryEvent.OnClientEvent:Connect(function(action, payload)
 	elseif action == "NextStopOptions" then
 		showNextStops(payload)
 	elseif action == "DestinationEvent" then
+		sideOfferSerial += 1
+		sideOfferFrame.Visible = false
+		sideOfferHouseName = nil
 		clearEventObjective()
 		showEventAppearance(tostring(payload.id or ""))
 		destinationEventSerial = tonumber(payload.jobSerial)
@@ -1465,8 +1470,6 @@ deliveryEvent.OnClientEvent:Connect(function(action, payload)
 					modifierFrame.Visible = false
 				end
 			end)
-		elseif currentModifier then
-			showModifier(currentModifier)
 		end
 	elseif action == "RareAnomaly" then
 		showRareAnomaly(payload)
@@ -1561,7 +1564,10 @@ RunService.RenderStepped:Connect(function()
 			eventObjectiveButton.Text = string.format("指定位置まであと %d studs", math.max(0, math.floor(distance)))
 		end
 	end
-	local navSoft = player:GetAttribute("NightDeliveryNavSoft") == true and distance > 70
+	local navSoft = (
+		player:GetAttribute("NightDeliveryNavSoft") == true
+		or player:GetAttribute("NightDeliveryNightNavSoft") == true
+	) and distance > 70
 	navFrame.Visible = not navSoft
 	local angle = getFlatDirectionAngle(camera, currentTarget.Position, root.Position)
 	arrow.Rotation = angle
