@@ -20,6 +20,7 @@ local orderStartedAt = nil
 local orderExpiresAt = nil
 local currentModifier = nil
 local resultSerial = 0
+local rumorSerial = 0
 
 local gui = Instance.new("ScreenGui")
 gui.Name = "NightDeliveryReleaseUI"
@@ -213,6 +214,55 @@ introBody.TextColor3 = Color3.fromRGB(220, 228, 239)
 local introHint = makeLabel(introFrame, UDim2.new(1, -24, 0, 18), UDim2.fromOffset(12, 132), "配達3件で最初のセッション報酬", 11, Enum.Font.Gotham)
 introHint.TextColor3 = Color3.fromRGB(255, 208, 116)
 
+-- Story clue card appears after a delivery milestone.
+local rumorFrame = Instance.new("Frame")
+rumorFrame.Name = "NeighborhoodRumor"
+rumorFrame.Size = UDim2.fromOffset(440, 144)
+rumorFrame.AnchorPoint = Vector2.new(0.5, 0)
+rumorFrame.Position = UDim2.new(0.5, 0, 0, 12)
+rumorFrame.BackgroundColor3 = Color3.fromRGB(22, 27, 38)
+rumorFrame.BackgroundTransparency = 1
+rumorFrame.Visible = false
+rumorFrame.ZIndex = 50
+rumorFrame.Parent = gui
+addCorner(rumorFrame, 14)
+local rumorStroke = addStroke(rumorFrame, Color3.fromRGB(255, 207, 120), 1, 1.4)
+
+local rumorKicker = makeLabel(rumorFrame, UDim2.new(1, -58, 0, 20), UDim2.fromOffset(12, 7), "街のうわさ", 11, Enum.Font.GothamBold)
+rumorKicker.TextColor3 = Color3.fromRGB(255, 207, 120)
+rumorKicker.ZIndex = 51
+
+local rumorClose = Instance.new("TextButton")
+rumorClose.Name = "CloseRumor"
+rumorClose.Size = UDim2.fromOffset(28, 28)
+rumorClose.Position = UDim2.new(1, -36, 0, 4)
+rumorClose.BackgroundTransparency = 1
+rumorClose.Text = "×"
+rumorClose.TextColor3 = Color3.fromRGB(185, 198, 216)
+rumorClose.TextSize = 22
+rumorClose.Font = Enum.Font.Gotham
+rumorClose.ZIndex = 52
+rumorClose.Parent = rumorFrame
+
+local rumorTitle = makeLabel(rumorFrame, UDim2.new(1, -24, 0, 24), UDim2.fromOffset(12, 29), "", 16, Enum.Font.GothamBold)
+rumorTitle.TextColor3 = Color3.fromRGB(245, 248, 255)
+rumorTitle.ZIndex = 51
+
+local rumorBody = makeLabel(rumorFrame, UDim2.new(1, -24, 0, 62), UDim2.fromOffset(12, 55), "", 13, Enum.Font.Gotham)
+rumorBody.TextWrapped = true
+rumorBody.TextYAlignment = Enum.TextYAlignment.Top
+rumorBody.TextColor3 = Color3.fromRGB(220, 228, 239)
+rumorBody.ZIndex = 51
+
+local rumorReward = makeLabel(rumorFrame, UDim2.new(1, -24, 0, 18), UDim2.fromOffset(12, 120), "", 11, Enum.Font.GothamMedium)
+rumorReward.TextColor3 = Color3.fromRGB(255, 215, 126)
+rumorReward.ZIndex = 51
+
+rumorClose.Activated:Connect(function()
+	rumorSerial += 1
+	rumorFrame.Visible = false
+end)
+
 local townRevealShown = false
 local townRevealActive = false
 
@@ -303,6 +353,51 @@ local function showIntro()
 		BackgroundTransparency = 0.06,
 		Position = UDim2.new(0.5, 0, 1, -46),
 	}):Play()
+end
+
+local function showRumor(payload)
+	rumorSerial += 1
+	local serial = rumorSerial
+	local chapter = math.clamp(tonumber(payload.chapter) or 1, 1, tonumber(payload.total) or 4)
+	local total = math.max(1, tonumber(payload.total) or 4)
+
+	rumorKicker.Text = string.format("街のうわさ  %d / %d", chapter, total)
+	rumorTitle.Text = tostring(payload.title or "新しい手がかり")
+	rumorBody.Text = tostring(payload.text or "")
+	local reward = math.max(0, tonumber(payload.reward) or 0)
+	rumorReward.Text = reward > 0 and string.format("全てのうわさを解明！ +%d Coins", reward) or "配達を続けると、街の謎が少しずつ見えてくる。"
+
+	rumorFrame.Visible = true
+	rumorFrame.BackgroundTransparency = 1
+	rumorFrame.Position = UDim2.new(0.5, 0, 0, -12)
+	rumorStroke.Transparency = 1
+	for _, label in ipairs({rumorKicker, rumorTitle, rumorBody, rumorReward}) do
+		label.TextTransparency = 1
+	end
+
+	TweenService:Create(rumorFrame, TweenInfo.new(0.24, Enum.EasingStyle.Quint, Enum.EasingDirection.Out), {
+		BackgroundTransparency = 0.06,
+		Position = UDim2.new(0.5, 0, 0, 12),
+	}):Play()
+	TweenService:Create(rumorStroke, TweenInfo.new(0.24), {Transparency = 0.15}):Play()
+	for _, label in ipairs({rumorKicker, rumorTitle, rumorBody, rumorReward}) do
+		TweenService:Create(label, TweenInfo.new(0.24), {TextTransparency = 0}):Play()
+	end
+
+	task.delay(8, function()
+		if serial ~= rumorSerial then
+			return
+		end
+		TweenService:Create(rumorFrame, TweenInfo.new(0.3), {BackgroundTransparency = 1}):Play()
+		TweenService:Create(rumorStroke, TweenInfo.new(0.3), {Transparency = 1}):Play()
+		for _, label in ipairs({rumorKicker, rumorTitle, rumorBody, rumorReward}) do
+			TweenService:Create(label, TweenInfo.new(0.3), {TextTransparency = 1}):Play()
+		end
+		task.wait(0.32)
+		if serial == rumorSerial then
+			rumorFrame.Visible = false
+		end
+	end)
 end
 
 local function setTarget(houseName, displayName)
@@ -519,6 +614,8 @@ deliveryEvent.OnClientEvent:Connect(function(action, payload)
 		deliveryEvent:FireServer("PolishRequestState")
 	elseif action == "PolishSessionState" then
 		updateMissionCard(payload.missions)
+	elseif action == "RumorUnlocked" then
+		showRumor(payload)
 	elseif action == "PolishOrderModifier" then
 		showModifier(payload)
 	elseif action == "PolishDeliveryResult" then
@@ -577,6 +674,9 @@ local function updateResponsiveScale()
 		modifierTitle.TextSize = 12
 		modifierDescription.TextSize = 10
 		resultFrame.Size = UDim2.new(0.86, 0, 0, 180)
+		rumorFrame.Size = UDim2.new(0.92, 0, 0, 166)
+		rumorTitle.TextSize = 14
+		rumorBody.TextSize = 12
 		introFrame.Size = UDim2.new(0.92, 0, 0, 166)
 		introBody.TextSize = 12
 		introTitle.TextSize = 15
@@ -592,6 +692,9 @@ local function updateResponsiveScale()
 		modifierTitle.TextSize = 14
 		modifierDescription.TextSize = 12
 		resultFrame.Size = UDim2.fromOffset(360, 190)
+		rumorFrame.Size = UDim2.fromOffset(440, 144)
+		rumorTitle.TextSize = 16
+		rumorBody.TextSize = 13
 		introFrame.Size = UDim2.fromOffset(440, 154)
 		introBody.TextSize = 13
 		introTitle.TextSize = 16
