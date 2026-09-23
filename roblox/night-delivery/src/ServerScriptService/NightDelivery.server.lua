@@ -1590,9 +1590,6 @@ local function assignJob(player)
 
 	player:SetAttribute("NightDeliveryBikeBlocked", false)
 	player:SetAttribute("NightDeliveryRequestedModifier", nil)
-	if isAnomaly then
-		sendStatus(player, "RareAnomaly", {title = "宛名が一瞬、読めなくなった"})
-	end
 	playerLastHouse[player] = target.Name
 	addParcelVisual(player, jobType.id)
 
@@ -1612,6 +1609,9 @@ local function assignJob(player)
 		bagCapacity = playerJobs[player].bagCapacity,
 		nightCondition = currentNightRule.name,
 	})
+	if isAnomaly then
+		sendStatus(player, "RareAnomaly", {title = "宛名が一瞬、読めなくなった"})
+	end
 end
 
 local function completeDelivery(player, houseName)
