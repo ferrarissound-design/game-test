@@ -777,7 +777,7 @@ RunService.RenderStepped:Connect(function()
 			if currentHighlight then currentHighlight.Enabled = true end
 			if currentBillboard then currentBillboard.Enabled = true end
 		end
-		local distanceText = distance and string.format("  •  距離 %d", distance) or ""
+		local distanceText = (not eventObjectiveActive and distance) and string.format("  •  距離 %d", distance) or ""
 
 		timerLabel.Text = string.format("残り %d秒%s", remaining, distanceText)
 
