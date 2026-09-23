@@ -1042,6 +1042,15 @@ deliveryEvent.OnClientEvent:Connect(function(action, payload)
 		end
 	elseif action == "RareAnomaly" then
 		showRareAnomaly(payload)
+		if currentHouseName then
+			local jobSerial = tonumber(player:GetAttribute("NightDeliveryJobSerial"))
+			navTitle.Text = "宛名が読めない..."
+			task.delay(1.1, function()
+				if currentHouseName and tonumber(player:GetAttribute("NightDeliveryJobSerial")) == jobSerial then
+					navTitle.Text = currentDisplayName or currentHouseName
+				end
+			end)
+		end
 	elseif action == "Welcome" then
 		if payload.nightConditionName then
 			nightBadge.Visible = true
