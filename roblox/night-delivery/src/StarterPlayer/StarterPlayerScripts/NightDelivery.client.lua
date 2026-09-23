@@ -624,6 +624,18 @@ deliveryEvent.OnClientEvent:Connect(function(action, payload)
 		else
 			showToast("街灯の道を選択。時間に余裕を持って配達しよう。")
 		end
+	elseif action == "TravelEventStarted" then
+		if payload.blocking == true then
+			eventObjectiveActive = true
+			targetLabel.Text = "道中イベント: " .. tostring(payload.title or "通行止め")
+			if currentHighlight then currentHighlight.Enabled = false end
+			if currentBillboard then currentBillboard.Enabled = false end
+		end
+	elseif action == "TravelEventResolved" or action == "TravelEventExpired" then
+		if eventObjectiveActive and currentHouseName then
+			eventObjectiveActive = false
+			targetLabel.Text = "配達先: " .. (currentDisplayName or currentHouseName)
+		end
 	elseif action == "Delivered" then
 		local bonusText = ""
 		if (payload.streakBonus or 0) > 0 then
