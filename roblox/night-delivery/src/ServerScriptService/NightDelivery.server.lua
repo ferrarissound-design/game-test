@@ -2511,6 +2511,9 @@ local function saveData(player)
 	while playerSaveInProgress[player] do
 		task.wait(0.05)
 	end
+	if playerDataLoadSucceeded[player] ~= true then
+		return false
+	end
 	playerSaveInProgress[player] = true
 
 	local stats = getStats(player)
@@ -3145,7 +3148,6 @@ Players.PlayerRemoving:Connect(function(player)
 	playerShiftProgress[player] = nil
 	remoteLastAction[player] = nil
 	playerDataLoadSucceeded[player] = nil
-	playerSaveInProgress[player] = nil
 end)
 
 task.spawn(function()
