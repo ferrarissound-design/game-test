@@ -16,7 +16,7 @@ local function cacheCharacter(player, character)
 
 		local joints = {}
 		for _, object in ipairs(character:GetDescendants()) do
-			if object:IsA("Motor6D") then
+			if object:IsA("Motor6D") or object:IsA("AnimationConstraint") then
 				joints[object.Name] = object
 			end
 		end
