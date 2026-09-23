@@ -23,6 +23,7 @@ local pendingRouteSerial = nil
 local eventObjectivePart = nil
 local eventObjectiveSerial = nil
 local eventObjectiveReady = false
+local eventHazardTriggered = false
 local resultSerial = 0
 local rumorSerial = 0
 
@@ -635,6 +636,7 @@ eventObjectiveButton.Parent = eventObjectiveFrame
 addCorner(eventObjectiveButton, 9)
 
 local function clearEventObjective()
+	eventHazardTriggered = false
 	if eventObjectivePart then
 		if currentTarget == eventObjectivePart then
 			currentTarget = nil
@@ -654,6 +656,7 @@ local function showEventObjective(payload)
 	end
 
 	eventObjectiveSerial = tonumber(payload.jobSerial)
+	eventHazardTriggered = false
 	local part = Instance.new("Part")
 	part.Name = "LocalDestinationEventObjective"
 	part.Size = Vector3.new(4.5, 0.28, 4.5)
@@ -683,6 +686,7 @@ local function showEventObjective(payload)
 	navTitle.Text = tostring(payload.label or "指定された場所へ届ける")
 	navFrame.Visible = true
 	eventObjectiveTitle.Text = tostring(payload.label or "届ける場所が変わった")
+	eventObjectiveTitle.TextColor3 = Color3.fromRGB(151, 230, 193)
 	eventObjectiveBody.Text = (tonumber(payload.reward) or 0) > 0
 		and string.format("緑の目印まで移動して届けよう。成功で +%d Coins", tonumber(payload.reward) or 0)
 		or "緑の目印まで移動して、最後に荷物を置こう。"
@@ -690,6 +694,14 @@ local function showEventObjective(payload)
 	eventObjectiveButton.Active = false
 	eventObjectiveButton.AutoButtonColor = false
 	eventObjectiveFrame.Visible = true
+
+	if tostring(payload.eventId or "") == "work" and eventAppearance then
+		for _, descendant in ipairs(eventAppearance:GetDescendants()) do
+			if descendant:IsA("BasePart") and descendant:GetAttribute("NightDeliveryObstacle") == true then
+				descendant.CanCollide = true
+			end
+		end
+	end
 end
 
 eventObjectiveButton.Activated:Connect(function()
@@ -821,7 +833,7 @@ local function clearEventAppearance()
 	end
 end
 
-local function addLocalEventPart(parent, name, size, position, color, shape)
+local function addLocalEventPart(parent, name, size, position, color, shape, transparency)
 	local part = Instance.new("Part")
 	part.Name = name
 	part.Size = size
@@ -832,10 +844,26 @@ local function addLocalEventPart(parent, name, size, position, color, shape)
 	part.CanQuery = false
 	part.CastShadow = false
 	part.Color = color
+	part.Transparency = transparency or 0
 	part.Material = Enum.Material.SmoothPlastic
 	if shape then part.Shape = shape end
 	part.Parent = parent
 	return part
+end
+
+local function addEventBillboard(part, textValue, textColor)
+	local marker = Instance.new("BillboardGui")
+	marker.Name = "EventWarning"
+	marker.Size = UDim2.fromOffset(190, 38)
+	marker.StudsOffset = Vector3.new(0, 2.5, 0)
+	marker.AlwaysOnTop = true
+	marker.Adornee = part
+	marker.Parent = part
+
+	local label = makeLabel(marker, UDim2.fromScale(1, 1), UDim2.fromOffset(0, 0), textValue, 12, Enum.Font.GothamBold)
+	label.TextXAlignment = Enum.TextXAlignment.Center
+	label.TextColor3 = textColor or Color3.fromRGB(255, 230, 190)
+	return marker
 end
 
 local function showEventAppearance(eventId)
@@ -864,17 +892,47 @@ local function showEventAppearance(eventId)
 		addLocalEventPart(eventAppearance, "ParcelLocker", Vector3.new(2.2, 1.6, 1.4), point.Position + Vector3.new(3.4, 1.05, -0.4), Color3.fromRGB(102, 127, 151))
 		addLocalEventPart(eventAppearance, "LockerSlot", Vector3.new(1.2, 0.55, 0.12), point.Position + Vector3.new(3.4, 1.1, -1.16), Color3.fromRGB(37, 47, 58), Enum.PartType.Block)
 	elseif eventId == "dog" then
-		local dogPosition = point.Position + Vector3.new(3.5, 0.8, 0)
-		addLocalEventPart(eventAppearance, "DogBody", Vector3.new(2, 1.25, 1.1), dogPosition, Color3.fromRGB(150, 105, 70))
+		local dogPosition = point.Position + Vector3.new(6.5, 0.8, 0)
+		local dogBody = addLocalEventPart(eventAppearance, "DogBody", Vector3.new(2, 1.25, 1.1), dogPosition, Color3.fromRGB(150, 105, 70))
 		addLocalEventPart(eventAppearance, "DogHead", Vector3.new(0.95, 0.95, 0.95), dogPosition + Vector3.new(1.05, 0.42, 0), Color3.fromRGB(171, 125, 83), Enum.PartType.Ball)
 		for _, offset in ipairs({Vector3.new(-0.6, -0.55, -0.3), Vector3.new(0.6, -0.55, -0.3), Vector3.new(-0.6, -0.55, 0.3), Vector3.new(0.6, -0.55, 0.3)}) do
 			addLocalEventPart(eventAppearance, "DogLeg", Vector3.new(0.3, 0.7, 0.3), dogPosition + offset, Color3.fromRGB(123, 84, 59))
 		end
+		local alertZone = addLocalEventPart(
+			eventAppearance,
+			"DogAlertZone",
+			Vector3.new(6, 0.08, 6),
+			point.Position + Vector3.new(6.5, 0.08, 0),
+			Color3.fromRGB(220, 88, 76),
+			nil,
+			0.72
+		)
+		alertZone.Material = Enum.Material.Neon
+		addEventBillboard(dogBody, "赤い範囲に入ると吠える", Color3.fromRGB(255, 190, 170))
 	elseif eventId == "work" then
-		local barrier = addLocalEventPart(eventAppearance, "WorkBarrier", Vector3.new(5.5, 1.1, 0.45), point.Position + Vector3.new(3.5, 1.0, -0.3), Color3.fromRGB(225, 137, 56))
-		barrier.Orientation = Vector3.new(0, 0, -8)
-		for _, offset in ipairs({-1.8, 1.8}) do
-			addLocalEventPart(eventAppearance, "WorkCone", Vector3.new(0.8, 1.2, 0.8), point.Position + Vector3.new(offset + 3.5, 0.85, -1.1), Color3.fromRGB(239, 116, 60), Enum.PartType.Block)
+		local barrier = addLocalEventPart(
+			eventAppearance,
+			"WorkBarrierMain",
+			Vector3.new(0.8, 2.4, 8),
+			point.Position + Vector3.new(-4.0, 1.2, 1.5),
+			Color3.fromRGB(225, 137, 56)
+		)
+		barrier:SetAttribute("NightDeliveryObstacle", true)
+		local guard = addLocalEventPart(
+			eventAppearance,
+			"WorkBarrierGuard",
+			Vector3.new(5.0, 2.4, 0.8),
+			point.Position + Vector3.new(-1.8, 1.2, 5.1),
+			Color3.fromRGB(226, 170, 62)
+		)
+		guard:SetAttribute("NightDeliveryObstacle", true)
+		addEventBillboard(barrier, "正面通行止め", Color3.fromRGB(255, 222, 151))
+		for _, position in ipairs({
+			point.Position + Vector3.new(-3.6, 0.85, -3.0),
+			point.Position + Vector3.new(-3.6, 0.85, 5.8),
+			point.Position + Vector3.new(0.8, 0.85, 4.8),
+		}) do
+			addLocalEventPart(eventAppearance, "WorkCone", Vector3.new(0.8, 1.2, 0.8), position, Color3.fromRGB(239, 116, 60), Enum.PartType.Block)
 		end
 	end
 end
@@ -1140,6 +1198,16 @@ deliveryEvent.OnClientEvent:Connect(function(action, payload)
 	elseif action == "DestinationEventObjective" then
 		destinationEventFrame.Visible = false
 		showEventObjective(payload)
+	elseif action == "DestinationEventHazard" then
+		if tonumber(payload.jobSerial) == tonumber(eventObjectiveSerial) then
+			eventHazardTriggered = true
+			eventObjectiveTitle.Text = "犬が吠えた！"
+			eventObjectiveTitle.TextColor3 = Color3.fromRGB(255, 154, 136)
+			eventObjectiveBody.Text = tostring(payload.text or "警戒範囲に入り、現場判断ボーナスを失った。")
+			if eventObjectivePart then
+				TweenService:Create(eventObjectivePart, TweenInfo.new(0.16), {Color = Color3.fromRGB(235, 105, 87)}):Play()
+			end
+		end
 	elseif action == "NightConditionChanged" then
 		nightBadge.Visible = true
 		nightName.Text = "今夜: " .. tostring(payload.name or "静かな夜")
