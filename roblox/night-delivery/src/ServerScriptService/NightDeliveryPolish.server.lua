@@ -232,6 +232,10 @@ local function beginTrackedOrder(player, payload)
 	local authoritativeLimit = tonumber(player:GetAttribute("NightDeliveryTimeLimit")) or JOB_LIMITS[jobTypeId]
 	local authoritativeStart = tonumber(player:GetAttribute("NightDeliveryOrderStartedAt")) or os.clock()
 
+	if state.activeOrder and state.activeOrder.jumpConnection then
+		state.activeOrder.jumpConnection:Disconnect()
+	end
+
 	state.activeOrder = {
 		baselineDeliveries = deliveries.Value,
 		startedAt = authoritativeStart,
@@ -276,8 +280,14 @@ local function finishTrackedOrder(player)
 	end
 	if tonumber(player:GetAttribute("NightDeliveryCompletedJobSerial")) ~= order.jobSerial
 		or tonumber(player:GetAttribute("NightDeliveryJobSerial")) ~= order.jobSerial then
+		if order.jumpConnection then
+			order.jumpConnection:Disconnect()
+		end
 		state.activeOrder = nil
 		return
+	end
+	if order.jumpConnection then
+		order.jumpConnection:Disconnect()
 	end
 	state.activeOrder = nil
 
@@ -287,10 +297,10 @@ local function finishTrackedOrder(player)
 	if order.modifier.id == "frozen" and elapsed > 35 then
 		grade = ({S = "A", A = "B", B = "C", C = "C"})[grade] or "C"
 	end
-	local gradeBonus = GRADE_BONUS[grade] or 0
 	if order.modifier.id == "fragile" and order.jumpDamaged then
 		grade = "C"
 	end
+	local gradeBonus = GRADE_BONUS[grade] or 0
 	local modifierBonus = modifierSucceeded(order.modifier, grade, elapsed, order) and order.modifier.reward or 0
 
 	state.sessionDeliveries += 1
