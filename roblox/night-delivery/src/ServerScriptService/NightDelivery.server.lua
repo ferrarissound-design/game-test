@@ -2593,6 +2593,7 @@ local function buyNextStyle(player, kind)
 	player:SetAttribute(attributeName, nextLevel)
 
 	if kind == "bag" and playerJobs[player] then
+		playerJobs[player].bagCapacity = math.clamp(1 + nextLevel, 1, 3)
 		addParcelVisual(player, playerJobs[player].jobTypeId)
 	elseif kind == "bike" then
 		addBikeVisual(player)
@@ -2605,7 +2606,7 @@ local function buyNextStyle(player, kind)
 	sendShopState(player)
 end
 
-local function applyWeather(weather, announceWeather)
+local function applyWeather(weather, announceWeather, announceNightCondition)
 	currentWeather = weather
 	Lighting.Ambient = selectedWorldTheme.id == "harbor"
 		and Color3.fromRGB(53, 64, 76)
@@ -2667,12 +2668,14 @@ local function applyWeather(weather, announceWeather)
 		)
 		applyMovementSpeed(player)
 	end
-	deliveryEvent:FireAllClients("NightConditionChanged", {
-		id = currentNightRule.id,
-		name = currentNightRule.name,
-		description = currentNightRule.description,
-	})
-	if announceWeather ~= false then
+	if announceNightCondition == true then
+		deliveryEvent:FireAllClients("NightConditionChanged", {
+			id = currentNightRule.id,
+			name = currentNightRule.name,
+			description = currentNightRule.description,
+		})
+	end
+	if announceWeather == true then
 		deliveryEvent:FireAllClients("WeatherChanged", {
 			weatherId = weather.id,
 			weatherName = weather.name,
@@ -2691,7 +2694,7 @@ local function startWeatherLoop()
 					table.insert(candidates, weather)
 				end
 			end
-			applyWeather(candidates[math.random(1, #candidates)], true)
+			applyWeather(candidates[math.random(1, #candidates)], true, false)
 		end
 	end)
 end
@@ -2992,7 +2995,7 @@ end)
 
 currentNightRule = RULES.chooseWeighted(RULES.NightConditions)
 world:SetAttribute("NightConditionId", currentNightRule.id)
-applyWeather(currentWeather, false)
+applyWeather(currentWeather, false, false)
 startWeatherLoop()
 
 task.spawn(function()
@@ -3000,7 +3003,7 @@ task.spawn(function()
 		task.wait(240)
 		currentNightRule = RULES.chooseWeighted(RULES.NightConditions, currentNightRule.id)
 		world:SetAttribute("NightConditionId", currentNightRule.id)
-		applyWeather(currentWeather, false)
+		applyWeather(currentWeather, false, true)
 	end
 end)
 
