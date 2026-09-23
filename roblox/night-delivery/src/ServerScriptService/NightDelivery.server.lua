@@ -156,7 +156,7 @@ local WORLD_THEMES = {
 		id = "japanese",
 		name = "日本住宅街",
 		groundColor = Color3.fromRGB(47, 61, 57),
-		roadColor = selectedWorldTheme.roadColor,
+		roadColor = Color3.fromRGB(48, 51, 55),
 		warehouseRoadColor = Color3.fromRGB(42, 44, 49),
 		canalColor = Color3.fromRGB(44, 91, 122),
 		streetLightColor = Color3.fromRGB(255, 229, 174),
@@ -1434,6 +1434,13 @@ local function completeDelivery(player, houseName)
 	local coopBonus = math.floor(reward * (COOP_BONUS_PER_HELPER * helperCount))
 	reward += coopBonus
 
+	-- A small chance of a grateful resident tipping the courier keeps ordinary jobs surprising.
+	local neighborhoodTip = 0
+	if math.random(1, 100) <= 14 then
+		neighborhoodTip = math.random(40, 90)
+		reward += neighborhoodTip
+	end
+
 	local shiftBonus = 0
 	if remaining > 0 then
 		playerShiftProgress[player] = (playerShiftProgress[player] or 0) + 1
@@ -1470,6 +1477,7 @@ local function completeDelivery(player, houseName)
 		weatherName = job.weatherName or "晴れ",
 		weatherBonus = weatherBonus,
 		coopBonus = coopBonus,
+		neighborhoodTip = neighborhoodTip,
 		helperCount = helperCount,
 		shiftBonus = shiftBonus,
 		shiftProgress = playerShiftProgress[player] or 0,
