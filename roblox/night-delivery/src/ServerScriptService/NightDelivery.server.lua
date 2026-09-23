@@ -711,28 +711,28 @@ local function createWarehouseHouse(model, position, bodyColor, variant)
 end
 
 local RESIDENTS_BY_HOUSE = {
-	BlueHouse = {name = "青木さん", color = Color3.fromRGB(82, 142, 191), first = "いつもこの時間にありがとう。温かいうちに受け取るね。", repeat = "今夜も助かったよ。気をつけて帰ってね。"},
-	RedHouse = {name = "佐藤さん", color = Color3.fromRGB(188, 104, 91), first = "遅くまでおつかれさま。荷物、待ってたよ。", repeat = "また会えたね。今夜も配達ありがとう。"},
-	GreenHouse = {name = "森さん", color = Color3.fromRGB(93, 150, 105), first = "庭の花が夜露に濡れてきれいでしょう。届けてくれてありがとう。", repeat = "花に水をあげたところだよ。今夜もありがとう。"},
-	YellowHouse = {name = "小林さん", color = Color3.fromRGB(194, 163, 75), first = "この明かりを目印にしてくれたの？助かったよ。", repeat = "待っていたよ。足元に気をつけてね。"},
-	PurpleHouse = {name = "高橋さん", color = Color3.fromRGB(133, 108, 170), first = "夜の配達って大変だね。受け取れてよかった。", repeat = "今夜も届けてくれてありがとう。"},
-	WhiteHouse = {name = "山本さん", color = Color3.fromRGB(183, 188, 190), first = "ちょうど必要なものだったんだ。ありがとう。", repeat = "いつも助かってるよ。温かいお茶をどうぞ。"},
-	OrangeHouse = {name = "井上さん", color = Color3.fromRGB(198, 132, 78), first = "おかえりなさい、って言いたくなる時間だね。ありがとう。", repeat = "今夜も無事に届いたね。気をつけて。"},
-	MintHouse = {name = "中村さん", color = Color3.fromRGB(93, 169, 148), first = "雨が降る前に届いてよかった。ありがとう。", repeat = "またお願いしちゃったね。助かったよ。"},
-	RiverBlueHouse = {name = "川辺さん", color = Color3.fromRGB(84, 143, 185), first = "川沿いは暗いから、灯りを頼りに来たよ。", repeat = "川風が冷たいね。今夜もありがとう。"},
-	RiverPinkHouse = {name = "桃井さん", color = Color3.fromRGB(183, 117, 143), first = "川の音を聞いて待っていたよ。ありがとう。", repeat = "今夜も川沿いまでご苦労さま。"},
-	RiverTealHouse = {name = "水野さん", color = Color3.fromRGB(82, 151, 153), first = "こんな遅くまで届けてくれてありがとう。", repeat = "荷物、確かに受け取ったよ。気をつけてね。"},
-	RiverCreamHouse = {name = "白石さん", color = Color3.fromRGB(183, 165, 130), first = "遠くまでありがとう。温かい飲み物を用意しておくね。", repeat = "また来てくれてうれしいよ。ありがとう。"},
-	Warehouse01 = {name = "田中さん", color = Color3.fromRGB(113, 140, 151), first = "夜勤の休憩に間に合った。ありがとう。", repeat = "今夜の仕事もこれで頑張れそうだ。"},
-	Warehouse02 = {name = "加藤さん", color = Color3.fromRGB(157, 127, 91), first = "倉庫まで届けてくれて助かったよ。", repeat = "荷物を受け取ったよ。夜道に気をつけて。"},
-	Warehouse03 = {name = "吉田さん", color = Color3.fromRGB(111, 150, 121), first = "ちょうど手が離せなかったんだ。ありがとう。", repeat = "いつも時間どおりだね。助かるよ。"},
-	Warehouse04 = {name = "斎藤さん", color = Color3.fromRGB(155, 124, 151), first = "この時間の配達は心強いね。ありがとう。", repeat = "今夜もご苦労さま。無事に帰ってね。"},
+	BlueHouse = {name = "青木さん", color = Color3.fromRGB(82, 142, 191), first = "いつもこの時間にありがとう。温かいうちに受け取るね。", returnLine = "今夜も助かったよ。気をつけて帰ってね。"},
+	RedHouse = {name = "佐藤さん", color = Color3.fromRGB(188, 104, 91), first = "遅くまでおつかれさま。荷物、待ってたよ。", returnLine = "また会えたね。今夜も配達ありがとう。"},
+	GreenHouse = {name = "森さん", color = Color3.fromRGB(93, 150, 105), first = "庭の花が夜露に濡れてきれいでしょう。届けてくれてありがとう。", returnLine = "花に水をあげたところだよ。今夜もありがとう。"},
+	YellowHouse = {name = "小林さん", color = Color3.fromRGB(194, 163, 75), first = "この明かりを目印にしてくれたの？助かったよ。", returnLine = "待っていたよ。足元に気をつけてね。"},
+	PurpleHouse = {name = "高橋さん", color = Color3.fromRGB(133, 108, 170), first = "夜の配達って大変だね。受け取れてよかった。", returnLine = "今夜も届けてくれてありがとう。"},
+	WhiteHouse = {name = "山本さん", color = Color3.fromRGB(183, 188, 190), first = "ちょうど必要なものだったんだ。ありがとう。", returnLine = "いつも助かってるよ。温かいお茶をどうぞ。"},
+	OrangeHouse = {name = "井上さん", color = Color3.fromRGB(198, 132, 78), first = "おかえりなさい、って言いたくなる時間だね。ありがとう。", returnLine = "今夜も無事に届いたね。気をつけて。"},
+	MintHouse = {name = "中村さん", color = Color3.fromRGB(93, 169, 148), first = "雨が降る前に届いてよかった。ありがとう。", returnLine = "またお願いしちゃったね。助かったよ。"},
+	RiverBlueHouse = {name = "川辺さん", color = Color3.fromRGB(84, 143, 185), first = "川沿いは暗いから、灯りを頼りに来たよ。", returnLine = "川風が冷たいね。今夜もありがとう。"},
+	RiverPinkHouse = {name = "桃井さん", color = Color3.fromRGB(183, 117, 143), first = "川の音を聞いて待っていたよ。ありがとう。", returnLine = "今夜も川沿いまでご苦労さま。"},
+	RiverTealHouse = {name = "水野さん", color = Color3.fromRGB(82, 151, 153), first = "こんな遅くまで届けてくれてありがとう。", returnLine = "荷物、確かに受け取ったよ。気をつけてね。"},
+	RiverCreamHouse = {name = "白石さん", color = Color3.fromRGB(183, 165, 130), first = "遠くまでありがとう。温かい飲み物を用意しておくね。", returnLine = "また来てくれてうれしいよ。ありがとう。"},
+	Warehouse01 = {name = "田中さん", color = Color3.fromRGB(113, 140, 151), first = "夜勤の休憩に間に合った。ありがとう。", returnLine = "今夜の仕事もこれで頑張れそうだ。"},
+	Warehouse02 = {name = "加藤さん", color = Color3.fromRGB(157, 127, 91), first = "倉庫まで届けてくれて助かったよ。", returnLine = "荷物を受け取ったよ。夜道に気をつけて。"},
+	Warehouse03 = {name = "吉田さん", color = Color3.fromRGB(111, 150, 121), first = "ちょうど手が離せなかったんだ。ありがとう。", returnLine = "いつも時間どおりだね。助かるよ。"},
+	Warehouse04 = {name = "斎藤さん", color = Color3.fromRGB(155, 124, 151), first = "この時間の配達は心強いね。ありがとう。", returnLine = "今夜もご苦労さま。無事に帰ってね。"},
 }
 
 local function createResident(model, position, frontZ, resident)
 	model:SetAttribute("ResidentName", resident.name)
 	model:SetAttribute("ResidentFirstLine", resident.first)
-	model:SetAttribute("ResidentReturnLine", resident.repeat)
+	model:SetAttribute("ResidentReturnLine", resident.returnLine)
 
 	local basePosition = position + Vector3.new(7.5, 0, frontZ - 3)
 	local torso = makePart("ResidentTorso", Vector3.new(1.6, 1.9, 0.85), basePosition + Vector3.new(0, 2.0, 0), resident.color, model)
