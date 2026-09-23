@@ -1367,6 +1367,31 @@ local function findJobType(id)
 	return JOB_TYPES[1]
 end
 
+local ROUTE_DISTANCE_FACTOR = 1.15
+local JOB_TIME_PROFILES = {
+	standard = {paceMultiplier = 1.75, setupSeconds = 5, minimum = 16, maximum = 40},
+	express = {paceMultiplier = 1.25, setupSeconds = 4, minimum = 12, maximum = 28},
+	long = {paceMultiplier = 3.1, setupSeconds = 7, minimum = 24, maximum = 72},
+	special = {paceMultiplier = 1.65, setupSeconds = 5, minimum = 16, maximum = 38},
+}
+
+local function getDeliveryDistance(house)
+	local depot = world:FindFirstChild("Depot")
+	local counter = depot and depot:FindFirstChild("JobCounter")
+	local deliveryPoint = house and house:FindFirstChild("DeliveryPoint")
+	if not counter or not deliveryPoint then
+		return 0
+	end
+	return (deliveryPoint.Position - counter.Position).Magnitude
+end
+
+local function getJobTimeLimit(jobType, house)
+	local profile = JOB_TIME_PROFILES[jobType.id] or JOB_TIME_PROFILES.standard
+	local estimatedWalkingTime = getDeliveryDistance(house) * ROUTE_DISTANCE_FACTOR / BASE_WALK_SPEED
+	local seconds = estimatedWalkingTime * profile.paceMultiplier + profile.setupSeconds
+	return math.clamp(math.ceil(seconds), profile.minimum, profile.maximum)
+end
+
 local function assignJob(player)
 	if playerJobs[player] then
 		sendStatus(player, "Message", {
@@ -1380,27 +1405,42 @@ local function assignJob(player)
 		return
 	end
 
+	local jobType = chooseJobType(player)
 	local candidates = {}
+	local fallbackCandidates = {}
 	local lastHouse = playerLastHouse[player]
 
 	for _, house in ipairs(houses) do
 		if isHouseUnlocked(player, house) and (house.Name ~= lastHouse or #houses == 1) then
-			table.insert(candidates, house)
+			table.insert(fallbackCandidates, house)
+			local distance = getDeliveryDistance(house)
+			local matchesRoute = jobType.id == "express" and distance <= 210
+				or jobType.id == "long" and distance >= 185
+				or jobType.id ~= "express" and jobType.id ~= "long"
+			if matchesRoute then
+				table.insert(candidates, house)
+			end
 		end
 	end
 
+	if #candidates == 0 then
+		candidates = fallbackCandidates
+	end
 	if #candidates == 0 then
 		return
 	end
 
 	local target = candidates[math.random(1, #candidates)]
-	local jobType = chooseJobType(player)
 	local districtId = target:GetAttribute("DistrictId") or "central"
 	local districtName = target:GetAttribute("DistrictName") or DISTRICT_NAMES[districtId] or districtId
 	local weather = currentWeather
 	local now = workspace:GetServerTimeNow()
-	local expiresAt = now + jobType.timeLimit
+	local timeLimit = getJobTimeLimit(jobType, target)
+	local orderStartedAt = os.clock()
+	local expiresAt = now + timeLimit
 
+	player:SetAttribute("NightDeliveryTimeLimit", timeLimit)
+	player:SetAttribute("NightDeliveryOrderStartedAt", orderStartedAt)
 	playerJobs[player] = {
 		houseName = target.Name,
 		displayName = target:GetAttribute("DisplayName") or target.Name,
@@ -1411,7 +1451,8 @@ local function assignJob(player)
 		weatherName = weather.name,
 		weatherMultiplier = weather.rewardMultiplier,
 		expiresAt = expiresAt,
-		startedAt = now,
+		timeLimit = timeLimit,
+		startedAt = orderStartedAt,
 	}
 
 	playerLastHouse[player] = target.Name
@@ -1428,7 +1469,7 @@ local function assignJob(player)
 		weatherName = weather.name,
 		weatherMultiplier = weather.rewardMultiplier,
 		expiresAt = expiresAt,
-		timeLimit = jobType.timeLimit,
+		timeLimit = timeLimit,
 		baseReward = jobType.baseReward,
 	})
 end
@@ -1523,6 +1564,8 @@ local function completeDelivery(player, houseName)
 	local warehouseUnlocked = deliveriesAfter == WAREHOUSE_UNLOCK_DELIVERIES
 
 	playerJobs[player] = nil
+	player:SetAttribute("NightDeliveryTimeLimit", nil)
+	player:SetAttribute("NightDeliveryOrderStartedAt", nil)
 	clearParcelVisual(player)
 
 	sendStatus(player, "Delivered", {
@@ -1907,6 +1950,8 @@ local function setupPlayer(player)
 
 	player:SetAttribute("SpeedLevel", data.speedLevel)
 	player:SetAttribute("BikeActive", false)
+	player:SetAttribute("NightDeliveryTimeLimit", nil)
+	player:SetAttribute("NightDeliveryOrderStartedAt", nil)
 	player:SetAttribute("BagStyleLevel", data.bagStyleLevel)
 	player:SetAttribute("BikeStyleLevel", data.bikeStyleLevel)
 	player:SetAttribute("ShiftWins", data.shiftWins)
