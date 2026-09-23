@@ -695,9 +695,13 @@ local eventAppearance = nil
 local hiddenResidentParts = {}
 
 local function clearEventAppearance()
-	for part, transparency in pairs(hiddenResidentParts) do
-		if part and part.Parent then
-			part.LocalTransparencyModifier = transparency
+	for instance, previousValue in pairs(hiddenResidentParts) do
+		if instance and instance.Parent then
+			if instance:IsA("BasePart") then
+				instance.LocalTransparencyModifier = previousValue
+			elseif instance:IsA("BillboardGui") then
+				instance.Enabled = previousValue
+			end
 		end
 	end
 	table.clear(hiddenResidentParts)
