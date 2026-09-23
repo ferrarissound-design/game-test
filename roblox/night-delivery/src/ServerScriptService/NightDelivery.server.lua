@@ -139,6 +139,7 @@ housesFolder.Parent = world
 
 local playerJobs = {}
 local playerLastHouse = {}
+local playerResidentVisits = {}
 local playerStreak = {}
 local playerShiftProgress = {}
 local remoteLastAction = {}
@@ -709,6 +710,66 @@ local function createWarehouseHouse(model, position, bodyColor, variant)
 	return body, -10.25
 end
 
+local RESIDENTS_BY_HOUSE = {
+	BlueHouse = {name = "青木さん", color = Color3.fromRGB(82, 142, 191), first = "いつもこの時間にありがとう。温かいうちに受け取るね。", repeat = "今夜も助かったよ。気をつけて帰ってね。"},
+	RedHouse = {name = "佐藤さん", color = Color3.fromRGB(188, 104, 91), first = "遅くまでおつかれさま。荷物、待ってたよ。", repeat = "また会えたね。今夜も配達ありがとう。"},
+	GreenHouse = {name = "森さん", color = Color3.fromRGB(93, 150, 105), first = "庭の花が夜露に濡れてきれいでしょう。届けてくれてありがとう。", repeat = "花に水をあげたところだよ。今夜もありがとう。"},
+	YellowHouse = {name = "小林さん", color = Color3.fromRGB(194, 163, 75), first = "この明かりを目印にしてくれたの？助かったよ。", repeat = "待っていたよ。足元に気をつけてね。"},
+	PurpleHouse = {name = "高橋さん", color = Color3.fromRGB(133, 108, 170), first = "夜の配達って大変だね。受け取れてよかった。", repeat = "今夜も届けてくれてありがとう。"},
+	WhiteHouse = {name = "山本さん", color = Color3.fromRGB(183, 188, 190), first = "ちょうど必要なものだったんだ。ありがとう。", repeat = "いつも助かってるよ。温かいお茶をどうぞ。"},
+	OrangeHouse = {name = "井上さん", color = Color3.fromRGB(198, 132, 78), first = "おかえりなさい、って言いたくなる時間だね。ありがとう。", repeat = "今夜も無事に届いたね。気をつけて。"},
+	MintHouse = {name = "中村さん", color = Color3.fromRGB(93, 169, 148), first = "雨が降る前に届いてよかった。ありがとう。", repeat = "またお願いしちゃったね。助かったよ。"},
+	RiverBlueHouse = {name = "川辺さん", color = Color3.fromRGB(84, 143, 185), first = "川沿いは暗いから、灯りを頼りに来たよ。", repeat = "川風が冷たいね。今夜もありがとう。"},
+	RiverPinkHouse = {name = "桃井さん", color = Color3.fromRGB(183, 117, 143), first = "川の音を聞いて待っていたよ。ありがとう。", repeat = "今夜も川沿いまでご苦労さま。"},
+	RiverTealHouse = {name = "水野さん", color = Color3.fromRGB(82, 151, 153), first = "こんな遅くまで届けてくれてありがとう。", repeat = "荷物、確かに受け取ったよ。気をつけてね。"},
+	RiverCreamHouse = {name = "白石さん", color = Color3.fromRGB(183, 165, 130), first = "遠くまでありがとう。温かい飲み物を用意しておくね。", repeat = "また来てくれてうれしいよ。ありがとう。"},
+	Warehouse01 = {name = "田中さん", color = Color3.fromRGB(113, 140, 151), first = "夜勤の休憩に間に合った。ありがとう。", repeat = "今夜の仕事もこれで頑張れそうだ。"},
+	Warehouse02 = {name = "加藤さん", color = Color3.fromRGB(157, 127, 91), first = "倉庫まで届けてくれて助かったよ。", repeat = "荷物を受け取ったよ。夜道に気をつけて。"},
+	Warehouse03 = {name = "吉田さん", color = Color3.fromRGB(111, 150, 121), first = "ちょうど手が離せなかったんだ。ありがとう。", repeat = "いつも時間どおりだね。助かるよ。"},
+	Warehouse04 = {name = "斎藤さん", color = Color3.fromRGB(155, 124, 151), first = "この時間の配達は心強いね。ありがとう。", repeat = "今夜もご苦労さま。無事に帰ってね。"},
+}
+
+local function createResident(model, position, frontZ, resident)
+	model:SetAttribute("ResidentName", resident.name)
+	model:SetAttribute("ResidentFirstLine", resident.first)
+	model:SetAttribute("ResidentReturnLine", resident.repeat)
+
+	local basePosition = position + Vector3.new(7.5, 0, frontZ - 3)
+	local torso = makePart("ResidentTorso", Vector3.new(1.6, 1.9, 0.85), basePosition + Vector3.new(0, 2.0, 0), resident.color, model)
+	torso.CanCollide = false
+	local head = makePart("ResidentHead", Vector3.new(1.2, 1.2, 1.2), basePosition + Vector3.new(0, 3.55, 0), Color3.fromRGB(231, 199, 166), model)
+	head.Shape = Enum.PartType.Ball
+	head.CanCollide = false
+	for _, x in ipairs({-0.43, 0.43}) do
+		local leg = makePart("ResidentLeg", Vector3.new(0.48, 1.05, 0.55), basePosition + Vector3.new(x, 0.55, 0), Color3.fromRGB(48, 55, 68), model)
+		leg.CanCollide = false
+	end
+	for _, x in ipairs({-1.0, 1.0}) do
+		local arm = makePart("ResidentArm", Vector3.new(0.45, 1.5, 0.55), basePosition + Vector3.new(x, 2.0, 0), resident.color, model)
+		arm.CanCollide = false
+	end
+
+	local billboard = Instance.new("BillboardGui")
+	billboard.Name = "ResidentNameTag"
+	billboard.Size = UDim2.fromOffset(150, 30)
+	billboard.StudsOffset = Vector3.new(0, 1.0, 0)
+	billboard.AlwaysOnTop = true
+	billboard.MaxDistance = 55
+	billboard.Parent = head
+	local label = Instance.new("TextLabel")
+	label.Size = UDim2.fromScale(1, 1)
+	label.BackgroundColor3 = Color3.fromRGB(18, 24, 34)
+	label.BackgroundTransparency = 0.18
+	label.Text = resident.name
+	label.TextColor3 = Color3.fromRGB(247, 240, 220)
+	label.TextSize = 14
+	label.Font = Enum.Font.GothamBold
+	label.Parent = billboard
+	local corner = Instance.new("UICorner")
+	corner.CornerRadius = UDim.new(0, 8)
+	corner.Parent = label
+end
+
 local function createHouse(id, displayName, districtId, position, bodyColor)
 	local model = Instance.new("Model")
 	model.Name = id
@@ -763,6 +824,11 @@ local function createHouse(id, displayName, districtId, position, bodyColor)
 	prompt.MaxActivationDistance = 10
 	prompt.RequiresLineOfSight = false
 	prompt.Parent = porch
+
+	local resident = RESIDENTS_BY_HOUSE[id]
+	if resident then
+		createResident(model, position, frontZ, resident)
+	end
 
 	local porchLight = makePart(
 		"PorchLight",
@@ -1487,6 +1553,9 @@ local function assignJob(player)
 		weatherName = weather.name,
 		weatherMultiplier = weather.rewardMultiplier,
 		baseTimeLimit = baseTimeLimit,
+		residentName = target:GetAttribute("ResidentName") or "住人",
+		residentFirstLine = target:GetAttribute("ResidentFirstLine") or "配達ありがとう。",
+		residentReturnLine = target:GetAttribute("ResidentReturnLine") or "今夜もありがとう。",
 		routeChoice = nil,
 		routeReward = 0,
 	}
@@ -1540,6 +1609,12 @@ local function completeDelivery(player, houseName)
 	if not isNearPart(player, deliveryPoint, 13) then
 		return
 	end
+
+	local visits = playerResidentVisits[player] or {}
+	playerResidentVisits[player] = visits
+	local visitCount = visits[job.houseName] or 0
+	visits[job.houseName] = visitCount + 1
+	local residentReaction = visitCount == 0 and job.residentFirstLine or job.residentReturnLine
 
 	local jobType = findJobType(job.jobTypeId)
 	local now = workspace:GetServerTimeNow()
@@ -1645,6 +1720,8 @@ local function completeDelivery(player, houseName)
 	sendStatus(player, "Delivered", {
 		houseName = houseName,
 		displayName = job.displayName,
+		residentName = job.residentName,
+		residentReaction = residentReaction,
 		reward = reward,
 		timeRemaining = remaining,
 		streak = streak,
@@ -2136,6 +2213,7 @@ Players.PlayerRemoving:Connect(function(player)
 	saveData(player)
 	playerJobs[player] = nil
 	playerLastHouse[player] = nil
+	playerResidentVisits[player] = nil
 	playerStreak[player] = nil
 	playerShiftProgress[player] = nil
 	remoteLastAction[player] = nil
