@@ -19,6 +19,7 @@ local currentJobTypeName = nil
 local orderStartedAt = nil
 local orderExpiresAt = nil
 local currentModifier = nil
+local pendingRouteSerial = nil
 local resultSerial = 0
 local rumorSerial = 0
 
@@ -213,6 +214,75 @@ introBody.TextColor3 = Color3.fromRGB(220, 228, 239)
 
 local introHint = makeLabel(introFrame, UDim2.new(1, -24, 0, 18), UDim2.fromOffset(12, 132), "配達3件で最初のセッション報酬", 11, Enum.Font.Gotham)
 introHint.TextColor3 = Color3.fromRGB(255, 208, 116)
+
+-- Route choice pauses the order timer until the player picks a plan.
+local routeChoiceFrame = Instance.new("Frame")
+routeChoiceFrame.Name = "RouteChoice"
+routeChoiceFrame.Size = UDim2.fromOffset(430, 190)
+routeChoiceFrame.AnchorPoint = Vector2.new(0.5, 0.5)
+routeChoiceFrame.Position = UDim2.fromScale(0.5, 0.5)
+routeChoiceFrame.BackgroundColor3 = Color3.fromRGB(20, 26, 38)
+routeChoiceFrame.BackgroundTransparency = 0.04
+routeChoiceFrame.Visible = false
+routeChoiceFrame.ZIndex = 35
+routeChoiceFrame.Parent = gui
+addCorner(routeChoiceFrame, 16)
+addStroke(routeChoiceFrame, Color3.fromRGB(110, 164, 214), 0.25, 1.4)
+
+local routeChoiceTitle = makeLabel(routeChoiceFrame, UDim2.new(1, -24, 0, 30), UDim2.fromOffset(12, 10), "どのルートで届ける？", 18, Enum.Font.GothamBold)
+routeChoiceTitle.TextColor3 = Color3.fromRGB(245, 248, 255)
+routeChoiceTitle.ZIndex = 36
+
+local routeChoiceHint = makeLabel(routeChoiceFrame, UDim2.new(1, -24, 0, 32), UDim2.fromOffset(12, 42), "選んだルートで制限時間と追加報酬が変わるよ。", 12, Enum.Font.Gotham)
+routeChoiceHint.TextColor3 = Color3.fromRGB(190, 204, 224)
+routeChoiceHint.ZIndex = 36
+
+local lanternRouteButton = Instance.new("TextButton")
+lanternRouteButton.Name = "LanternRoute"
+lanternRouteButton.Size = UDim2.new(0.5, -18, 0, 90)
+lanternRouteButton.Position = UDim2.fromOffset(12, 82)
+lanternRouteButton.BackgroundColor3 = Color3.fromRGB(54, 71, 83)
+lanternRouteButton.Text = "街灯の道\n時間に余裕\n追加報酬なし"
+lanternRouteButton.TextColor3 = Color3.fromRGB(238, 244, 250)
+lanternRouteButton.TextSize = 14
+lanternRouteButton.TextWrapped = true
+lanternRouteButton.Font = Enum.Font.GothamBold
+lanternRouteButton.ZIndex = 36
+lanternRouteButton.Parent = routeChoiceFrame
+addCorner(lanternRouteButton, 10)
+
+local shortcutRouteButton = Instance.new("TextButton")
+shortcutRouteButton.Name = "ShortcutRoute"
+shortcutRouteButton.Size = UDim2.new(0.5, -18, 0, 90)
+shortcutRouteButton.Position = UDim2.new(0.5, 6, 0, 82)
+shortcutRouteButton.BackgroundColor3 = Color3.fromRGB(103, 70, 51)
+shortcutRouteButton.Text = "裏路地の近道\n制限時間短め\n成功で +80 Coins"
+shortcutRouteButton.TextColor3 = Color3.fromRGB(255, 239, 219)
+shortcutRouteButton.TextSize = 14
+shortcutRouteButton.TextWrapped = true
+shortcutRouteButton.Font = Enum.Font.GothamBold
+shortcutRouteButton.ZIndex = 36
+shortcutRouteButton.Parent = routeChoiceFrame
+addCorner(shortcutRouteButton, 10)
+
+local function submitRouteChoice(routeId)
+	if not routeChoiceFrame.Visible or not pendingRouteSerial then
+		return
+	end
+	lanternRouteButton.Active = false
+	shortcutRouteButton.Active = false
+	deliveryEvent:FireServer("ChooseRoute", {
+		jobSerial = pendingRouteSerial,
+		routeId = routeId,
+	})
+end
+
+lanternRouteButton.Activated:Connect(function()
+	submitRouteChoice("lantern")
+end)
+shortcutRouteButton.Activated:Connect(function()
+	submitRouteChoice("shortcut")
+end)
 
 -- Story clue card appears after a delivery milestone.
 local rumorFrame = Instance.new("Frame")
@@ -575,15 +645,13 @@ deliveryEvent.OnClientEvent:Connect(function(action, payload)
 		orderStartedAt = workspace:GetServerTimeNow()
 		orderExpiresAt = payload.expiresAt
 		setTarget(payload.houseName, payload.displayName)
-		modifierTitle.Text = "依頼条件を確認中..."
-		modifierDescription.Text = ""
-		modifierFrame.Visible = true
-
-		deliveryEvent:FireServer("PolishJobSeen", {
-			jobTypeId = currentJobTypeId,
-			houseName = payload.houseName,
-			jobSerial = payload.jobSerial,
-		})
+		modifierTitle.Text = "ルートを選択中..."
+		modifierDescription.Text = "ルート決定後に制限時間が始まります。"
+		modifierFrame.Visible = false
+		pendingRouteSerial = payload.jobSerial
+		lanternRouteButton.Active = true
+		shortcutRouteButton.Active = true
+		routeChoiceFrame.Visible = true
 
 		if introFrame.Visible then
 			introFrame.Visible = false
@@ -592,6 +660,19 @@ deliveryEvent.OnClientEvent:Connect(function(action, payload)
 			townReveal.Visible = false
 			townRevealActive = false
 		end
+	elseif action == "JobRouteChosen" then
+		if tonumber(payload.jobSerial) ~= tonumber(pendingRouteSerial) then
+			return
+		end
+		routeChoiceFrame.Visible = false
+		orderStartedAt = workspace:GetServerTimeNow()
+		orderExpiresAt = payload.expiresAt
+		modifierFrame.Visible = true
+		deliveryEvent:FireServer("PolishJobSeen", {
+			jobTypeId = currentJobTypeId,
+			houseName = currentHouseName,
+			jobSerial = payload.jobSerial,
+		})
 	elseif action == "Delivered" then
 		deliveryEvent:FireServer("PolishDeliveryComplete", {
 			houseName = currentHouseName,
@@ -602,6 +683,8 @@ deliveryEvent.OnClientEvent:Connect(function(action, payload)
 		currentJobTypeName = nil
 		orderStartedAt = nil
 		orderExpiresAt = nil
+		pendingRouteSerial = nil
+		routeChoiceFrame.Visible = false
 	elseif action == "Welcome" then
 		showTownReveal()
 		if (payload.deliveries or 0) == 0 then
@@ -674,6 +757,9 @@ local function updateResponsiveScale()
 		modifierTitle.TextSize = 12
 		modifierDescription.TextSize = 10
 		resultFrame.Size = UDim2.new(0.86, 0, 0, 180)
+		routeChoiceFrame.Size = UDim2.new(0.92, 0, 0, 200)
+		lanternRouteButton.TextSize = 12
+		shortcutRouteButton.TextSize = 12
 		rumorFrame.Size = UDim2.new(0.92, 0, 0, 166)
 		rumorTitle.TextSize = 14
 		rumorBody.TextSize = 12
@@ -692,6 +778,9 @@ local function updateResponsiveScale()
 		modifierTitle.TextSize = 14
 		modifierDescription.TextSize = 12
 		resultFrame.Size = UDim2.fromOffset(360, 190)
+		routeChoiceFrame.Size = UDim2.fromOffset(430, 190)
+		lanternRouteButton.TextSize = 14
+		shortcutRouteButton.TextSize = 14
 		rumorFrame.Size = UDim2.fromOffset(440, 144)
 		rumorTitle.TextSize = 16
 		rumorBody.TextSize = 13
