@@ -1456,15 +1456,17 @@ deliveryEvent.OnClientEvent:Connect(function(action, payload)
 		nightBadge.Visible = true
 		nightName.Text = "今夜: " .. tostring(payload.name or "静かな夜")
 		nightDescription.Text = tostring(payload.description or "")
-		modifierTitle.Text = "今夜: " .. tostring(payload.name or "静かな夜")
-		modifierDescription.Text = tostring(payload.description or "")
 		if not currentHouseName then
+			modifierTitle.Text = "今夜: " .. tostring(payload.name or "静かな夜")
+			modifierDescription.Text = tostring(payload.description or "")
 			modifierFrame.Visible = true
 			task.delay(5, function()
 				if not currentHouseName then
 					modifierFrame.Visible = false
 				end
 			end)
+		elseif currentModifier then
+			showModifier(currentModifier)
 		end
 	elseif action == "RareAnomaly" then
 		showRareAnomaly(payload)
@@ -1473,7 +1475,13 @@ deliveryEvent.OnClientEvent:Connect(function(action, payload)
 			navTitle.Text = "宛名が読めない..."
 			task.delay(1.1, function()
 				if currentHouseName and tonumber(player:GetAttribute("NightDeliveryJobSerial")) == jobSerial then
-					navTitle.Text = currentDisplayName or currentHouseName
+					if eventObjectivePart and eventObjectivePart.Parent then
+						navTitle.Text = eventObjectiveNavTitle or "指定された場所へ届ける"
+					elseif travelEventBlocking and travelEventPart and travelEventPart.Parent then
+						navTitle.Text = "迂回ポイントへ"
+					else
+						navTitle.Text = currentDisplayName or currentHouseName
+					end
 				end
 			end)
 		end
