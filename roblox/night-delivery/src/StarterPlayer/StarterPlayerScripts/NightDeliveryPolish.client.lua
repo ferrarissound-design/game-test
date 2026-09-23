@@ -1033,6 +1033,8 @@ local function updateResponsiveScale()
 	if narrow then
 		navFrame.Size = UDim2.fromOffset(236, 58)
 		nightBadge.Size = UDim2.new(0, 205, 0, 48)
+		nightBadge.Position = UDim2.new(1, -10, 0, 78)
+		sideOfferFrame.Position = UDim2.new(0.5, 0, 0, 132)
 		nightName.TextSize = 11
 		nightDescription.TextSize = 9
 		missionFrame.Size = UDim2.fromOffset(210, 76)
@@ -1064,6 +1066,8 @@ local function updateResponsiveScale()
 	else
 		navFrame.Size = UDim2.fromOffset(300, 64)
 		nightBadge.Size = UDim2.fromOffset(250, 52)
+		nightBadge.Position = UDim2.new(1, -14, 0, 12)
+		sideOfferFrame.Position = UDim2.new(0.5, 0, 0, 86)
 		nightName.TextSize = 12
 		nightDescription.TextSize = 10
 		missionFrame.Size = UDim2.fromOffset(255, 82)
