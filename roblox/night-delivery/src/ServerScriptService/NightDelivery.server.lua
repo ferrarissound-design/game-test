@@ -1623,12 +1623,12 @@ local DESTINATION_EVENT_OBJECTIVES = {
 		careful = {offset = Vector3.new(5.0, 0, -0.5), label = "雨よけの置き配場所まで運ぶ"},
 	},
 	dog = {
-		quick = {offset = Vector3.new(-5.0, 0, 3.0), label = "犬から離れた場所に置く"},
+		quick = {offset = Vector3.new(-5.0, 0, 1.5), label = "犬から離れた場所に置く"},
 		careful = {offset = Vector3.new(-4.5, 0, -2.0), label = "犬を避けて静かに横から届ける"},
 	},
 	work = {
 		quick = {offset = Vector3.new(-4.5, 0, -1.5), label = "工事柵の切れ目から近道する"},
-		careful = {offset = Vector3.new(-8.0, 0, 6.0), label = "脇道を回って安全な入口へ向かう"},
+		careful = {offset = Vector3.new(-10.0, 0, 1.5), label = "脇道を回って安全な入口へ向かう"},
 	},
 }
 
