@@ -1498,11 +1498,15 @@ local function getDeliveryDistance(house)
 	return (deliveryPoint.Position - counter.Position).Magnitude
 end
 
-local function getJobTimeLimit(jobType, house)
+local function getJobTimeLimitForDistance(jobType, distance)
 	local profile = JOB_TIME_PROFILES[jobType.id] or JOB_TIME_PROFILES.standard
-	local estimatedWalkingTime = getDeliveryDistance(house) * ROUTE_DISTANCE_FACTOR / BASE_WALK_SPEED
+	local estimatedWalkingTime = math.max(0, tonumber(distance) or 0) * ROUTE_DISTANCE_FACTOR / BASE_WALK_SPEED
 	local seconds = estimatedWalkingTime * profile.paceMultiplier + profile.setupSeconds
 	return math.clamp(math.ceil(seconds), profile.minimum, profile.maximum)
+end
+
+local function getJobTimeLimit(jobType, house)
+	return getJobTimeLimitForDistance(jobType, getDeliveryDistance(house))
 end
 
 local function buildNeighborhoodStory(sourceId, targetHouseName)
@@ -2326,7 +2330,16 @@ local function startNextStop(player, job, stopIndex)
 	job.shortcutReward = ROUTE_CHOICES.shortcut.reward + (currentNightRule.id == "roadwork" and 40 or 0)
 	job.isAnomaly = math.random() <= RULES.RareAnomalyChance
 	job.isSideRequest = true
-	job.baseTimeLimit = math.min(getJobTimeLimit(findJobType(job.jobTypeId), target), stop.timeLimit or 35)
+	local targetPoint = target:FindFirstChild("DeliveryPoint")
+	local character = player.Character
+	local root = character and character:FindFirstChild("HumanoidRootPart")
+	local sideDistance = root and targetPoint
+		and (root.Position - targetPoint.Position).Magnitude
+		or getDeliveryDistance(target)
+	job.baseTimeLimit = math.min(
+		getJobTimeLimitForDistance(findJobType(job.jobTypeId), sideDistance),
+		stop.timeLimit or 35
+	)
 	job.routeChoice = nil
 	job.expiresAt = nil
 	job.startedAt = nil
