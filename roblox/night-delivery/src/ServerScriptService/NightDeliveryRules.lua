@@ -22,7 +22,7 @@ Rules.TravelEvents = {
 		body = "工事車両で正面が塞がれた。黄色い迂回ポイントを通って先へ進もう。",
 		blocking = true,
 		reward = 30,
-		lifetime = 0,
+		lifetime = 25,
 	},
 	{
 		id = "lost_item",

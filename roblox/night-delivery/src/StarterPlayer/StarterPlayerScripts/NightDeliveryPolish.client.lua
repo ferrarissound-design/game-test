@@ -23,6 +23,7 @@ local pendingRouteSerial = nil
 local eventObjectivePart = nil
 local eventObjectiveSerial = nil
 local eventObjectiveReady = false
+local eventObjectiveNavTitle = nil
 local eventHazardTriggered = false
 local travelEventPart = nil
 local travelObstacle = nil
@@ -284,7 +285,7 @@ shortcutRouteButton.Name = "ShortcutRoute"
 shortcutRouteButton.Size = UDim2.new(0.5, -18, 0, 90)
 shortcutRouteButton.Position = UDim2.new(0.5, 6, 0, 82)
 shortcutRouteButton.BackgroundColor3 = Color3.fromRGB(103, 70, 51)
-shortcutRouteButton.Text = "裏路地の近道\n制限時間短め\n成功で +80 Coins"
+shortcutRouteButton.Text = "裏路地の近道\n制限時間短め\n成功で追加報酬"
 shortcutRouteButton.TextColor3 = Color3.fromRGB(255, 239, 219)
 shortcutRouteButton.TextSize = 14
 shortcutRouteButton.TextWrapped = true
@@ -294,7 +295,7 @@ shortcutRouteButton.Parent = routeChoiceFrame
 addCorner(shortcutRouteButton, 10)
 
 local function submitRouteChoice(routeId)
-	if not routeChoiceFrame.Visible or not pendingRouteSerial then
+	if not routeChoiceFrame.Visible or not pendingRouteSerial or not currentModifier then
 		return
 	end
 	lanternRouteButton.Active = false
@@ -664,6 +665,7 @@ local function clearEventObjective()
 	end
 	eventObjectiveSerial = nil
 	eventObjectiveReady = false
+	eventObjectiveNavTitle = nil
 	eventObjectiveFrame.Visible = false
 end
 
@@ -701,7 +703,8 @@ local function showEventObjective(payload)
 	markerText.TextColor3 = Color3.fromRGB(236, 255, 246)
 
 	currentTarget = part
-	navTitle.Text = tostring(payload.label or "指定された場所へ届ける")
+	eventObjectiveNavTitle = tostring(payload.label or "指定された場所へ届ける")
+	navTitle.Text = eventObjectiveNavTitle
 	navFrame.Visible = true
 	eventObjectiveTitle.Text = tostring(payload.label or "届ける場所が変わった")
 	eventObjectiveTitle.TextColor3 = Color3.fromRGB(151, 230, 193)
@@ -1037,8 +1040,14 @@ local function clearTravelEvent(restoreTarget, hideFrame)
 	if hideFrame ~= false then
 		travelEventFrame.Visible = false
 	end
-	if restoreTarget and currentHouseName then
-		setTarget(currentHouseName, currentDisplayName)
+	if restoreTarget then
+		if eventObjectivePart and eventObjectivePart.Parent then
+			currentTarget = eventObjectivePart
+			navTitle.Text = eventObjectiveNavTitle or "指定された場所へ届ける"
+			navFrame.Visible = true
+		elseif currentHouseName then
+			setTarget(currentHouseName, currentDisplayName)
+		end
 	end
 end
 
@@ -1317,9 +1326,16 @@ deliveryEvent.OnClientEvent:Connect(function(action, payload)
 		modifierDescription.Text = "ルート決定後に制限時間が始まります。"
 		modifierFrame.Visible = false
 		pendingRouteSerial = payload.jobSerial
-		lanternRouteButton.Active = true
-		shortcutRouteButton.Active = true
+		lanternRouteButton.Active = false
+		shortcutRouteButton.Active = false
+		shortcutRouteButton.Text = string.format(
+			"裏路地の近道\n制限時間短め\n成功で +%d Coins",
+			tonumber(payload.shortcutReward) or 80
+		)
 		routeChoiceFrame.Visible = true
+		deliveryEvent:FireServer("PolishRequestOrderModifier", {
+			jobSerial = payload.jobSerial,
+		})
 
 		if introFrame.Visible then
 			introFrame.Visible = false
@@ -1336,19 +1352,11 @@ deliveryEvent.OnClientEvent:Connect(function(action, payload)
 		orderStartedAt = workspace:GetServerTimeNow()
 		orderExpiresAt = payload.expiresAt
 		modifierFrame.Visible = true
-		deliveryEvent:FireServer("PolishJobSeen", {
-			jobTypeId = currentJobTypeId,
-			houseName = currentHouseName,
-			jobSerial = payload.jobSerial,
-		})
 	elseif action == "Delivered" then
 		clearTravelEvent(false, true)
 		clearEventObjective()
 		clearEventAppearance()
 		showResident(payload)
-		deliveryEvent:FireServer("PolishDeliveryComplete", {
-			houseName = currentHouseName,
-		})
 		clearTarget()
 		hideModifier()
 		destinationEventFrame.Visible = false
@@ -1383,11 +1391,19 @@ deliveryEvent.OnClientEvent:Connect(function(action, payload)
 		end
 	elseif action == "TravelEventExpired" then
 		if tonumber(payload.jobSerial) == tonumber(travelEventSerial) then
-			showTravelEventOutcome(
-				"寄り道を見送った",
-				"配達を優先。目的地へ向かおう。",
-				true
-			)
+			if payload.blocking == true then
+				showTravelEventOutcome(
+					"通行止め解除",
+					"工事車両が移動した。通常ルートで配達を続けよう。",
+					true
+				)
+			else
+				showTravelEventOutcome(
+					"寄り道を見送った",
+					"配達を優先。目的地へ向かおう。",
+					true
+				)
+			end
 		end
 	elseif action == "SideJobOffer" then
 		sideOfferSerial += 1
@@ -1440,15 +1456,17 @@ deliveryEvent.OnClientEvent:Connect(function(action, payload)
 		nightBadge.Visible = true
 		nightName.Text = "今夜: " .. tostring(payload.name or "静かな夜")
 		nightDescription.Text = tostring(payload.description or "")
-		modifierTitle.Text = "今夜: " .. tostring(payload.name or "静かな夜")
-		modifierDescription.Text = tostring(payload.description or "")
 		if not currentHouseName then
+			modifierTitle.Text = "今夜: " .. tostring(payload.name or "静かな夜")
+			modifierDescription.Text = tostring(payload.description or "")
 			modifierFrame.Visible = true
 			task.delay(5, function()
 				if not currentHouseName then
 					modifierFrame.Visible = false
 				end
 			end)
+		elseif currentModifier then
+			showModifier(currentModifier)
 		end
 	elseif action == "RareAnomaly" then
 		showRareAnomaly(payload)
@@ -1457,7 +1475,13 @@ deliveryEvent.OnClientEvent:Connect(function(action, payload)
 			navTitle.Text = "宛名が読めない..."
 			task.delay(1.1, function()
 				if currentHouseName and tonumber(player:GetAttribute("NightDeliveryJobSerial")) == jobSerial then
-					navTitle.Text = currentDisplayName or currentHouseName
+					if eventObjectivePart and eventObjectivePart.Parent then
+						navTitle.Text = eventObjectiveNavTitle or "指定された場所へ届ける"
+					elseif travelEventBlocking and travelEventPart and travelEventPart.Parent then
+						navTitle.Text = "迂回ポイントへ"
+					else
+						navTitle.Text = currentDisplayName or currentHouseName
+					end
 				end
 			end)
 		end
@@ -1481,7 +1505,13 @@ deliveryEvent.OnClientEvent:Connect(function(action, payload)
 	elseif action == "RumorUnlocked" then
 		showRumor(payload)
 	elseif action == "PolishOrderModifier" then
-		showModifier(payload)
+		if tonumber(payload.jobSerial) == tonumber(pendingRouteSerial) then
+			showModifier(payload)
+			if routeChoiceFrame.Visible then
+				lanternRouteButton.Active = true
+				shortcutRouteButton.Active = true
+			end
+		end
 	elseif action == "PolishDeliveryResult" then
 		showResult(payload)
 	end

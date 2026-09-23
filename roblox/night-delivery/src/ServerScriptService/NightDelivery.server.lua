@@ -1534,13 +1534,16 @@ local function queueNeighborhoodStory(player, sourceId)
 	for _, house in ipairs(housesFolder:GetChildren()) do
 		if house.Name ~= currentHouseName
 			and house.Name ~= playerLastHouse[player]
+			and house:GetAttribute("DistrictId") ~= "warehouse"
 			and isHouseUnlocked(player, house) then
 			table.insert(candidates, house)
 		end
 	end
 	if #candidates == 0 then
 		for _, house in ipairs(housesFolder:GetChildren()) do
-			if house.Name ~= currentHouseName and isHouseUnlocked(player, house) then
+			if house.Name ~= currentHouseName
+				and house:GetAttribute("DistrictId") ~= "warehouse"
+				and isHouseUnlocked(player, house) then
 				table.insert(candidates, house)
 			end
 		end
@@ -1603,10 +1606,18 @@ local function assignJob(player)
 	local callbackHouse = neighborhoodCallback
 		and housesFolder:FindFirstChild(neighborhoodCallback.targetHouseName)
 		or nil
-	if neighborhoodCallback and (not callbackHouse or not isHouseUnlocked(player, callbackHouse)) then
+	if neighborhoodCallback and (
+		not callbackHouse
+		or callbackHouse:GetAttribute("DistrictId") == "warehouse"
+		or not isHouseUnlocked(player, callbackHouse)
+	) then
+		local sourceId = neighborhoodCallback.sourceId
 		callbackHouse = nil
 		playerPendingNeighborhoodStory[player] = nil
-		neighborhoodCallback = nil
+		neighborhoodCallback = queueNeighborhoodStory(player, sourceId)
+		callbackHouse = neighborhoodCallback
+			and housesFolder:FindFirstChild(neighborhoodCallback.targetHouseName)
+			or nil
 	end
 
 	if neighborhoodCallback then
@@ -1627,10 +1638,12 @@ local function assignJob(player)
 
 	player:SetAttribute("NightDeliveryTimeLimit", nil)
 	player:SetAttribute("NightDeliveryOrderStartedAt", nil)
-	player:SetAttribute("NightDeliveryJobSerial", jobSerial)
+	player:SetAttribute("NightDeliveryRequestedModifier", neighborhoodCallback and "none" or nil)
+	player:SetAttribute("NightDeliveryBikeBlocked", false)
+	player:SetAttribute("NightDeliveryNavSoft", false)
 	player:SetAttribute("NightDeliveryJobType", jobType.id)
 	player:SetAttribute("NightDeliveryHouseName", target.Name)
-	player:SetAttribute("NightDeliveryNavSoft", false)
+	player:SetAttribute("NightDeliveryJobSerial", jobSerial)
 	playerJobs[player] = {
 		jobSerial = jobSerial,
 		houseName = target.Name,
@@ -1649,6 +1662,7 @@ local function assignJob(player)
 		residentReturnLine = target:GetAttribute("ResidentReturnLine") or "今夜もありがとう。",
 		routeChoice = nil,
 		routeReward = 0,
+		shortcutReward = ROUTE_CHOICES.shortcut.reward + (currentNightRule.id == "roadwork" and 40 or 0),
 		destinationEvent = destinationEvent,
 		destinationEventPrompted = false,
 		destinationEventReward = 0,
@@ -1667,8 +1681,6 @@ local function assignJob(player)
 		isAnomaly = isAnomaly,
 	}
 
-	player:SetAttribute("NightDeliveryBikeBlocked", false)
-	player:SetAttribute("NightDeliveryRequestedModifier", nil)
 	playerLastHouse[player] = target.Name
 	addParcelVisual(player, jobType.id)
 
@@ -1687,6 +1699,7 @@ local function assignJob(player)
 		baseReward = jobType.baseReward,
 		bagCapacity = playerJobs[player].bagCapacity,
 		nightCondition = currentNightRule.name,
+		shortcutReward = playerJobs[player].shortcutReward,
 		neighborhoodThreadTitle = neighborhoodCallback and neighborhoodCallback.title or nil,
 		neighborhoodKindness = player:GetAttribute("NeighborhoodKindness") or 0,
 	})
@@ -1767,6 +1780,54 @@ local function startDestinationEventHazardMonitor(player, job)
 	end)
 end
 
+local SAFE_TRAVEL_FLOORS = {
+	Ground = true,
+	MainRoad = true,
+	CrossRoad = true,
+	NorthRoad = true,
+	RiversideRoad = true,
+	WarehouseRoad = true,
+}
+
+local function projectTravelPointToGround(player, desiredPosition)
+	if typeof(desiredPosition) ~= "Vector3" then
+		return nil
+	end
+	local params = RaycastParams.new()
+	params.FilterType = Enum.RaycastFilterType.Exclude
+	params.FilterDescendantsInstances = player.Character and {player.Character} or {}
+	params.IgnoreWater = false
+
+	local origin = desiredPosition + Vector3.new(0, 55, 0)
+	local result = workspace:Raycast(origin, Vector3.new(0, -110, 0), params)
+	if not result or not result.Instance or not SAFE_TRAVEL_FLOORS[result.Instance.Name] then
+		return nil
+	end
+	return Vector3.new(desiredPosition.X, result.Position.Y, desiredPosition.Z)
+end
+
+local function findSafeTravelPoint(player, origin, flatDirection, right, forwardDistance, sideDistance, preferredSide)
+	local side = preferredSide or 1
+	local candidates = {
+		origin + flatDirection * forwardDistance + right * (sideDistance * side),
+		origin + flatDirection * forwardDistance + right * (sideDistance * -side),
+		origin + flatDirection * (forwardDistance + 2) + right * (sideDistance * 0.7 * side),
+		origin + flatDirection * (forwardDistance + 2) + right * (sideDistance * -0.7 * side),
+	}
+	for _, candidate in ipairs(candidates) do
+		local projected = projectTravelPointToGround(player, candidate)
+		if projected then
+			return projected
+		end
+	end
+	return nil
+end
+
+local function horizontalDistance(a, b)
+	local delta = a - b
+	return Vector3.new(delta.X, 0, delta.Z).Magnitude
+end
+
 local function scheduleTravelEvent(player, jobSerial)
 	task.delay(math.random(4, 7), function()
 		local job = playerJobs[player]
@@ -1804,19 +1865,32 @@ local function scheduleTravelEvent(player, jobSerial)
 		if not event then
 			return
 		end
-		playerLastTravelEvent[player] = event.id
 
 		local side = math.random(0, 1) == 0 and -1 or 1
 		local objectivePosition
 		local obstaclePosition = nil
 		if event.id == "roadblock" then
-			obstaclePosition = root.Position + flatDirection * 10
-			objectivePosition = obstaclePosition + right * (8 * side) + flatDirection * 3
+			obstaclePosition = projectTravelPointToGround(player, root.Position + flatDirection * 10)
+			if obstaclePosition then
+				objectivePosition = findSafeTravelPoint(
+					player,
+					obstaclePosition,
+					flatDirection,
+					right,
+					3,
+					8,
+					side
+				)
+			end
 		elseif event.id == "lost_item" then
-			objectivePosition = root.Position + flatDirection * 6 + right * (7 * side)
+			objectivePosition = findSafeTravelPoint(player, root.Position, flatDirection, right, 6, 7, side)
 		else
-			objectivePosition = root.Position + flatDirection * 7 + right * (8 * side)
+			objectivePosition = findSafeTravelPoint(player, root.Position, flatDirection, right, 7, 8, side)
 		end
+		if not objectivePosition or (event.id == "roadblock" and not obstaclePosition) then
+			return
+		end
+		playerLastTravelEvent[player] = event.id
 
 		local lifetime = math.max(0, tonumber(event.lifetime) or 0)
 		local expiresAt = lifetime > 0 and (workspace:GetServerTimeNow() + lifetime) or nil
@@ -1859,6 +1933,7 @@ local function scheduleTravelEvent(player, jobSerial)
 					jobSerial = currentJob.jobSerial,
 					id = event.id,
 					title = event.title,
+					blocking = event.blocking == true,
 				})
 			end)
 		end
@@ -2175,6 +2250,7 @@ local function sendSideRequestOffer(player, jobSerial)
 		distance = math.floor(chosen.distance),
 		reward = 180,
 		expiresIn = 35,
+		bagCapacity = job.bagCapacity,
 		cargoType = cargoType.title,
 	})
 end
@@ -2215,6 +2291,7 @@ local function startNextStop(player, job, stopIndex)
 	job.travelEventExpiresAt = nil
 	job.routeReward = 0
 	job.routeTitle = nil
+	job.shortcutReward = ROUTE_CHOICES.shortcut.reward + (currentNightRule.id == "roadwork" and 40 or 0)
 	job.isAnomaly = math.random() <= RULES.RareAnomalyChance
 	job.isSideRequest = true
 	job.baseTimeLimit = math.min(getJobTimeLimit(findJobType(job.jobTypeId), target), stop.timeLimit or 35)
@@ -2224,14 +2301,14 @@ local function startNextStop(player, job, stopIndex)
 	job.destinationEvent = math.random() <= RULES.DestinationEventChance
 		and RULES.chooseWeighted(RULES.DestinationEvents, playerLastDestinationEvent[player]) or nil
 	if job.destinationEvent then playerLastDestinationEvent[player] = job.destinationEvent.id end
-	player:SetAttribute("NightDeliveryJobSerial", job.jobSerial)
 	player:SetAttribute("NightDeliveryTimeLimit", nil)
 	player:SetAttribute("NightDeliveryOrderStartedAt", nil)
-	player:SetAttribute("NightDeliveryJobType", job.jobTypeId)
-	player:SetAttribute("NightDeliveryHouseName", target.Name)
+	player:SetAttribute("NightDeliveryRequestedModifier", job.forcedModifierId)
 	player:SetAttribute("NightDeliveryBikeBlocked", false)
 	player:SetAttribute("NightDeliveryNavSoft", false)
-	player:SetAttribute("NightDeliveryRequestedModifier", job.forcedModifierId)
+	player:SetAttribute("NightDeliveryJobType", job.jobTypeId)
+	player:SetAttribute("NightDeliveryHouseName", target.Name)
+	player:SetAttribute("NightDeliveryJobSerial", job.jobSerial)
 	addParcelVisual(player, job.jobTypeId)
 	sendStatus(player, "JobAssigned", {
 		houseName = target.Name,
@@ -2245,9 +2322,10 @@ local function startNextStop(player, job, stopIndex)
 		weatherName = currentWeather.name,
 		weatherMultiplier = currentWeather.rewardMultiplier,
 		baseTimeLimit = job.baseTimeLimit,
-		baseReward = findJobType(job.jobTypeId).baseReward + job.currentStopBonus,
+		baseReward = findJobType(job.jobTypeId).baseReward,
 		bagCapacity = job.bagCapacity,
 		orderModifierId = job.forcedModifierId,
+		shortcutReward = job.shortcutReward,
 		sideRequest = true,
 	})
 	if job.isAnomaly then
@@ -2766,7 +2844,7 @@ deliveryEvent.OnServerEvent:Connect(function(player, action, payload)
 		end
 		local character = player.Character
 		local root = character and character:FindFirstChild("HumanoidRootPart")
-		if not root or (root.Position - job.destinationEventObjectivePosition).Magnitude > 9 then
+		if not root or horizontalDistance(root.Position, job.destinationEventObjectivePosition) > 9 then
 			return
 		end
 		job.destinationEventObjectiveComplete = true
@@ -2788,12 +2866,13 @@ deliveryEvent.OnServerEvent:Connect(function(player, action, payload)
 
 		local character = player.Character
 		local root = character and character:FindFirstChild("HumanoidRootPart")
-		if not root or (root.Position - job.travelEventObjectivePosition).Magnitude > 9 then
+		if not root or horizontalDistance(root.Position, job.travelEventObjectivePosition) > 9 then
 			return
 		end
 
 		local resolvedId = job.travelEventId
 		local reward = math.max(0, tonumber(job.travelEventReward) or 0)
+		local wasBlocking = job.travelEventBlocking == true
 		local followUpStory = queueNeighborhoodStory(player, resolvedId)
 		job.travelEventResolved = true
 		job.travelEventActive = false
@@ -2811,6 +2890,7 @@ deliveryEvent.OnServerEvent:Connect(function(player, action, payload)
 			jobSerial = job.jobSerial,
 			id = resolvedId,
 			reward = reward,
+			blocking = wasBlocking,
 			followUpText = followUpStory and followUpStory.threadStartedText or nil,
 			followUpTitle = followUpStory and followUpStory.title or nil,
 		})
@@ -2829,13 +2909,12 @@ deliveryEvent.OnServerEvent:Connect(function(player, action, payload)
 
 		job.routeChoice = routeId
 		job.routeTitle = route.title
-		job.routeReward = route.reward
+		job.routeReward = routeId == "shortcut"
+			and (job.shortcutReward or route.reward)
+			or route.reward
 		job.timeLimit = math.clamp(math.ceil(job.baseTimeLimit * route.timeMultiplier), 10, 90)
 		job.startedAt = os.clock()
 		job.expiresAt = workspace:GetServerTimeNow() + job.timeLimit
-		if currentNightRule.id == "roadwork" and routeId == "shortcut" then
-			job.routeReward += 40
-		end
 		player:SetAttribute("NightDeliveryTimeLimit", job.timeLimit)
 		player:SetAttribute("NightDeliveryOrderStartedAt", job.startedAt)
 		sendStatus(player, "JobRouteChosen", {
