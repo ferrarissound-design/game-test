@@ -746,7 +746,7 @@ local function showEventAppearance(eventId)
 					hiddenResidentParts[descendant] = descendant.LocalTransparencyModifier
 					descendant.LocalTransparencyModifier = 1
 				elseif descendant:IsA("BillboardGui") then
-					hiddenResidentParts[descendant] = descendant.Enabled and 0 or 1
+					hiddenResidentParts[descendant] = descendant.Enabled
 					descendant.Enabled = false
 				end
 			end
