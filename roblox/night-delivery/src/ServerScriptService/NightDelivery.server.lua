@@ -7,6 +7,7 @@ local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Lighting = game:GetService("Lighting")
 local DataStoreService = game:GetService("DataStoreService")
+local RULES = require(script.Parent:WaitForChild("NightDeliveryRules"))
 
 local REMOTE_NAME = "NightDeliveryEvent"
 local WORLD_NAME = "NightDeliveryWorld"
@@ -140,6 +141,8 @@ housesFolder.Parent = world
 local playerJobs = {}
 local playerLastHouse = {}
 local playerResidentVisits = {}
+local playerLastDestinationEvent = {}
+local currentNightRule = RULES.NightConditions[1]
 local playerStreak = {}
 local playerShiftProgress = {}
 local remoteLastAction = {}
@@ -1230,6 +1233,9 @@ local function applyMovementSpeed(player)
 	if bikeActive then
 		targetSpeed += BIKE_BONUS_SPEED
 	end
+	if currentNightRule.id == "festival" and bikeActive then
+		targetSpeed -= 2
+	end
 
 	humanoid.WalkSpeed = targetSpeed
 end
@@ -1531,6 +1537,12 @@ local function assignJob(player)
 	end
 
 	local target = candidates[math.random(1, #candidates)]
+	local destinationEvent = nil
+	if math.random() <= RULES.DestinationEventChance then
+		destinationEvent = RULES.chooseWeighted(RULES.DestinationEvents, playerLastDestinationEvent[player])
+		playerLastDestinationEvent[player] = destinationEvent.id
+	end
+	local isAnomaly = math.random() <= RULES.RareAnomalyChance
 	local districtId = target:GetAttribute("DistrictId") or "central"
 	local districtName = target:GetAttribute("DistrictName") or DISTRICT_NAMES[districtId] or districtId
 	local weather = currentWeather
@@ -1558,8 +1570,16 @@ local function assignJob(player)
 		residentReturnLine = target:GetAttribute("ResidentReturnLine") or "今夜もありがとう。",
 		routeChoice = nil,
 		routeReward = 0,
+		destinationEvent = destinationEvent,
+		destinationEventPrompted = false,
+		destinationEventReward = 0,
+		isAnomaly = isAnomaly,
 	}
 
+	player:SetAttribute("NightDeliveryBikeBlocked", false)
+	if isAnomaly then
+		sendStatus(player, "RareAnomaly", {title = "宛名が一瞬、読めなくなった"})
+	end
 	playerLastHouse[player] = target.Name
 	addParcelVisual(player, jobType.id)
 
@@ -1576,6 +1596,7 @@ local function assignJob(player)
 		weatherMultiplier = weather.rewardMultiplier,
 		baseTimeLimit = baseTimeLimit,
 		baseReward = jobType.baseReward,
+		nightCondition = currentNightRule.name,
 	})
 end
 
@@ -1610,6 +1631,21 @@ local function completeDelivery(player, houseName)
 		return
 	end
 
+	if job.destinationEvent and not job.destinationEventChoice then
+		if not job.destinationEventPrompted then
+			job.destinationEventPrompted = true
+			sendStatus(player, "DestinationEvent", {
+				jobSerial = job.jobSerial,
+				id = job.destinationEvent.id,
+				title = job.destinationEvent.title,
+				body = job.destinationEvent.body,
+				quickLabel = job.destinationEvent.quickLabel,
+				carefulLabel = job.destinationEvent.carefulLabel,
+			})
+		end
+		return
+	end
+
 	local visits = playerResidentVisits[player] or {}
 	playerResidentVisits[player] = visits
 	local visitCount = visits[job.houseName] or 0
@@ -1634,6 +1670,14 @@ local function completeDelivery(player, houseName)
 	local reward = math.floor(rawReward * weatherMultiplier)
 	local routeBonus = job.routeChoice == "shortcut" and remaining > 0 and (job.routeReward or 0) or 0
 	reward += routeBonus
+	local destinationEventBonus = job.destinationEventReward or 0
+	if currentNightRule.id == "festival" then
+		reward = math.floor(reward * 1.1)
+	end
+	if currentNightRule.id == "tip" and neighborhoodTip > 0 then
+		neighborhoodTip += 40
+		reward += 40
+	end
 
 	local targetHouse = housesFolder:FindFirstChild(houseName)
 	local targetPart = targetHouse and targetHouse:FindFirstChild("DeliveryPoint")
@@ -1659,12 +1703,13 @@ local function completeDelivery(player, houseName)
 	end
 
 	local coopBonus = math.floor(reward * (COOP_BONUS_PER_HELPER * helperCount))
-	reward += coopBonus
+	reward += coopBonus + destinationEventBonus
 
 	-- A small chance of a grateful resident tipping the courier keeps ordinary jobs surprising.
+	local tipChance = currentNightRule.id == "tip" and 30 or 14
 	local neighborhoodTip = 0
-	if math.random(1, 100) <= 14 then
-		neighborhoodTip = math.random(40, 90)
+	if math.random(1, 100) <= tipChance then
+		neighborhoodTip = math.random(40, 90) + (currentNightRule.id == "tip" and 40 or 0)
 		reward += neighborhoodTip
 	end
 
@@ -1715,6 +1760,7 @@ local function completeDelivery(player, houseName)
 	player:SetAttribute("NightDeliveryOrderStartedAt", nil)
 	player:SetAttribute("NightDeliveryJobType", nil)
 	player:SetAttribute("NightDeliveryHouseName", nil)
+	player:SetAttribute("NightDeliveryBikeBlocked", false)
 	clearParcelVisual(player)
 
 	sendStatus(player, "Delivered", {
@@ -1728,6 +1774,9 @@ local function completeDelivery(player, houseName)
 		streakBonus = streakBonus,
 		routeTitle = job.routeTitle,
 		routeBonus = routeBonus,
+		destinationEventBonus = destinationEventBonus,
+		destinationEventId = job.destinationEvent and job.destinationEvent.id or nil,
+		isAnomaly = job.isAnomaly == true,
 		weatherName = job.weatherName or "晴れ",
 		weatherBonus = weatherBonus,
 		coopBonus = coopBonus,
@@ -1751,6 +1800,10 @@ local function toggleBike(player)
 		return
 	end
 	if not isNearPart(player, bikePadRef, 14) then
+		return
+	end
+	if player:GetAttribute("NightDeliveryBikeBlocked") == true then
+		sendStatus(player, "Message", {text = "大型荷物を運んでいる間は自転車に乗れないよ。"})
 		return
 	end
 	local active = not (player:GetAttribute("BikeActive") == true)
@@ -2003,6 +2056,20 @@ local function applyWeather(weather)
 		end
 	end
 
+	if currentNightRule.id == "fog" then
+		Lighting.FogEnd = math.min(Lighting.FogEnd, 390)
+	elseif currentNightRule.id == "blackout" then
+		Lighting.Brightness = math.max(0.65, Lighting.Brightness * 0.72)
+		Lighting.FogEnd = math.min(Lighting.FogEnd, 430)
+	elseif currentNightRule.id == "festival" then
+		Lighting.Ambient = Color3.fromRGB(91, 77, 78)
+	end
+
+	deliveryEvent:FireAllClients("NightConditionChanged", {
+		id = currentNightRule.id,
+		name = currentNightRule.name,
+		description = currentNightRule.description,
+	})
 	deliveryEvent:FireAllClients("WeatherChanged", {
 		weatherId = weather.id,
 		weatherName = weather.name,
@@ -2067,7 +2134,29 @@ deliveryEvent.OnServerEvent:Connect(function(player, action, payload)
 	end
 	remoteLastAction[player] = now
 
-	if action == "ChooseRoute" then
+	if action == "ResolveDestinationEvent" then
+		local job = playerJobs[player]
+		if not requirePlayerReady(player)
+			or not job
+			or not job.destinationEvent
+			or job.destinationEventChoice
+			or type(payload) ~= "table"
+			or tonumber(payload.jobSerial) ~= job.jobSerial then
+			return
+		end
+		local house = housesFolder:FindFirstChild(job.houseName)
+		local point = house and house:FindFirstChild("DeliveryPoint")
+		if not isNearPart(player, point, 13) then
+			return
+		end
+		local choice = tostring(payload.choice or "")
+		if choice ~= "quick" and choice ~= "careful" then
+			return
+		end
+		job.destinationEventChoice = choice
+		job.destinationEventReward = choice == "careful" and job.destinationEvent.carefulBonus or job.destinationEvent.quickBonus
+		completeDelivery(player, job.houseName)
+	elseif action == "ChooseRoute" then
 		local job = playerJobs[player]
 		local routeId = type(payload) == "table" and tostring(payload.routeId or "") or ""
 		local route = ROUTE_CHOICES[routeId]
@@ -2086,6 +2175,9 @@ deliveryEvent.OnServerEvent:Connect(function(player, action, payload)
 		job.timeLimit = math.clamp(math.ceil(job.baseTimeLimit * route.timeMultiplier), 10, 90)
 		job.startedAt = os.clock()
 		job.expiresAt = workspace:GetServerTimeNow() + job.timeLimit
+		if currentNightRule.id == "roadwork" and routeId == "shortcut" then
+			job.routeReward += 40
+		end
 		player:SetAttribute("NightDeliveryTimeLimit", job.timeLimit)
 		player:SetAttribute("NightDeliveryOrderStartedAt", job.startedAt)
 		sendStatus(player, "JobRouteChosen", {
@@ -2129,8 +2221,19 @@ deliveryEvent.OnServerEvent:Connect(function(player, action, payload)
 	end
 end)
 
+currentNightRule = RULES.chooseWeighted(RULES.NightConditions)
+world:SetAttribute("NightConditionId", currentNightRule.id)
 applyWeather(currentWeather)
 startWeatherLoop()
+
+task.spawn(function()
+	while true do
+		task.wait(240)
+		currentNightRule = RULES.chooseWeighted(RULES.NightConditions, currentNightRule.id)
+		world:SetAttribute("NightConditionId", currentNightRule.id)
+		applyWeather(currentWeather)
+	end
+end)
 
 for _, entry in ipairs(housePrompts) do
 	entry.prompt.Triggered:Connect(function(player)
@@ -2168,6 +2271,7 @@ local function setupPlayer(player)
 	player:SetAttribute("NightDeliveryCompletedJobSerial", 0)
 	player:SetAttribute("NightDeliveryJobType", nil)
 	player:SetAttribute("NightDeliveryHouseName", nil)
+	player:SetAttribute("NightDeliveryBikeBlocked", false)
 	player:SetAttribute("BagStyleLevel", data.bagStyleLevel)
 	player:SetAttribute("BikeStyleLevel", data.bikeStyleLevel)
 	player:SetAttribute("ShiftWins", data.shiftWins)
@@ -2214,6 +2318,7 @@ Players.PlayerRemoving:Connect(function(player)
 	playerJobs[player] = nil
 	playerLastHouse[player] = nil
 	playerResidentVisits[player] = nil
+	playerLastDestinationEvent[player] = nil
 	playerStreak[player] = nil
 	playerShiftProgress[player] = nil
 	remoteLastAction[player] = nil
