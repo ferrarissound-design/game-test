@@ -2123,7 +2123,7 @@ local function sendSideRequestOffer(player, jobSerial)
 		job.sideOffer = nil
 	end
 	if not job or job.jobSerial ~= jobSerial or not job.houseName
-		or job.sideOffer or job.travelEventActive
+		or job.sideOffer or job.travelEventActive or job.neighborhoodCallback
 		or #job.extraStops >= (job.bagCapacity - 1)
 		or math.random() > 0.38 then
 		return
