@@ -273,6 +273,9 @@ local function finishTrackedOrder(player)
 	local elapsed = math.max(0, os.clock() - order.startedAt)
 	local timeLimit = order.timeLimit or JOB_LIMITS[order.jobTypeId] or JOB_LIMITS.standard
 	local grade = calculateGrade(elapsed, timeLimit)
+	if order.modifier.id == "frozen" and elapsed > 35 then
+		grade = ({S = "A", A = "B", B = "C", C = "C"})[grade] or "C"
+	end
 	local gradeBonus = GRADE_BONUS[grade] or 0
 	if order.modifier.id == "fragile" and order.jumpDamaged then
 		grade = "C"
@@ -341,7 +344,8 @@ deliveryEvent.OnServerEvent:Connect(function(player, action, payload)
 	end
 
 	local now = os.clock()
-	if now - state.lastRemoteAt < 0.08 then
+	if action ~= "PolishJobSeen" and action ~= "PolishDeliveryComplete"
+		and now - state.lastRemoteAt < 0.08 then
 		return
 	end
 	state.lastRemoteAt = now
