@@ -611,10 +611,22 @@ deliveryEvent.OnClientEvent:Connect(function(action, payload)
 		else
 			showToast("荷物を受け取った。黄色く光る家へ届けよう。")
 		end
+	elseif action == "JobRouteChosen" then
+		expiresAt = payload.expiresAt
+		jobLabel.Text ..= "  •  " .. (payload.routeTitle or "選択ルート")
+		if payload.routeId == "shortcut" then
+			showToast("裏路地の近道を選択。時間内なら追加 +80 Coins！")
+		else
+			showToast("街灯の道を選択。時間に余裕を持って配達しよう。")
+		end
 	elseif action == "Delivered" then
 		local bonusText = ""
 		if (payload.streakBonus or 0) > 0 then
 			bonusText = string.format("  連続 +%d", payload.streakBonus)
+		end
+
+		if (payload.routeBonus or 0) > 0 then
+			bonusText ..= string.format("  近道 +%d", payload.routeBonus)
 		end
 
 		local unlockText = ""
