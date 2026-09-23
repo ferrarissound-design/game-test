@@ -1185,15 +1185,17 @@ local function addBikeVisual(player)
 	model.Name = "DeliveryBikeVisual"
 	model.Parent = character
 
-	local function bikePart(name, size, offset, color, shape)
+	local function bikePart(name, size, offset, color, shape, material)
 		local part = Instance.new("Part")
 		part.Name = name
 		part.Size = size
 		part.Color = color
-		part.Material = Enum.Material.Metal
+		part.Material = material or Enum.Material.Metal
 		part.CanCollide = false
+		part.CanTouch = false
 		part.CanQuery = false
 		part.Massless = true
+		part.CastShadow = false
 		if shape then
 			part.Shape = shape
 		end
@@ -1207,9 +1209,65 @@ local function addBikeVisual(player)
 		return part
 	end
 
-	bikePart("Frame", Vector3.new(0.25, 1.4, 3.2), CFrame.new(0, -1.9, 0.7), style.color)
-	bikePart("WheelFront", Vector3.new(0.35, 2.3, 2.3), CFrame.new(0, -2.0, -1.0) * CFrame.Angles(0, 0, math.rad(90)), Color3.fromRGB(40, 42, 46), Enum.PartType.Cylinder)
-	bikePart("WheelBack", Vector3.new(0.35, 2.3, 2.3), CFrame.new(0, -2.0, 2.3) * CFrame.Angles(0, 0, math.rad(90)), Color3.fromRGB(40, 42, 46), Enum.PartType.Cylinder)
+	local function bikeBeam(name, fromOffset, toOffset, thickness, color)
+		local midpoint = (fromOffset + toOffset) / 2
+		local length = (toOffset - fromOffset).Magnitude
+		local localFrame = CFrame.lookAt(midpoint, toOffset)
+		return bikePart(
+			name,
+			Vector3.new(thickness, thickness, length),
+			localFrame,
+			color,
+			nil,
+			Enum.Material.Metal
+		)
+	end
+
+	local frontAxle = Vector3.new(0, -2.02, -0.98)
+	local rearAxle = Vector3.new(0, -2.02, 1.88)
+	local crank = Vector3.new(0, -1.72, 0.44)
+	local seatJoint = Vector3.new(0, -0.80, 0.56)
+	local headJoint = Vector3.new(0, -0.77, -0.59)
+	local frameColor = style.color
+	local trimColor = Color3.fromRGB(190, 202, 210)
+	local rubberColor = Color3.fromRGB(31, 34, 39)
+
+	-- Narrow cylinders run along the bicycle's left-right axis, leaving both wheels upright.
+	bikePart("FrontTire", Vector3.new(0.22, 2.02, 2.02), CFrame.new(frontAxle), rubberColor, Enum.PartType.Cylinder)
+	bikePart("RearTire", Vector3.new(0.22, 2.02, 2.02), CFrame.new(rearAxle), rubberColor, Enum.PartType.Cylinder)
+
+	for _, axle in ipairs({frontAxle, rearAxle}) do
+		bikePart("WheelHubLeft", Vector3.new(0.16, 0.32, 0.32), CFrame.new(-0.17, axle.Y, axle.Z), trimColor, Enum.PartType.Cylinder)
+		bikePart("WheelHubRight", Vector3.new(0.16, 0.32, 0.32), CFrame.new(0.17, axle.Y, axle.Z), trimColor, Enum.PartType.Cylinder)
+
+		for _, side in ipairs({-0.12, 0.12}) do
+			local center = Vector3.new(side, axle.Y, axle.Z)
+			bikeBeam("WheelSpoke", center, center + Vector3.new(0, 0.76, 0), 0.035, trimColor)
+			bikeBeam("WheelSpoke", center, center + Vector3.new(0, -0.76, 0), 0.035, trimColor)
+		end
+	end
+
+	-- A clear triangular frame makes it read as a bicycle at a glance.
+	bikeBeam("FrameTopTube", seatJoint, headJoint, 0.12, frameColor)
+	bikeBeam("FrameDownTube", headJoint, crank, 0.14, frameColor)
+	bikeBeam("FrameSeatTube", crank, seatJoint, 0.12, frameColor)
+	bikeBeam("RearStayTop", seatJoint, rearAxle, 0.09, trimColor)
+	bikeBeam("RearStayBottom", crank, rearAxle, 0.09, trimColor)
+	bikeBeam("FrontFork", headJoint, frontAxle, 0.13, frameColor)
+
+	-- Seat, steering stem, handlebars, pedals, and a small delivery crate finish the silhouette.
+	bikeBeam("SeatPost", seatJoint, seatJoint + Vector3.new(0, 0.28, 0.02), 0.10, trimColor)
+	bikePart("Saddle", Vector3.new(0.48, 0.10, 0.34), CFrame.new(0, -0.47, 0.58), rubberColor)
+	bikeBeam("HandlebarStem", headJoint, Vector3.new(0, -0.28, -0.72), 0.10, trimColor)
+	bikePart("Handlebar", Vector3.new(0.88, 0.10, 0.12), CFrame.new(0, -0.28, -0.72), rubberColor)
+	bikePart("PedalAxle", Vector3.new(0.56, 0.12, 0.12), CFrame.new(crank), trimColor)
+	bikePart("LeftPedal", Vector3.new(0.14, 0.10, 0.34), CFrame.new(-0.34, -1.72, 0.44), rubberColor)
+	bikePart("RightPedal", Vector3.new(0.14, 0.10, 0.34), CFrame.new(0.34, -1.72, 0.44), rubberColor)
+
+	bikeBeam("CargoRackLeft", Vector3.new(-0.38, -1.05, 1.05), Vector3.new(-0.38, -1.05, 2.15), 0.08, trimColor)
+	bikeBeam("CargoRackRight", Vector3.new(0.38, -1.05, 1.05), Vector3.new(0.38, -1.05, 2.15), 0.08, trimColor)
+	bikePart("DeliveryCrate", Vector3.new(0.90, 0.62, 0.82), CFrame.new(0, -0.72, 1.70), style.color, nil, Enum.Material.SmoothPlastic)
+	bikePart("CrateLatch", Vector3.new(0.94, 0.07, 0.08), CFrame.new(0, -0.73, 1.27), trimColor, nil, Enum.Material.Metal)
 end
 
 local function addParcelVisual(player, jobTypeId)
