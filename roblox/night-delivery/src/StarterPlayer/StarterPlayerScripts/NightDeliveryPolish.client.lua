@@ -166,10 +166,10 @@ local resultScale = Instance.new("UIScale")
 resultScale.Scale = 0.88
 resultScale.Parent = resultFrame
 
--- First-session introduction.
+-- First-session introduction. Keep it visible until the player starts a job or closes it.
 local introFrame = Instance.new("Frame")
 introFrame.Name = "Intro"
-introFrame.Size = UDim2.fromOffset(390, 118)
+introFrame.Size = UDim2.fromOffset(440, 154)
 introFrame.AnchorPoint = Vector2.new(0.5, 1)
 introFrame.Position = UDim2.new(0.5, 0, 1, -46)
 introFrame.BackgroundColor3 = Color3.fromRGB(17, 23, 34)
@@ -180,14 +180,37 @@ introFrame.Parent = gui
 addCorner(introFrame, 14)
 addStroke(introFrame, Color3.fromRGB(98, 150, 197), 0.35, 1.2)
 
-local introTitle = makeLabel(introFrame, UDim2.new(1, -24, 0, 30), UDim2.fromOffset(12, 10), "NIGHT DELIVERY", 18, Enum.Font.GothamBold)
+local introTitle = makeLabel(introFrame, UDim2.new(1, -54, 0, 26), UDim2.fromOffset(12, 8), "最初の配達：やることは3つ", 16, Enum.Font.GothamBold)
 introTitle.TextColor3 = Color3.fromRGB(173, 215, 255)
-local introBody = makeLabel(introFrame, UDim2.new(1, -24, 0, 58), UDim2.fromOffset(12, 42), "黄色い配達所で仕事を受ける → 矢印を追う → 家の前で届ける。\n速く、連続で、悪天候ほど稼ぎやすい。", 13, Enum.Font.Gotham)
+
+local introClose = Instance.new("TextButton")
+introClose.Name = "CloseIntro"
+introClose.Size = UDim2.fromOffset(28, 28)
+introClose.Position = UDim2.new(1, -36, 0, 4)
+introClose.BackgroundTransparency = 1
+introClose.Text = "×"
+introClose.TextColor3 = Color3.fromRGB(185, 198, 216)
+introClose.TextSize = 22
+introClose.Font = Enum.Font.Gotham
+introClose.ZIndex = 31
+introClose.Parent = introFrame
+introClose.Activated:Connect(function()
+	introFrame.Visible = false
+end)
+
+local introBody = makeLabel(
+	introFrame,
+	UDim2.new(1, -24, 0, 94),
+	UDim2.fromOffset(12, 38),
+	"① 黄色い受付で受注 → 矢印を追って玄関へ\n② PC: WASDで移動・Eで操作 / スマホ: 左スティック・画面ボタン\n③ 制限時間はボーナス用。時間切れでも配達OK\n自転車は受付横のスタンドで切替（PC: B）",
+	13,
+	Enum.Font.Gotham
+)
 introBody.TextWrapped = true
 introBody.TextYAlignment = Enum.TextYAlignment.Top
 introBody.TextColor3 = Color3.fromRGB(220, 228, 239)
 
-local introHint = makeLabel(introFrame, UDim2.new(1, -24, 0, 18), UDim2.fromOffset(12, 96), "配達3件で最初のセッション報酬", 11, Enum.Font.Gotham)
+local introHint = makeLabel(introFrame, UDim2.new(1, -24, 0, 18), UDim2.fromOffset(12, 132), "配達3件で最初のセッション報酬", 11, Enum.Font.Gotham)
 introHint.TextColor3 = Color3.fromRGB(255, 208, 116)
 
 local townRevealShown = false
@@ -280,18 +303,6 @@ local function showIntro()
 		BackgroundTransparency = 0.06,
 		Position = UDim2.new(0.5, 0, 1, -46),
 	}):Play()
-
-	task.delay(6, function()
-		if introFrame.Visible then
-			local tween = TweenService:Create(introFrame, TweenInfo.new(0.28), {
-				BackgroundTransparency = 1,
-				Position = UDim2.new(0.5, 0, 1, 20),
-			})
-			tween:Play()
-			tween.Completed:Wait()
-			introFrame.Visible = false
-		end
-	end)
 end
 
 local function setTarget(houseName, displayName)
@@ -566,6 +577,9 @@ local function updateResponsiveScale()
 		modifierTitle.TextSize = 12
 		modifierDescription.TextSize = 10
 		resultFrame.Size = UDim2.new(0.86, 0, 0, 180)
+		introFrame.Size = UDim2.new(0.92, 0, 0, 166)
+		introBody.TextSize = 12
+		introTitle.TextSize = 15
 		townTitle.TextSize = 27
 		townKicker.TextSize = 12
 		townSubtitle.TextSize = 11
@@ -578,6 +592,9 @@ local function updateResponsiveScale()
 		modifierTitle.TextSize = 14
 		modifierDescription.TextSize = 12
 		resultFrame.Size = UDim2.fromOffset(360, 190)
+		introFrame.Size = UDim2.fromOffset(440, 154)
+		introBody.TextSize = 13
+		introTitle.TextSize = 16
 		townTitle.TextSize = 34
 		townKicker.TextSize = 14
 		townSubtitle.TextSize = 13
