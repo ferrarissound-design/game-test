@@ -1836,7 +1836,8 @@ local function scheduleTravelEvent(player, jobSerial)
 			or job.jobSerial ~= jobSerial
 			or not job.houseName
 			or not job.routeChoice
-			or job.travelEventStarted then
+			or job.travelEventStarted
+			or playerPendingNeighborhoodStory[player] then
 			return
 		end
 		job.travelEventStarted = true
@@ -1983,6 +1984,22 @@ local function completeDelivery(player, houseName)
 
 	if job.destinationEvent and not job.destinationEventChoice then
 		if not job.destinationEventPrompted then
+			if job.travelEventActive and not job.travelEventBlocking then
+				local skippedTravelId = job.travelEventId
+				job.travelEventActive = false
+				job.travelEventBlocking = false
+				job.travelEventObjectivePosition = nil
+				job.travelEventId = nil
+				job.travelEventExpiresAt = nil
+				sendStatus(player, "TravelEventExpired", {
+					jobSerial = job.jobSerial,
+					id = skippedTravelId,
+					title = "目的地に到着",
+					blocking = false,
+					reason = "destination_reached",
+				})
+			end
+			job.sideOffer = nil
 			job.destinationEventPrompted = true
 			sendStatus(player, "DestinationEvent", {
 				jobSerial = job.jobSerial,
@@ -2202,6 +2219,7 @@ local function sendSideRequestOffer(player, jobSerial)
 	end
 	if not job or job.jobSerial ~= jobSerial or not job.houseName
 		or job.sideOffer or job.travelEventActive or job.neighborhoodCallback
+		or job.destinationEventPrompted or job.destinationEventChoice
 		or playerPendingNeighborhoodStory[player]
 		or #job.extraStops >= (job.bagCapacity - 1)
 		or math.random() > 0.38 then
@@ -2587,7 +2605,7 @@ local function buyNextStyle(player, kind)
 	sendShopState(player)
 end
 
-local function applyWeather(weather)
+local function applyWeather(weather, announceWeather)
 	currentWeather = weather
 	Lighting.Ambient = selectedWorldTheme.id == "harbor"
 		and Color3.fromRGB(53, 64, 76)
@@ -2643,6 +2661,10 @@ local function applyWeather(weather)
 	end
 
 	for _, player in ipairs(Players:GetPlayers()) do
+		player:SetAttribute(
+			"NightDeliveryNightNavSoft",
+			currentNightRule.id == "fog" or currentNightRule.id == "blackout"
+		)
 		applyMovementSpeed(player)
 	end
 	deliveryEvent:FireAllClients("NightConditionChanged", {
@@ -2650,11 +2672,13 @@ local function applyWeather(weather)
 		name = currentNightRule.name,
 		description = currentNightRule.description,
 	})
-	deliveryEvent:FireAllClients("WeatherChanged", {
-		weatherId = weather.id,
-		weatherName = weather.name,
-		rewardMultiplier = weather.rewardMultiplier,
-	})
+	if announceWeather ~= false then
+		deliveryEvent:FireAllClients("WeatherChanged", {
+			weatherId = weather.id,
+			weatherName = weather.name,
+			rewardMultiplier = weather.rewardMultiplier,
+		})
+	end
 end
 
 local function startWeatherLoop()
@@ -2667,7 +2691,7 @@ local function startWeatherLoop()
 					table.insert(candidates, weather)
 				end
 			end
-			applyWeather(candidates[math.random(1, #candidates)])
+			applyWeather(candidates[math.random(1, #candidates)], true)
 		end
 	end)
 end
@@ -2844,7 +2868,7 @@ deliveryEvent.OnServerEvent:Connect(function(player, action, payload)
 		end
 		local character = player.Character
 		local root = character and character:FindFirstChild("HumanoidRootPart")
-		if not root or horizontalDistance(root.Position, job.destinationEventObjectivePosition) > 9 then
+		if not root or (root.Position - job.destinationEventObjectivePosition).Magnitude > 10 then
 			return
 		end
 		job.destinationEventObjectiveComplete = true
@@ -2866,7 +2890,7 @@ deliveryEvent.OnServerEvent:Connect(function(player, action, payload)
 
 		local character = player.Character
 		local root = character and character:FindFirstChild("HumanoidRootPart")
-		if not root or horizontalDistance(root.Position, job.travelEventObjectivePosition) > 9 then
+		if not root or (root.Position - job.travelEventObjectivePosition).Magnitude > 10 then
 			return
 		end
 
@@ -2968,7 +2992,7 @@ end)
 
 currentNightRule = RULES.chooseWeighted(RULES.NightConditions)
 world:SetAttribute("NightConditionId", currentNightRule.id)
-applyWeather(currentWeather)
+applyWeather(currentWeather, false)
 startWeatherLoop()
 
 task.spawn(function()
@@ -2976,7 +3000,7 @@ task.spawn(function()
 		task.wait(240)
 		currentNightRule = RULES.chooseWeighted(RULES.NightConditions, currentNightRule.id)
 		world:SetAttribute("NightConditionId", currentNightRule.id)
-		applyWeather(currentWeather)
+		applyWeather(currentWeather, false)
 	end
 end)
 
@@ -3017,6 +3041,10 @@ local function setupPlayer(player)
 	player:SetAttribute("NightDeliveryJobType", nil)
 	player:SetAttribute("NightDeliveryHouseName", nil)
 	player:SetAttribute("NightDeliveryBikeBlocked", false)
+	player:SetAttribute(
+		"NightDeliveryNightNavSoft",
+		currentNightRule.id == "fog" or currentNightRule.id == "blackout"
+	)
 	player:SetAttribute("NightDeliveryRequestedModifier", nil)
 	player:SetAttribute("BagStyleLevel", data.bagStyleLevel)
 	player:SetAttribute("BikeStyleLevel", data.bikeStyleLevel)
