@@ -579,6 +579,91 @@ carefulEventButton.Activated:Connect(function()
 	submitDestinationEvent("careful")
 end)
 
+local sideOfferSerial = 0
+local sideOfferHouseName = nil
+local sideOfferFrame = Instance.new("Frame")
+sideOfferFrame.Name = "SideJobOffer"
+sideOfferFrame.Size = UDim2.fromOffset(420, 148)
+sideOfferFrame.AnchorPoint = Vector2.new(0.5, 0)
+sideOfferFrame.Position = UDim2.new(0.5, 0, 0, 86)
+sideOfferFrame.BackgroundColor3 = Color3.fromRGB(24, 35, 42)
+sideOfferFrame.Visible = false
+sideOfferFrame.ZIndex = 60
+sideOfferFrame.Parent = gui
+addCorner(sideOfferFrame, 13)
+addStroke(sideOfferFrame, Color3.fromRGB(104, 206, 175), 0.18, 1.4)
+local sideOfferTitle = makeLabel(sideOfferFrame, UDim2.new(1, -24, 0, 24), UDim2.fromOffset(12, 8), "近くの追加依頼", 15, Enum.Font.GothamBold)
+sideOfferTitle.TextColor3 = Color3.fromRGB(139, 226, 190)
+sideOfferTitle.ZIndex = 61
+local sideOfferBody = makeLabel(sideOfferFrame, UDim2.new(1, -24, 0, 44), UDim2.fromOffset(12, 34), "", 12, Enum.Font.Gotham)
+sideOfferBody.TextWrapped = true
+sideOfferBody.ZIndex = 61
+local sideOfferAccept = makeEventChoiceButton("AcceptSideJob", 12, Color3.fromRGB(54, 112, 91))
+sideOfferAccept.Parent = sideOfferFrame
+sideOfferAccept.Text = "受ける"
+local sideOfferIgnore = makeEventChoiceButton("IgnoreSideJob", 218, Color3.fromRGB(57, 67, 82))
+sideOfferIgnore.Parent = sideOfferFrame
+sideOfferIgnore.Text = "見送る"
+
+local nextStopFrame = Instance.new("Frame")
+nextStopFrame.Name = "NextStopChoice"
+nextStopFrame.Size = UDim2.fromOffset(420, 220)
+nextStopFrame.AnchorPoint = Vector2.new(0.5, 0.5)
+nextStopFrame.Position = UDim2.new(0.5, 0, 0.52, 0)
+nextStopFrame.BackgroundColor3 = Color3.fromRGB(25, 31, 42)
+nextStopFrame.Visible = false
+nextStopFrame.ZIndex = 65
+nextStopFrame.Parent = gui
+addCorner(nextStopFrame, 14)
+addStroke(nextStopFrame, Color3.fromRGB(119, 180, 231), 0.18, 1.4)
+local nextStopTitle = makeLabel(nextStopFrame, UDim2.new(1, -24, 0, 32), UDim2.fromOffset(12, 8), "次はどの家へ？", 16, Enum.Font.GothamBold)
+nextStopTitle.ZIndex = 66
+local nextStopButtons = {}
+
+local function sendSideJobResponse(accept)
+	if not sideOfferHouseName then return end
+	deliveryEvent:FireServer(accept and "AcceptSideJob" or "IgnoreSideJob", {
+		jobSerial = pendingRouteSerial,
+		houseName = sideOfferHouseName,
+	})
+	sideOfferFrame.Visible = false
+	sideOfferHouseName = nil
+end
+sideOfferAccept.Activated:Connect(function() sendSideJobResponse(true) end)
+sideOfferIgnore.Activated:Connect(function() sendSideJobResponse(false) end)
+
+local function showNextStops(payload)
+	for _, button in ipairs(nextStopButtons) do button:Destroy() end
+	nextStopButtons = {}
+	local stops = type(payload.stops) == "table" and payload.stops or {}
+	for index, stop in ipairs(stops) do
+		local selectedHouseName = tostring(stop.houseName or "")
+		local button = Instance.new("TextButton")
+		button.Name = "StopChoice" .. index
+		button.Size = UDim2.new(1, -24, 0, 46)
+		button.Position = UDim2.fromOffset(12, 48 + (index - 1) * 52)
+		button.BackgroundColor3 = Color3.fromRGB(48, 69, 90)
+		button.TextColor3 = Color3.fromRGB(245, 248, 255)
+		button.TextSize = 13
+		button.Font = Enum.Font.GothamBold
+		button.TextWrapped = true
+		button.ZIndex = 66
+		button.Text = string.format("%s  ・  %d studs  ・  +%d Coins", tostring(stop.displayName or "配達先"), tonumber(stop.distance) or 0, tonumber(stop.reward) or 0)
+		button.Parent = nextStopFrame
+		addCorner(button, 9)
+		button.Activated:Connect(function()
+			deliveryEvent:FireServer("ChooseNextStop", {
+				jobSerial = tonumber(payload.jobSerial),
+				houseName = selectedHouseName,
+			})
+			nextStopFrame.Visible = false
+		end)
+		table.insert(nextStopButtons, button)
+	end
+	nextStopFrame.Size = UDim2.fromOffset(420, 54 + (#stops * 52))
+	nextStopFrame.Visible = #stops > 0
+end
+
 local function setTarget(houseName, displayName)
 	currentTarget = nil
 	currentHouseName = houseName
@@ -789,12 +874,40 @@ deliveryEvent.OnClientEvent:Connect(function(action, payload)
 		})
 		clearTarget()
 		hideModifier()
+		destinationEventFrame.Visible = false
+		sideOfferFrame.Visible = false
+		if not payload.hasNextStops then
+			nextStopFrame.Visible = false
+		end
 		currentJobTypeId = nil
 		currentJobTypeName = nil
 		orderStartedAt = nil
 		orderExpiresAt = nil
 		pendingRouteSerial = nil
 		routeChoiceFrame.Visible = false
+	elseif action == "SideJobOffer" then
+		sideOfferSerial += 1
+		local serial = sideOfferSerial
+		sideOfferHouseName = tostring(payload.houseName or "")
+		sideOfferTitle.Text = string.format("近くの追加依頼  ・  %s", tostring(payload.cargoType or "追加便"))
+		sideOfferBody.Text = string.format("%sまで %d studs  /  成功で +%d Coins  /  受注期限 %d秒  /  バッグ枠 %s",
+			tostring(payload.displayName or "近くの家"), tonumber(payload.distance) or 0,
+			tonumber(payload.reward) or 0, tonumber(payload.expiresIn) or 35,
+			tostring(payload.bagCapacity or ""))
+		sideOfferFrame.Visible = true
+		task.delay(tonumber(payload.expiresIn) or 35, function()
+			if serial == sideOfferSerial then
+				sideOfferFrame.Visible = false
+				sideOfferHouseName = nil
+			end
+		end)
+	elseif action == "SideJobAccepted" then
+		sideOfferFrame.Visible = false
+		modifierTitle.Text = "追加依頼をバッグに積んだ"
+		modifierDescription.Text = string.format("%s  ・  +%d Coins", tostring(payload.displayName or "追加便"), tonumber(payload.reward) or 180)
+		modifierFrame.Visible = true
+	elseif action == "NextStopOptions" then
+		showNextStops(payload)
 	elseif action == "DestinationEvent" then
 		destinationEventSerial = tonumber(payload.jobSerial)
 		destinationEventTitle.Text = tostring(payload.title or "配達先で小さな問題")
@@ -888,6 +1001,8 @@ local function updateResponsiveScale()
 		modifierDescription.TextSize = 10
 		resultFrame.Size = UDim2.new(0.86, 0, 0, 180)
 		destinationEventFrame.Size = UDim2.new(0.92, 0, 0, 180)
+		sideOfferFrame.Size = UDim2.new(0.92, 0, 0, 148)
+		nextStopFrame.Size = UDim2.new(0.92, 0, 0, 220)
 		quickEventButton.TextSize = 11
 		carefulEventButton.TextSize = 11
 		residentFrame.Size = UDim2.new(0.92, 0, 0, 92)
@@ -914,6 +1029,8 @@ local function updateResponsiveScale()
 		modifierDescription.TextSize = 12
 		resultFrame.Size = UDim2.fromOffset(360, 190)
 		destinationEventFrame.Size = UDim2.fromOffset(430, 176)
+		sideOfferFrame.Size = UDim2.fromOffset(420, 148)
+		nextStopFrame.Size = UDim2.fromOffset(420, nextStopFrame.Size.Y.Offset)
 		quickEventButton.TextSize = 13
 		carefulEventButton.TextSize = 13
 		residentFrame.Size = UDim2.fromOffset(420, 94)
