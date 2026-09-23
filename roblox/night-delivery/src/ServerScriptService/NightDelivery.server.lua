@@ -2246,6 +2246,7 @@ local function sendSideRequestOffer(player, jobSerial)
 		distance = math.floor(chosen.distance),
 		reward = 180,
 		expiresIn = 35,
+		bagCapacity = job.bagCapacity,
 		cargoType = cargoType.title,
 	})
 end
@@ -2317,7 +2318,7 @@ local function startNextStop(player, job, stopIndex)
 		weatherName = currentWeather.name,
 		weatherMultiplier = currentWeather.rewardMultiplier,
 		baseTimeLimit = job.baseTimeLimit,
-		baseReward = findJobType(job.jobTypeId).baseReward + job.currentStopBonus,
+		baseReward = findJobType(job.jobTypeId).baseReward,
 		bagCapacity = job.bagCapacity,
 		orderModifierId = job.forcedModifierId,
 		shortcutReward = job.shortcutReward,
