@@ -12,6 +12,9 @@
       },
       "NightDeliveryPolish": {
         "$path": "src/ServerScriptService/NightDeliveryPolish.server.lua"
+      },
+      "NightDeliveryDiagnostics": {
+        "$path": "src/ServerScriptService/NightDeliveryDiagnostics.server.lua"
       }
     },
     "StarterPlayer": {

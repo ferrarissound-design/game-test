@@ -7,6 +7,7 @@ local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Lighting = game:GetService("Lighting")
 local DataStoreService = game:GetService("DataStoreService")
+local RunService = game:GetService("RunService")
 local RULES = require(script.Parent:WaitForChild("NightDeliveryRules"))
 
 local REMOTE_NAME = "NightDeliveryEvent"
@@ -146,6 +147,14 @@ world.Parent = workspace
 local housesFolder = Instance.new("Folder")
 housesFolder.Name = "Houses"
 housesFolder.Parent = world
+
+if RunService:IsStudio() then
+	world:SetAttribute("QAForceDestinationEventId", "")
+	world:SetAttribute("QAForceTravelEventId", "")
+	world:SetAttribute("QAForceModifierId", "")
+	world:SetAttribute("QAForceWeatherId", "")
+	world:SetAttribute("QAForceNightConditionId", "")
+end
 
 local playerJobs = {}
 local playerLastHouse = {}
@@ -1575,6 +1584,25 @@ local function queueNeighborhoodStory(player, sourceId)
 	return story
 end
 
+local function findRuleEntryById(entries, id)
+	if type(id) ~= "string" or id == "" then
+		return nil
+	end
+	for _, entry in ipairs(entries) do
+		if entry.id == id then
+			return entry
+		end
+	end
+	return nil
+end
+
+local function getStudioForcedEntry(attributeName, entries)
+	if not RunService:IsStudio() then
+		return nil
+	end
+	return findRuleEntryById(entries, tostring(world:GetAttribute(attributeName) or ""))
+end
+
 local function assignJob(player)
 	if not requirePlayerReady(player) then
 		return
@@ -1642,7 +1670,11 @@ local function assignJob(player)
 	end
 	local target = callbackHouse or candidates[math.random(1, #candidates)]
 	local destinationEvent = nil
-	if not neighborhoodCallback and math.random() <= RULES.DestinationEventChance then
+	local forcedDestinationEvent = getStudioForcedEntry("QAForceDestinationEventId", RULES.DestinationEvents)
+	if not neighborhoodCallback and forcedDestinationEvent then
+		destinationEvent = forcedDestinationEvent
+		playerLastDestinationEvent[player] = destinationEvent.id
+	elseif not neighborhoodCallback and math.random() <= RULES.DestinationEventChance then
 		destinationEvent = RULES.chooseWeighted(RULES.DestinationEvents, playerLastDestinationEvent[player])
 		playerLastDestinationEvent[player] = destinationEvent.id
 	end
@@ -1671,6 +1703,8 @@ local function assignJob(player)
 		weatherId = weather.id,
 		weatherName = weather.name,
 		weatherMultiplier = weather.rewardMultiplier,
+		nightConditionId = currentNightRule.id,
+		nightConditionName = currentNightRule.name,
 		baseTimeLimit = baseTimeLimit,
 		bagCapacity = math.clamp(1 + (player:GetAttribute("BagStyleLevel") or 0), 1, 3),
 		extraStops = {},
@@ -1716,7 +1750,8 @@ local function assignJob(player)
 		baseTimeLimit = baseTimeLimit,
 		baseReward = jobType.baseReward,
 		bagCapacity = playerJobs[player].bagCapacity,
-		nightCondition = currentNightRule.name,
+		nightCondition = playerJobs[player].nightConditionName,
+		nightConditionId = playerJobs[player].nightConditionId,
 		shortcutReward = playerJobs[player].shortcutReward,
 		neighborhoodThreadTitle = neighborhoodCallback and neighborhoodCallback.title or nil,
 		neighborhoodKindness = player:GetAttribute("NeighborhoodKindness") or 0,
@@ -1855,7 +1890,8 @@ local function scheduleTravelEvent(player, jobSerial)
 		end
 		job.travelEventStarted = true
 
-		if math.random() > RULES.TravelEventChance then
+		local forcedTravelEvent = getStudioForcedEntry("QAForceTravelEventId", RULES.TravelEvents)
+		if not forcedTravelEvent and math.random() > RULES.TravelEventChance then
 			return
 		end
 
@@ -1875,7 +1911,7 @@ local function scheduleTravelEvent(player, jobSerial)
 		flatDirection = flatDirection.Unit
 		local right = Vector3.new(-flatDirection.Z, 0, flatDirection.X)
 
-		local event = RULES.chooseWeighted(RULES.TravelEvents, playerLastTravelEvent[player])
+		local event = forcedTravelEvent or RULES.chooseWeighted(RULES.TravelEvents, playerLastTravelEvent[player])
 		if not event then
 			return
 		end
@@ -2066,8 +2102,12 @@ local function completeDelivery(player, houseName)
 	local destinationEventBonus = job.destinationEventReward or 0
 	local sideRequestBonus = job.currentStopBonus or 0
 	reward += sideRequestBonus
-	if currentNightRule.id == "festival" then
+	local nightConditionId = job.nightConditionId or "quiet"
+	local nightConditionBonus = 0
+	if nightConditionId == "festival" then
+		local beforeFestival = reward
 		reward = math.floor(reward * 1.1)
+		nightConditionBonus = math.max(0, reward - beforeFestival)
 	end
 
 	local targetHouse = housesFolder:FindFirstChild(houseName)
@@ -2097,10 +2137,10 @@ local function completeDelivery(player, houseName)
 	reward += coopBonus + destinationEventBonus + neighborhoodCallbackBonus
 
 	-- A small chance of a grateful resident tipping the courier keeps ordinary jobs surprising.
-	local tipChance = currentNightRule.id == "tip" and 30 or 14
+	local tipChance = nightConditionId == "tip" and 30 or 14
 	local neighborhoodTip = 0
 	if math.random(1, 100) <= tipChance then
-		neighborhoodTip = math.random(40, 90) + (currentNightRule.id == "tip" and 40 or 0)
+		neighborhoodTip = math.random(40, 90) + (nightConditionId == "tip" and 40 or 0)
 		reward += neighborhoodTip
 	end
 
@@ -2187,6 +2227,9 @@ local function completeDelivery(player, houseName)
 		isAnomaly = job.isAnomaly == true,
 		weatherName = job.weatherName or "晴れ",
 		weatherBonus = weatherBonus,
+		nightConditionId = nightConditionId,
+		nightConditionName = job.nightConditionName or "静かな夜",
+		nightConditionBonus = nightConditionBonus,
 		coopBonus = coopBonus,
 		neighborhoodTip = neighborhoodTip,
 		helperCount = helperCount,
@@ -2307,6 +2350,8 @@ local function startNextStop(player, job, stopIndex)
 	job.weatherId = currentWeather.id
 	job.weatherName = currentWeather.name
 	job.weatherMultiplier = currentWeather.rewardMultiplier
+	job.nightConditionId = currentNightRule.id
+	job.nightConditionName = currentNightRule.name
 	job.currentStopBonus = stop.reward or 0
 	job.forcedModifierId = stop.cargoRuleId
 	job.destinationEventChoice = nil
@@ -2343,8 +2388,10 @@ local function startNextStop(player, job, stopIndex)
 	job.routeChoice = nil
 	job.expiresAt = nil
 	job.startedAt = nil
-	job.destinationEvent = math.random() <= RULES.DestinationEventChance
-		and RULES.chooseWeighted(RULES.DestinationEvents, playerLastDestinationEvent[player]) or nil
+	local forcedDestinationEvent = getStudioForcedEntry("QAForceDestinationEventId", RULES.DestinationEvents)
+	job.destinationEvent = forcedDestinationEvent
+		or (math.random() <= RULES.DestinationEventChance
+			and RULES.chooseWeighted(RULES.DestinationEvents, playerLastDestinationEvent[player]) or nil)
 	if job.destinationEvent then playerLastDestinationEvent[player] = job.destinationEvent.id end
 	player:SetAttribute("NightDeliveryTimeLimit", nil)
 	player:SetAttribute("NightDeliveryOrderStartedAt", nil)
@@ -2370,6 +2417,8 @@ local function startNextStop(player, job, stopIndex)
 		baseReward = findJobType(job.jobTypeId).baseReward,
 		bagCapacity = job.bagCapacity,
 		orderModifierId = job.forcedModifierId,
+		nightCondition = job.nightConditionName,
+		nightConditionId = job.nightConditionId,
 		shortcutReward = job.shortcutReward,
 		sideRequest = true,
 	})
@@ -2737,6 +2786,30 @@ local function startWeatherLoop()
 	end)
 end
 
+local function enableStudioQAForcing()
+	if not RunService:IsStudio() then
+		return
+	end
+
+	world:GetAttributeChangedSignal("QAForceWeatherId"):Connect(function()
+		local forced = findRuleEntryById(WEATHER_TYPES, tostring(world:GetAttribute("QAForceWeatherId") or ""))
+		if forced then
+			applyWeather(forced, true, false)
+			print("[NightDelivery QA] forced weather:", forced.id)
+		end
+	end)
+
+	world:GetAttributeChangedSignal("QAForceNightConditionId"):Connect(function()
+		local forced = findRuleEntryById(RULES.NightConditions, tostring(world:GetAttribute("QAForceNightConditionId") or ""))
+		if forced then
+			currentNightRule = forced
+			world:SetAttribute("NightConditionId", currentNightRule.id)
+			applyWeather(currentWeather, false, true)
+			print("[NightDelivery QA] forced night condition:", forced.id)
+		end
+	end)
+end
+
 local function sendPlayerState(player)
 	local stats = getStats(player)
 	local deliveries = stats and stats.deliveries and stats.deliveries.Value or 0
@@ -2767,6 +2840,7 @@ local function sendPlayerState(player)
 end
 
 local depotPrompt, bikePrompt, shopPrompt, housePrompts = createWorld()
+enableStudioQAForcing()
 
 depotPrompt.Triggered:Connect(assignJob)
 bikePrompt.Triggered:Connect(toggleBike)
