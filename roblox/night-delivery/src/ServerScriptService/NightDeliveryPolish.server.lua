@@ -81,6 +81,15 @@ local function chooseModifier()
 	return ORDER_MODIFIERS[1]
 end
 
+local function findModifier(id)
+	for _, modifier in ipairs(ORDER_MODIFIERS) do
+		if modifier.id == id then
+			return modifier
+		end
+	end
+	return nil
+end
+
 local function calculateGrade(elapsed, timeLimit)
 	if not timeLimit or timeLimit <= 0 then
 		return "C"
@@ -198,7 +207,8 @@ local function beginTrackedOrder(player, payload)
 		return
 	end
 
-	local modifier = chooseModifier()
+	local requestedModifierId = player:GetAttribute("NightDeliveryRequestedModifier")
+	local modifier = findModifier(requestedModifierId) or chooseModifier()
 	player:SetAttribute("NightDeliveryBikeBlocked", modifier.id == "oversized")
 	player:SetAttribute("NightDeliveryNavSoft", modifier.id == "secret" or modifier.id == "mystery")
 	if modifier.id == "oversized" and player:GetAttribute("BikeActive") == true then
