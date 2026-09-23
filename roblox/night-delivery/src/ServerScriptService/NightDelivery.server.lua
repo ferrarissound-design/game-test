@@ -136,6 +136,8 @@ local playerShiftProgress = {}
 local remoteLastAction = {}
 local currentWeather = WEATHER_TYPES[1]
 local shopPadRef = nil
+local jobCounterRef = nil
+local bikePadRef = nil
 
 local function makePart(name, size, position, color, parent, material)
 	local part = Instance.new("Part")
@@ -1067,6 +1069,8 @@ local function createWorld()
 	createThemeDressing()
 
 	shopPadRef = shopPad
+	jobCounterRef = depotPad
+	bikePadRef = bikePad
 	return depotPrompt, bikePrompt, shopPrompt, prompts
 end
 
@@ -1393,6 +1397,9 @@ local function getJobTimeLimit(jobType, house)
 end
 
 local function assignJob(player)
+	if not isNearPart(player, jobCounterRef, 14) then
+		return
+	end
 	if playerJobs[player] then
 		sendStatus(player, "Message", {
 			text = "すでに配達中だよ。今の荷物を先に届けよう。",
@@ -1438,11 +1445,17 @@ local function assignJob(player)
 	local timeLimit = getJobTimeLimit(jobType, target)
 	local orderStartedAt = os.clock()
 	local expiresAt = now + timeLimit
+	local jobSerial = (player:GetAttribute("NightDeliveryJobSerial") or 0) + 1
 
 	player:SetAttribute("NightDeliveryTimeLimit", timeLimit)
 	player:SetAttribute("NightDeliveryOrderStartedAt", orderStartedAt)
+	player:SetAttribute("NightDeliveryJobSerial", jobSerial)
+	player:SetAttribute("NightDeliveryJobType", jobType.id)
+	player:SetAttribute("NightDeliveryHouseName", target.Name)
 	playerJobs[player] = {
+		jobSerial = jobSerial,
 		houseName = target.Name,
+		jobSerial = jobSerial,
 		displayName = target:GetAttribute("DisplayName") or target.Name,
 		districtId = districtId,
 		districtName = districtName,
@@ -1487,6 +1500,12 @@ local function completeDelivery(player, houseName)
 		sendStatus(player, "Message", {
 			text = "ここじゃない。黄色く光っている配達先を確認しよう。",
 		})
+		return
+	end
+
+	local targetHouse = housesFolder:FindFirstChild(job.houseName)
+	local deliveryPoint = targetHouse and targetHouse:FindFirstChild("DeliveryPoint")
+	if not isNearPart(player, deliveryPoint, 13) then
 		return
 	end
 
@@ -1557,6 +1576,7 @@ local function completeDelivery(player, houseName)
 		stats.coins.Value += reward
 		stats.deliveries.Value += 1
 		deliveriesAfter = stats.deliveries.Value
+		player:SetAttribute("NightDeliveryCompletedJobSerial", job.jobSerial)
 	end
 
 	local districtUnlocked = deliveriesAfter == RIVERSIDE_UNLOCK_DELIVERIES
@@ -1566,6 +1586,8 @@ local function completeDelivery(player, houseName)
 	playerJobs[player] = nil
 	player:SetAttribute("NightDeliveryTimeLimit", nil)
 	player:SetAttribute("NightDeliveryOrderStartedAt", nil)
+	player:SetAttribute("NightDeliveryJobType", nil)
+	player:SetAttribute("NightDeliveryHouseName", nil)
 	clearParcelVisual(player)
 
 	sendStatus(player, "Delivered", {
@@ -1591,6 +1613,9 @@ local function completeDelivery(player, houseName)
 end
 
 local function toggleBike(player)
+	if not isNearPart(player, bikePadRef, 14) then
+		return
+	end
 	local active = not (player:GetAttribute("BikeActive") == true)
 	player:SetAttribute("BikeActive", active)
 	applyMovementSpeed(player)
@@ -1952,6 +1977,10 @@ local function setupPlayer(player)
 	player:SetAttribute("BikeActive", false)
 	player:SetAttribute("NightDeliveryTimeLimit", nil)
 	player:SetAttribute("NightDeliveryOrderStartedAt", nil)
+	player:SetAttribute("NightDeliveryJobSerial", 0)
+	player:SetAttribute("NightDeliveryCompletedJobSerial", 0)
+	player:SetAttribute("NightDeliveryJobType", nil)
+	player:SetAttribute("NightDeliveryHouseName", nil)
 	player:SetAttribute("BagStyleLevel", data.bagStyleLevel)
 	player:SetAttribute("BikeStyleLevel", data.bikeStyleLevel)
 	player:SetAttribute("ShiftWins", data.shiftWins)
