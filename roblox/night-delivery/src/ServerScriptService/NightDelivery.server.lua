@@ -1954,6 +1954,9 @@ local function startNextStop(player, job, stopIndex)
 		orderModifierId = job.forcedModifierId,
 		sideRequest = true,
 	})
+	if job.isAnomaly then
+		sendStatus(player, "RareAnomaly", {title = "この家の表札が一瞬、別の名前に見えた"})
+	end
 end
 
 local function toggleBike(player)
