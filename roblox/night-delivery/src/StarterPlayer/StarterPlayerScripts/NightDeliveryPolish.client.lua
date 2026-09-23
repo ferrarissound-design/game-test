@@ -901,12 +901,13 @@ local function showEventAppearance(eventId)
 		local alertZone = addLocalEventPart(
 			eventAppearance,
 			"DogAlertZone",
-			Vector3.new(6, 0.08, 6),
+			Vector3.new(0.08, 6, 6),
 			point.Position + Vector3.new(6.5, 0.08, 0),
 			Color3.fromRGB(220, 88, 76),
-			nil,
+			Enum.PartType.Cylinder,
 			0.72
 		)
+		alertZone.Orientation = Vector3.new(0, 0, 90)
 		alertZone.Material = Enum.Material.Neon
 		addEventBillboard(dogBody, "赤い範囲に入ると吠える", Color3.fromRGB(255, 190, 170))
 	elseif eventId == "work" then
