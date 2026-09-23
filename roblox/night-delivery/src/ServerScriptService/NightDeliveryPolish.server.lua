@@ -265,8 +265,10 @@ local function finishTrackedOrder(player)
 	end
 	if tonumber(player:GetAttribute("NightDeliveryCompletedJobSerial")) ~= order.jobSerial
 		or tonumber(player:GetAttribute("NightDeliveryJobSerial")) ~= order.jobSerial then
+		state.activeOrder = nil
 		return
 	end
+	state.activeOrder = nil
 
 	local elapsed = math.max(0, os.clock() - order.startedAt)
 	local timeLimit = order.timeLimit or JOB_LIMITS[order.jobTypeId] or JOB_LIMITS.standard
