@@ -961,6 +961,11 @@ deliveryEvent.OnClientEvent:Connect(function(action, payload)
 	elseif action == "RareAnomaly" then
 		showRareAnomaly(payload)
 	elseif action == "Welcome" then
+		if payload.nightConditionName then
+			nightBadge.Visible = true
+			nightName.Text = "今夜: " .. tostring(payload.nightConditionName)
+			nightDescription.Text = tostring(payload.nightConditionDescription or "")
+		end
 		showTownReveal()
 		if (payload.deliveries or 0) == 0 then
 			task.delay(3.15, function()
