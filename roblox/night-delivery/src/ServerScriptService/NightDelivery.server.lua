@@ -158,6 +158,7 @@ local playerStreak = {}
 local playerShiftProgress = {}
 local remoteLastAction = {}
 local playerDataLoadSucceeded = {}
+local playerSaveInProgress = {}
 local currentWeather = WEATHER_TYPES[1]
 local shopPadRef = nil
 local jobCounterRef = nil
@@ -2494,9 +2495,15 @@ local function saveData(player)
 		return false
 	end
 
+	while playerSaveInProgress[player] do
+		task.wait(0.05)
+	end
+	playerSaveInProgress[player] = true
+
 	local stats = getStats(player)
 	if not stats or not stats.coins or not stats.deliveries then
-		return
+		playerSaveInProgress[player] = nil
+		return false
 	end
 
 	local pendingNeighborhoodStory = playerPendingNeighborhoodStory[player]
@@ -2524,6 +2531,7 @@ local function saveData(player)
 			end)
 		end)
 		if success then
+			playerSaveInProgress[player] = nil
 			return true
 		end
 		warn("Night Delivery: DataStore save attempt failed for", player.Name, attempt, err)
@@ -2531,6 +2539,7 @@ local function saveData(player)
 	end
 
 	warn("Night Delivery: DataStore save failed after retries for", player.Name, err)
+	playerSaveInProgress[player] = nil
 	return false
 end
 
@@ -3123,6 +3132,7 @@ Players.PlayerRemoving:Connect(function(player)
 	playerShiftProgress[player] = nil
 	remoteLastAction[player] = nil
 	playerDataLoadSucceeded[player] = nil
+	playerSaveInProgress[player] = nil
 end)
 
 task.spawn(function()
