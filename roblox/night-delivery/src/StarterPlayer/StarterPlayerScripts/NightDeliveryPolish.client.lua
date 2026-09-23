@@ -91,6 +91,21 @@ navTitle.TextColor3 = Color3.fromRGB(245, 248, 255)
 local navDistance = makeLabel(navFrame, UDim2.new(1, -68, 0, 24), UDim2.fromOffset(65, 33), "", 12, Enum.Font.Gotham)
 navDistance.TextColor3 = Color3.fromRGB(160, 185, 212)
 
+local nightBadge = Instance.new("Frame")
+nightBadge.Name = "NightConditionBadge"
+nightBadge.Size = UDim2.fromOffset(250, 52)
+nightBadge.AnchorPoint = Vector2.new(1, 0)
+nightBadge.Position = UDim2.new(1, -14, 0, 12)
+nightBadge.BackgroundColor3 = Color3.fromRGB(22, 28, 39)
+nightBadge.BackgroundTransparency = 0.12
+nightBadge.Visible = false
+nightBadge.Parent = gui
+addCorner(nightBadge, 10)
+addStroke(nightBadge, Color3.fromRGB(118, 159, 196), 0.5, 1)
+local nightName = makeLabel(nightBadge, UDim2.new(1, -18, 0, 22), UDim2.fromOffset(9, 4), "", 12, Enum.Font.GothamBold)
+local nightDescription = makeLabel(nightBadge, UDim2.new(1, -18, 0, 22), UDim2.fromOffset(9, 26), "", 10, Enum.Font.Gotham)
+nightDescription.TextColor3 = Color3.fromRGB(182, 198, 218)
+
 -- Session mission card.
 local missionFrame = Instance.new("Frame")
 missionFrame.Name = "SessionMission"
@@ -664,6 +679,18 @@ local function showNextStops(payload)
 	nextStopFrame.Visible = #stops > 0
 end
 
+local function showRareAnomaly(payload)
+	showRumor({
+		chapter = 1,
+		total = 1,
+		title = tostring(payload.title or "地図にない呼び声"),
+		text = tostring(payload.text or "配達を終えたはずの家から、もう一度だけ明かりが点いた。"),
+		reward = 0,
+	})
+	rumorKicker.Text = "めったに起きない異変"
+	rumorReward.Text = "次の夜には、何も起きないかもしれない。"
+end
+
 local function setTarget(houseName, displayName)
 	currentTarget = nil
 	currentHouseName = houseName
@@ -918,6 +945,9 @@ deliveryEvent.OnClientEvent:Connect(function(action, payload)
 		carefulEventButton.Active = true
 		destinationEventFrame.Visible = true
 	elseif action == "NightConditionChanged" then
+		nightBadge.Visible = true
+		nightName.Text = "今夜: " .. tostring(payload.name or "静かな夜")
+		nightDescription.Text = tostring(payload.description or "")
 		modifierTitle.Text = "今夜: " .. tostring(payload.name or "静かな夜")
 		modifierDescription.Text = tostring(payload.description or "")
 		if not currentHouseName then
@@ -928,6 +958,8 @@ deliveryEvent.OnClientEvent:Connect(function(action, payload)
 				end
 			end)
 		end
+	elseif action == "RareAnomaly" then
+		showRareAnomaly(payload)
 	elseif action == "Welcome" then
 		showTownReveal()
 		if (payload.deliveries or 0) == 0 then
@@ -967,6 +999,8 @@ RunService.RenderStepped:Connect(function()
 	end
 
 	local distance = (currentTarget.Position - root.Position).Magnitude
+	local navSoft = player:GetAttribute("NightDeliveryNavSoft") == true and distance > 70
+	navFrame.Visible = not navSoft
 	local angle = getFlatDirectionAngle(camera, currentTarget.Position, root.Position)
 	arrow.Rotation = angle
 
@@ -993,6 +1027,9 @@ local function updateResponsiveScale()
 
 	if narrow then
 		navFrame.Size = UDim2.fromOffset(236, 58)
+		nightBadge.Size = UDim2.new(0, 205, 0, 48)
+		nightName.TextSize = 11
+		nightDescription.TextSize = 9
 		missionFrame.Size = UDim2.fromOffset(210, 76)
 		missionName.TextSize = 12
 		missionProgress.TextSize = 10
@@ -1021,6 +1058,9 @@ local function updateResponsiveScale()
 		townSubtitle.TextSize = 11
 	else
 		navFrame.Size = UDim2.fromOffset(300, 64)
+		nightBadge.Size = UDim2.fromOffset(250, 52)
+		nightName.TextSize = 12
+		nightDescription.TextSize = 10
 		missionFrame.Size = UDim2.fromOffset(255, 82)
 		missionName.TextSize = 14
 		missionProgress.TextSize = 12
