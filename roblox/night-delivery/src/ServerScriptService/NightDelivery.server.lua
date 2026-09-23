@@ -1829,6 +1829,9 @@ end
 
 local function sendSideRequestOffer(player, jobSerial)
 	local job = playerJobs[player]
+	if job and job.sideOffer and os.clock() > job.sideOffer.expiresAt then
+		job.sideOffer = nil
+	end
 	if not job or job.jobSerial ~= jobSerial or not job.houseName
 		or job.sideOffer or #job.extraStops >= (job.bagCapacity - 1)
 		or math.random() > 0.38 then
@@ -1925,6 +1928,7 @@ local function startNextStop(player, job, stopIndex)
 		weatherMultiplier = currentWeather.rewardMultiplier,
 		baseTimeLimit = job.baseTimeLimit,
 		baseReward = findJobType(job.jobTypeId).baseReward + job.currentStopBonus,
+		bagCapacity = job.bagCapacity,
 		sideRequest = true,
 	})
 end
@@ -2250,6 +2254,9 @@ local function sendPlayerState(player)
 		shiftProgress = playerShiftProgress[player] or 0,
 		shiftTarget = SHIFT_TARGET,
 		shiftWins = player:GetAttribute("ShiftWins") or 0,
+		nightConditionId = currentNightRule.id,
+		nightConditionName = currentNightRule.name,
+		nightConditionDescription = currentNightRule.description,
 		weatherName = currentWeather.name,
 		weatherMultiplier = currentWeather.rewardMultiplier,
 		riversideUnlockAt = RIVERSIDE_UNLOCK_DELIVERIES,
