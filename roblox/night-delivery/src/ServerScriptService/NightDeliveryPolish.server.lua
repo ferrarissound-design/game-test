@@ -207,7 +207,19 @@ local function beginTrackedOrder(player, payload)
 
 	local jobTypeId = tostring(payload.jobTypeId or "standard")
 	if not JOB_LIMITS[jobTypeId] then
-		jobTypeId = "standard"
+		return
+	end
+
+	local jobSerial = tonumber(player:GetAttribute("NightDeliveryJobSerial"))
+	local timeLimit = tonumber(player:GetAttribute("NightDeliveryTimeLimit"))
+	local startedAt = tonumber(player:GetAttribute("NightDeliveryOrderStartedAt"))
+	if not jobSerial or not timeLimit or not startedAt then
+		return
+	end
+	if tonumber(payload.jobSerial) ~= jobSerial
+		or tostring(payload.houseName or "") ~= tostring(player:GetAttribute("NightDeliveryHouseName") or "")
+		or jobTypeId ~= tostring(player:GetAttribute("NightDeliveryJobType") or "") then
+		return
 	end
 
 	local modifier = chooseModifier()
@@ -226,6 +238,7 @@ local function beginTrackedOrder(player, payload)
 		baselineDeliveries = deliveries.Value,
 		startedAt = authoritativeStart,
 		timeLimit = authoritativeLimit,
+		jobSerial = jobSerial,
 		jobTypeId = jobTypeId,
 		houseName = tostring(payload.houseName or ""),
 		modifier = modifier,
@@ -248,6 +261,10 @@ local function finishTrackedOrder(player)
 
 	local order = state.activeOrder
 	if deliveries.Value <= order.baselineDeliveries then
+		return
+	end
+	if tonumber(player:GetAttribute("NightDeliveryCompletedJobSerial")) ~= order.jobSerial
+		or tonumber(player:GetAttribute("NightDeliveryJobSerial")) ~= order.jobSerial then
 		return
 	end
 
