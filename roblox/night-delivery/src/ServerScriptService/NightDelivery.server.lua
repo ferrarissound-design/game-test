@@ -1532,7 +1532,7 @@ local function assignJob(player)
 			local distance = getDeliveryDistance(house)
 			local matchesRoute = (jobType.id == "express" or jobType.id == "rush") and distance <= 210
 				or jobType.id == "long" and distance >= 185
-				or jobType.id ~= "express" and jobType.id ~= "long"
+				or jobType.id ~= "express" and jobType.id ~= "rush" and jobType.id ~= "long"
 			if matchesRoute then
 				table.insert(candidates, house)
 			end
