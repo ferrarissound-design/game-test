@@ -5,6 +5,14 @@ local Rules = {}
 Rules.DestinationEventChance = 0.22
 Rules.RareAnomalyChance = 0.004
 
+Rules.SideCargoTypes = {
+	{id = "fragile", title = "ワレモノ注意"},
+	{id = "frozen", title = "冷凍便"},
+	{id = "oversized", title = "大型荷物"},
+	{id = "hot", title = "温かい料理"},
+	{id = "secret", title = "秘密便"},
+}
+
 Rules.DestinationEvents = {
 	{
 		id = "absent",
