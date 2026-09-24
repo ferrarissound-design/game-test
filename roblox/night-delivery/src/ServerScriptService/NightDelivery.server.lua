@@ -35,7 +35,9 @@ local MAX_SPEED_LEVEL = 5
 local RIVERSIDE_UNLOCK_DELIVERIES = 5
 local SPECIAL_JOB_UNLOCK_DELIVERIES = 8
 local WAREHOUSE_UNLOCK_DELIVERIES = 15
-local SHIFT_TARGET = 5
+local SHIFT_TARGET = 6
+local SHIFT_TARGET_DELIVERIES = 6
+local PERFECT_COMBO_BONUS = 40
 local SHIFT_REWARD = 300
 local COOP_RANGE = 36
 local COOP_BONUS_PER_HELPER = 0.15
@@ -156,6 +158,9 @@ if RunService:IsStudio() then
 	world:SetAttribute("QAForceModifierId", "")
 	world:SetAttribute("QAForceWeatherId", "")
 	world:SetAttribute("QAForceNightConditionId", "")
+	world:SetAttribute("QAForceShiftDeliveryCount", -1)
+	world:SetAttribute("QAForceNightPhase", "")
+	world:SetAttribute("QAForceFinalDelivery", false)
 end
 
 local playerJobs = {}
@@ -1616,11 +1621,57 @@ local function getStudioForcedEntry(attributeName, entries)
 	return findRuleEntryById(entries, tostring(world:GetAttribute(attributeName) or ""))
 end
 
+-- The shift observes completed deliveries; route selection and job ownership stay here.
+local function shiftPhase(player)
+	if RunService:IsStudio() then
+		local forced = tostring(world:GetAttribute("QAForceNightPhase") or "")
+		if forced == "EarlyNight" or forced == "MidNight" or forced == "LateNight" or forced == "FinalRun" then
+			return forced
+		end
+	end
+	local completed = player:GetAttribute("NightShiftDeliveries") or 0
+	if RunService:IsStudio() then
+		local forcedCount = tonumber(world:GetAttribute("QAForceShiftDeliveryCount"))
+		if forcedCount and forcedCount >= 0 then completed = forcedCount end
+	end
+	if completed >= SHIFT_TARGET_DELIVERIES - 1
+		or (RunService:IsStudio() and world:GetAttribute("QAForceFinalDelivery") == true) then
+		return "FinalRun"
+	elseif completed >= 4 then
+		return "LateNight"
+	elseif completed >= 2 then
+		return "MidNight"
+	end
+	return "EarlyNight"
+end
+
+local function shiftChance(player, base, midBoost, lateBoost, finalBoost)
+	local phase = shiftPhase(player)
+	return math.min(0.75, base + (phase == "FinalRun" and finalBoost
+		or phase == "LateNight" and lateBoost or phase == "MidNight" and midBoost or 0))
+end
+
+local function startNightShift(player)
+	if player:GetAttribute("NightShiftActive") == true then return end
+	player:SetAttribute("NightShiftNumber", (player:GetAttribute("NightShiftNumber") or 0) + 1)
+	player:SetAttribute("NightShiftDeliveries", 0)
+	player:SetAttribute("NightShiftCoinsEarned", 0)
+	player:SetAttribute("NightShiftTravelEvents", 0)
+	player:SetAttribute("NightShiftKindnessGained", 0)
+	player:SetAttribute("NightShiftStartedAt", workspace:GetServerTimeNow())
+	player:SetAttribute("NightShiftPhase", "EarlyNight")
+	player:SetAttribute("NightShiftActive", true)
+end
+
 local function assignJob(player)
 	if not requirePlayerReady(player) then
 		return
 	end
 	if not isNearPart(player, jobCounterRef, 14) then
+		return
+	end
+	if player:GetAttribute("NightShiftResultPending") == true then
+		sendStatus(player, "Message", {text = "夜勤結果を確認してから次の依頼を受けよう。"})
 		return
 	end
 	if playerJobs[player] then
@@ -1660,6 +1711,9 @@ local function assignJob(player)
 		return
 	end
 
+	startNightShift(player)
+	local phase = shiftPhase(player)
+	player:SetAttribute("NightShiftPhase", phase)
 	local neighborhoodCallback = playerPendingNeighborhoodStory[player]
 	local callbackHouse = neighborhoodCallback
 		and housesFolder:FindFirstChild(neighborhoodCallback.targetHouseName)
@@ -1682,6 +1736,15 @@ local function assignJob(player)
 		jobType = JOB_TYPES[1]
 	end
 	local target = callbackHouse or candidates[math.random(1, #candidates)]
+	if phase == "FinalRun" and not callbackHouse and math.random() <= 0.52 then
+		local special = {}
+		for _, house in ipairs(candidates) do
+			if (house:GetAttribute("HouseType") or "Normal") ~= "Normal" then
+				table.insert(special, house)
+			end
+		end
+		if #special > 0 then target = special[math.random(1, #special)] end
+	end
 	if RunService:IsStudio() then
 		local forcedHouse = housesFolder:FindFirstChild(tostring(world:GetAttribute("QAForceHouseName") or ""))
 		if forcedHouse then
@@ -1696,7 +1759,7 @@ local function assignJob(player)
 	elseif not neighborhoodCallback and forcedDestinationEvent then
 		destinationEvent = forcedDestinationEvent
 		playerLastDestinationEvent[player] = destinationEvent.id
-	elseif not neighborhoodCallback and math.random() <= RULES.DestinationEventChance then
+	elseif not neighborhoodCallback and math.random() <= shiftChance(player, RULES.DestinationEventChance, 0.02, 0.05, 0.08) then
 		destinationEvent = RULES.chooseWeighted(RULES.DestinationEvents, playerLastDestinationEvent[player])
 		playerLastDestinationEvent[player] = destinationEvent.id
 	end
@@ -1704,6 +1767,16 @@ local function assignJob(player)
 	local districtId = target:GetAttribute("DistrictId") or "central"
 	local districtName = target:GetAttribute("DistrictName") or DISTRICT_NAMES[districtId] or districtId
 	local weather = currentWeather
+	local nightRule = currentNightRule
+	-- Local job conditions preserve independent player shifts and the shared sky.
+	if phase == "LateNight" or phase == "FinalRun" then
+		if math.random() <= (phase == "FinalRun" and 0.16 or 0.10) then
+			weather = WEATHER_TYPES[math.random(1, #WEATHER_TYPES)]
+		end
+		if math.random() <= (phase == "FinalRun" and 0.16 or 0.10) then
+			nightRule = RULES.chooseWeighted(RULES.NightConditions, currentNightRule.id)
+		end
+	end
 	local baseTimeLimit = getJobTimeLimit(jobType, target)
 	local jobSerial = (player:GetAttribute("NightDeliveryJobSerial") or 0) + 1
 
@@ -1725,8 +1798,8 @@ local function assignJob(player)
 		weatherId = weather.id,
 		weatherName = weather.name,
 		weatherMultiplier = weather.rewardMultiplier,
-		nightConditionId = currentNightRule.id,
-		nightConditionName = currentNightRule.name,
+		nightConditionId = nightRule.id,
+		nightConditionName = nightRule.name,
 		baseTimeLimit = baseTimeLimit,
 		bagCapacity = math.clamp(1 + (player:GetAttribute("BagStyleLevel") or 0), 1, 3),
 		extraStops = {},
@@ -1736,7 +1809,7 @@ local function assignJob(player)
 		residentReturnLine = target:GetAttribute("ResidentReturnLine") or "今夜もありがとう。",
 		routeChoice = nil,
 		routeReward = 0,
-		shortcutReward = ROUTE_CHOICES.shortcut.reward + (currentNightRule.id == "roadwork" and 40 or 0),
+		shortcutReward = ROUTE_CHOICES.shortcut.reward + (nightRule.id == "roadwork" and 40 or 0),
 		destinationEvent = destinationEvent,
 		destinationEventPrompted = false,
 		destinationEventReward = 0,
@@ -1748,6 +1821,7 @@ local function assignJob(player)
 		travelEventStarted = neighborhoodCallback ~= nil,
 		travelEventActive = false,
 		travelEventResolved = false,
+		travelEventsSolved = 0,
 		travelEventBlocking = false,
 		travelEventObjectivePosition = nil,
 		travelEventId = nil,
@@ -1776,6 +1850,7 @@ local function assignJob(player)
 		nightConditionId = playerJobs[player].nightConditionId,
 		shortcutReward = playerJobs[player].shortcutReward,
 		houseType = targetHouseType,
+		lastDelivery = phase == "FinalRun",
 		houseTypeLabel = HOUSE_TYPES.Definitions[targetHouseType].label,
 		neighborhoodThreadTitle = neighborhoodCallback and neighborhoodCallback.title or nil,
 		neighborhoodKindness = player:GetAttribute("NeighborhoodKindness") or 0,
@@ -1915,7 +1990,7 @@ local function scheduleTravelEvent(player, jobSerial)
 		job.travelEventStarted = true
 
 		local forcedTravelEvent = getStudioForcedEntry("QAForceTravelEventId", RULES.TravelEvents)
-		if not forcedTravelEvent and math.random() > RULES.TravelEventChance then
+		if not forcedTravelEvent and math.random() > shiftChance(player, RULES.TravelEventChance, 0.03, 0.07, 0.09) then
 			return
 		end
 
@@ -2155,6 +2230,9 @@ local function completeDelivery(player, houseName)
 				local otherStats = getStats(otherPlayer)
 				if otherStats and otherStats.coins then
 					otherStats.coins.Value += HELPER_REWARD
+					if otherPlayer:GetAttribute("NightShiftActive") == true then
+						otherPlayer:SetAttribute("NightShiftCoinsEarned", (otherPlayer:GetAttribute("NightShiftCoinsEarned") or 0) + HELPER_REWARD)
+					end
 					sendStatus(otherPlayer, "AssistReward", {
 						reward = HELPER_REWARD,
 						playerName = player.DisplayName,
@@ -2194,8 +2272,13 @@ local function completeDelivery(player, houseName)
 	local rumorUnlocked = nil
 	if stats and stats.coins and stats.deliveries then
 		stats.coins.Value += reward
+		player:SetAttribute("NightShiftCoinsEarned", (player:GetAttribute("NightShiftCoinsEarned") or 0) + reward)
+		player:SetAttribute("NightShiftKindnessGained", (player:GetAttribute("NightShiftKindnessGained") or 0) + neighborhoodKindnessGained)
 		stats.deliveries.Value += 1
 		deliveriesAfter = stats.deliveries.Value
+		player:SetAttribute("NightShiftLastDeliverySerial", job.jobSerial)
+		player:SetAttribute("NightShiftLastDestinationSuccess", job.destinationEvent ~= nil
+			and job.destinationEventObjectiveComplete == true and not job.destinationEventHazardTriggered)
 		player:SetAttribute("NightDeliveryCompletedJobSerial", job.jobSerial)
 
 		local clueLevel = player:GetAttribute("NightDeliveryRumorClueLevel") or 0
@@ -2205,6 +2288,7 @@ local function completeDelivery(player, houseName)
 			player:SetAttribute("NightDeliveryRumorClueLevel", clueLevel)
 			if nextClue.reward > 0 then
 				stats.coins.Value += nextClue.reward
+				player:SetAttribute("NightShiftCoinsEarned", (player:GetAttribute("NightShiftCoinsEarned") or 0) + nextClue.reward)
 			end
 			rumorUnlocked = {
 				chapter = clueLevel,
@@ -2313,6 +2397,7 @@ local function sendSideRequestOffer(player, jobSerial)
 		or job.sideOffer or job.travelEventActive or job.neighborhoodCallback
 		or job.destinationEventPrompted or job.destinationEventChoice
 		or playerPendingNeighborhoodStory[player]
+		or (player:GetAttribute("NightShiftDeliveries") or 0) + #job.extraStops >= SHIFT_TARGET_DELIVERIES - 1
 		or #job.extraStops >= (job.bagCapacity - 1)
 		or math.random() > 0.38 then
 		return
@@ -2399,6 +2484,7 @@ local function startNextStop(player, job, stopIndex)
 	job.travelEventStarted = false
 	job.travelEventActive = false
 	job.travelEventResolved = false
+	job.travelEventsSolved = 0
 	job.travelEventBlocking = false
 	job.travelEventObjectivePosition = nil
 	job.travelEventId = nil
@@ -2426,7 +2512,7 @@ local function startNextStop(player, job, stopIndex)
 	job.startedAt = nil
 	local forcedDestinationEvent = getStudioForcedEntry("QAForceDestinationEventId", RULES.DestinationEvents)
 	job.destinationEvent = stopHouseType ~= "Normal" and nil or forcedDestinationEvent
-		or (math.random() <= RULES.DestinationEventChance
+		or (math.random() <= shiftChance(player, RULES.DestinationEventChance, 0.02, 0.05, 0.08)
 			and RULES.chooseWeighted(RULES.DestinationEvents, playerLastDestinationEvent[player]) or nil)
 	if stopHouseType ~= "Normal" then job.destinationEvent = nil end
 	if job.destinationEvent then playerLastDestinationEvent[player] = job.destinationEvent.id end
@@ -2460,6 +2546,7 @@ local function startNextStop(player, job, stopIndex)
 		nightConditionId = job.nightConditionId,
 		shortcutReward = job.shortcutReward,
 		sideRequest = true,
+		lastDelivery = shiftPhase(player) == "FinalRun",
 	})
 	if job.isAnomaly then
 		sendStatus(player, "RareAnomaly", {title = "この家の表札が一瞬、別の名前に見えた"})
@@ -2906,7 +2993,12 @@ deliveryEvent.OnServerEvent:Connect(function(player, action, payload)
 	end
 	remoteLastAction[player] = now
 
-	if action == "AcceptSideJob" or action == "IgnoreSideJob" then
+	if action == "AcknowledgeNightShift" then
+		if player:GetAttribute("NightShiftActive") == false and player:GetAttribute("NightShiftResultPending") == true then
+			player:SetAttribute("NightShiftResultPending", false)
+		end
+		return
+	elseif action == "AcceptSideJob" or action == "IgnoreSideJob" then
 		local job = playerJobs[player]
 		if not job or type(payload) ~= "table"
 			or tonumber(payload.jobSerial) ~= job.jobSerial
@@ -3053,6 +3145,8 @@ deliveryEvent.OnServerEvent:Connect(function(player, action, payload)
 		local wasBlocking = job.travelEventBlocking == true
 		local followUpStory = queueNeighborhoodStory(player, resolvedId)
 		job.travelEventResolved = true
+		job.travelEventsSolved = (job.travelEventsSolved or 0) + 1
+		player:SetAttribute("NightShiftTravelEvents", (player:GetAttribute("NightShiftTravelEvents") or 0) + 1)
 		job.travelEventActive = false
 		job.travelEventBlocking = false
 		job.travelEventObjectivePosition = nil
@@ -3062,6 +3156,7 @@ deliveryEvent.OnServerEvent:Connect(function(player, action, payload)
 		local stats = getStats(player)
 		if reward > 0 and stats and stats.coins then
 			stats.coins.Value += reward
+			player:SetAttribute("NightShiftCoinsEarned", (player:GetAttribute("NightShiftCoinsEarned") or 0) + reward)
 		end
 
 		sendStatus(player, "TravelEventResolved", {
@@ -3194,6 +3289,12 @@ local function setupPlayer(player)
 	player:SetAttribute("NightDeliveryOrderStartedAt", nil)
 	player:SetAttribute("NightDeliveryJobSerial", 0)
 	player:SetAttribute("NightDeliveryCompletedJobSerial", 0)
+	player:SetAttribute("NightShiftActive", false)
+	player:SetAttribute("NightShiftResultPending", false)
+	player:SetAttribute("NightShiftDeliveries", 0)
+	player:SetAttribute("NightShiftTarget", SHIFT_TARGET_DELIVERIES)
+	player:SetAttribute("NightShiftNumber", 0)
+	player:SetAttribute("NightShiftPhase", "EarlyNight")
 	player:SetAttribute("NightDeliveryJobType", nil)
 	player:SetAttribute("NightDeliveryHouseName", nil)
 	player:SetAttribute("NightDeliveryBikeBlocked", false)

@@ -122,6 +122,90 @@ local nightName = makeLabel(nightBadge, UDim2.new(1, -18, 0, 22), UDim2.fromOffs
 local nightDescription = makeLabel(nightBadge, UDim2.new(1, -18, 0, 22), UDim2.fromOffset(9, 26), "", 10, Enum.Font.Gotham)
 nightDescription.TextColor3 = Color3.fromRGB(182, 198, 218)
 
+-- A compact shift clock sits below the top HUD; the center remains navigation space.
+local shiftHud = Instance.new("TextLabel")
+shiftHud.Name = "NightShiftHud"
+shiftHud.Size = UDim2.fromOffset(152, 38)
+shiftHud.Position = UDim2.fromOffset(10, 82)
+shiftHud.BackgroundColor3 = Color3.fromRGB(20, 26, 37)
+shiftHud.BackgroundTransparency = 0.12
+shiftHud.TextColor3 = Color3.fromRGB(255, 220, 144)
+shiftHud.Font = Enum.Font.GothamBold
+shiftHud.TextSize = 12
+shiftHud.Visible = false
+shiftHud.ZIndex = 25
+shiftHud.Parent = gui
+addCorner(shiftHud, 9)
+
+local shiftBanner = makeLabel(gui, UDim2.new(0.8, 0, 0, 50), UDim2.new(0.1, 0, 0.27, 0), "", 24, Enum.Font.GothamBlack)
+shiftBanner.TextXAlignment = Enum.TextXAlignment.Center
+shiftBanner.TextColor3 = Color3.fromRGB(255, 211, 120)
+shiftBanner.TextStrokeTransparency = 0.2
+shiftBanner.ZIndex = 85
+shiftBanner.Visible = false
+local bannerSerial = 0
+local function announceShift(message)
+	bannerSerial += 1
+	local serial = bannerSerial
+	shiftBanner.Text = message
+	shiftBanner.Visible = true
+	task.delay(2.3, function()
+		if serial == bannerSerial then shiftBanner.Visible = false end
+	end)
+end
+
+local shiftResult = Instance.new("Frame")
+shiftResult.Name = "NightShiftResult"
+shiftResult.Size = UDim2.fromOffset(340, 340)
+shiftResult.AnchorPoint = Vector2.new(0.5, 0.5)
+shiftResult.Position = UDim2.fromScale(0.5, 0.5)
+shiftResult.BackgroundColor3 = Color3.fromRGB(19, 25, 36)
+shiftResult.Visible = false
+shiftResult.ZIndex = 90
+shiftResult.Parent = gui
+addCorner(shiftResult, 16)
+addStroke(shiftResult, Color3.fromRGB(255, 209, 113), 0.1, 2)
+local shiftText = makeLabel(shiftResult, UDim2.new(1, -24, 1, -86), UDim2.fromOffset(12, 10), "", 16, Enum.Font.GothamBold)
+shiftText.TextWrapped = true
+shiftText.TextYAlignment = Enum.TextYAlignment.Top
+shiftText.ZIndex = 91
+local shiftClose = Instance.new("TextButton")
+shiftClose.Size = UDim2.new(1, -32, 0, 50)
+shiftClose.Position = UDim2.new(0, 16, 1, -62)
+shiftClose.Text = "次の夜勤へ（配達所で受注）"
+shiftClose.TextSize = 15
+shiftClose.Font = Enum.Font.GothamBold
+shiftClose.BackgroundColor3 = Color3.fromRGB(186, 137, 65)
+shiftClose.TextColor3 = Color3.fromRGB(18, 24, 34)
+shiftClose.ZIndex = 91
+shiftClose.Parent = shiftResult
+addCorner(shiftClose, 10)
+shiftClose.Activated:Connect(function()
+	shiftResult.Visible = false
+	deliveryEvent:FireServer("AcknowledgeNightShift")
+end)
+
+local phaseTimes = {EarlyNight = "20:30", MidNight = "22:30", LateNight = "0:00", FinalRun = "1:30"}
+local phaseTitles = {MidNight = "MID NIGHT", LateNight = "LATE NIGHT", FinalRun = "LAST DELIVERY"}
+local lastPhase = nil
+local function updateShiftHud()
+	local active = player:GetAttribute("NightShiftActive") == true
+	shiftHud.Visible = active
+	if not active then return end
+	local count = player:GetAttribute("NightShiftDeliveries") or 0
+	local target = player:GetAttribute("NightShiftTarget") or 6
+	local phase = player:GetAttribute("NightShiftPhase") or "EarlyNight"
+	shiftHud.Text = string.format("SHIFT %d / %d   %s", math.min(count + 1, target), target, phaseTimes[phase] or "20:30")
+	if lastPhase and phase ~= lastPhase and phaseTitles[phase] then
+		announceShift(phaseTitles[phase] .. "  " .. (phaseTimes[phase] or ""))
+	end
+	lastPhase = phase
+end
+for _, name in ipairs({"NightShiftActive", "NightShiftDeliveries", "NightShiftTarget", "NightShiftPhase"}) do
+	player:GetAttributeChangedSignal(name):Connect(updateShiftHud)
+end
+updateShiftHud()
+
 -- Session mission card.
 local missionFrame = Instance.new("Frame")
 missionFrame.Name = "SessionMission"
@@ -1432,6 +1516,7 @@ deliveryEvent.OnClientEvent:Connect(function(action, payload)
 		)
 		routeChoiceFrame.Visible = true
 		requestOrderModifier(payload.jobSerial)
+		if payload.lastDelivery then announceShift("LAST DELIVERY  今夜最後の配達") end
 
 		if introFrame.Visible then
 			introFrame.Visible = false
@@ -1440,6 +1525,26 @@ deliveryEvent.OnClientEvent:Connect(function(action, payload)
 			townReveal.Visible = false
 			townRevealActive = false
 		end
+	elseif action == "NightShiftProgress" then
+		if (payload.combo or 0) >= 2 then
+			announceShift(string.format("PERFECT x%d%s", payload.combo, (payload.comboBonus or 0) > 0 and "  BONUS!" or ""))
+		end
+	elseif action == "NightShiftComplete" then
+		local elapsed = math.max(0, math.floor(tonumber(payload.bestTime) or 0))
+		local body = string.format(
+			"NIGHT SHIFT COMPLETE  #%d\n\nDeliveries     %d\nPerfect         %d    Good %d    Poor %d\nEvents Solved   %d    Destination %d\nKindness +%d    Best Time %d:%02d\nMax Combo      %d\nCoins Earned    %d\n\nSHIFT RANK  %s",
+			tonumber(payload.number) or 1, tonumber(payload.deliveries) or 0,
+			tonumber(payload.perfect) or 0, tonumber(payload.good) or 0, tonumber(payload.poor) or 0,
+			tonumber(payload.events) or 0, tonumber(payload.destinationSuccess) or 0,
+			tonumber(payload.kindness) or 0, math.floor(elapsed / 60), elapsed % 60,
+			tonumber(payload.maxCombo) or 0, tonumber(payload.coins) or 0, tostring(payload.rank or "C")
+		)
+		task.delay(2.5, function()
+			if player:GetAttribute("NightShiftActive") ~= true then
+				shiftText.Text = body
+				shiftResult.Visible = true
+			end
+		end)
 	elseif action == "JobRouteChosen" then
 		if tonumber(payload.jobSerial) ~= tonumber(pendingRouteSerial) then
 			return
@@ -1701,6 +1806,9 @@ local function updateResponsiveScale()
 		modifierTitle.TextSize = 12
 		modifierDescription.TextSize = 10
 		resultFrame.Size = UDim2.new(0.86, 0, 0, 180)
+		shiftResult.Size = UDim2.new(0.9, 0, 0, 340)
+		shiftText.TextSize = 13
+		shiftHud.Size = UDim2.fromOffset(150, 38)
 		destinationEventFrame.Size = UDim2.new(0.92, 0, 0, 180)
 		eventObjectiveFrame.Size = UDim2.new(0.92, 0, 0, 116)
 		travelEventFrame.Size = UDim2.new(0.92, 0, 0, 96)
@@ -1737,6 +1845,8 @@ local function updateResponsiveScale()
 		modifierTitle.TextSize = 14
 		modifierDescription.TextSize = 12
 		resultFrame.Size = UDim2.fromOffset(360, 190)
+		shiftResult.Size = UDim2.fromOffset(340, 340)
+		shiftText.TextSize = 16
 		destinationEventFrame.Size = UDim2.fromOffset(430, 176)
 		eventObjectiveFrame.Size = UDim2.fromOffset(410, 116)
 		travelEventFrame.Size = UDim2.fromOffset(370, 92)
