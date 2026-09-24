@@ -1008,6 +1008,73 @@ local function clearTarget()
 	navFrame.Visible = false
 end
 
+-- Route-choice recovery watchdog.
+-- Job assignment is also mirrored into Player attributes by the server, so the
+-- player must never become stuck if a JobAssigned RemoteEvent callback is
+-- missed or interrupted before the route UI becomes visible.
+local lastRecoveredRouteKey = nil
+
+local function ensureRouteChoiceFromAttributes()
+	local jobSerial = tonumber(player:GetAttribute("NightDeliveryJobSerial"))
+	local houseName = tostring(player:GetAttribute("NightDeliveryHouseName") or "")
+	local startedAt = tonumber(player:GetAttribute("NightDeliveryOrderStartedAt"))
+
+	if not jobSerial or jobSerial <= 0 or houseName == "" then
+		return
+	end
+
+	-- Once the server confirms a route, the timer attribute exists and the
+	-- route chooser should stay closed.
+	if startedAt then
+		if tonumber(pendingRouteSerial) == jobSerial then
+			routeChoiceFrame.Visible = false
+		end
+		return
+	end
+
+	pendingRouteSerial = jobSerial
+
+	if currentHouseName ~= houseName or not currentTarget or not currentTarget.Parent then
+		local world = workspace:FindFirstChild("NightDeliveryWorld")
+		local houses = world and world:FindFirstChild("Houses")
+		local house = houses and houses:FindFirstChild(houseName)
+		local displayName = house and house:GetAttribute("DisplayName") or houseName
+		setTarget(houseName, displayName)
+	end
+
+	local world = workspace:FindFirstChild("NightDeliveryWorld")
+	local shortcutReward = 80
+	if world and tostring(world:GetAttribute("NightConditionId") or "") == "roadwork" then
+		shortcutReward += 40
+	end
+
+	routeChoiceFrame.Position = UDim2.fromScale(0.5, 0.5)
+	routeChoiceFrame.Visible = true
+	lanternRouteButton.Active = true
+	shortcutRouteButton.Active = true
+	shortcutRouteButton.Text = string.format(
+		"裏路地の近道\n制限時間短め\n成功で +%d Coins",
+		shortcutReward
+	)
+
+	local recoveryKey = string.format("%d:%s", jobSerial, houseName)
+	if recoveryKey ~= lastRecoveredRouteKey then
+		lastRecoveredRouteKey = recoveryKey
+		requestOrderModifier(jobSerial)
+	end
+end
+
+player:GetAttributeChangedSignal("NightDeliveryJobSerial"):Connect(function()
+	task.defer(ensureRouteChoiceFromAttributes)
+end)
+player:GetAttributeChangedSignal("NightDeliveryHouseName"):Connect(function()
+	task.defer(ensureRouteChoiceFromAttributes)
+end)
+player:GetAttributeChangedSignal("NightDeliveryOrderStartedAt"):Connect(function()
+	task.defer(ensureRouteChoiceFromAttributes)
+end)
+task.defer(ensureRouteChoiceFromAttributes)
+
 local travelEventFrame = Instance.new("Frame")
 travelEventFrame.Name = "TravelEvent"
 travelEventFrame.Size = UDim2.fromOffset(370, 92)
