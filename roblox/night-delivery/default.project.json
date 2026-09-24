@@ -16,6 +16,9 @@
       "NightDeliveryRules": {
         "$path": "src/ServerScriptService/NightDeliveryRules.lua"
       },
+      "NightDeliveryHouseTypes": {
+        "$path": "src/ServerScriptService/NightDeliveryHouseTypes.lua"
+      },
       "NightDeliveryPolish": {
         "$path": "src/ServerScriptService/NightDeliveryPolish.server.lua"
       },

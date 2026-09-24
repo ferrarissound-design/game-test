@@ -1413,7 +1413,11 @@ deliveryEvent.OnClientEvent:Connect(function(action, payload)
 		currentJobTypeName = payload.jobTypeName or "配達"
 		orderStartedAt = workspace:GetServerTimeNow()
 		orderExpiresAt = payload.expiresAt
-		setTarget(payload.houseName, payload.displayName)
+		local targetName = payload.displayName
+		if payload.houseType and payload.houseType ~= "Normal" then
+			targetName = tostring(targetName or "配達先") .. "（" .. tostring(payload.houseTypeLabel or "Obby") .. "）"
+		end
+		setTarget(payload.houseName, targetName)
 		modifierTitle.Text = "ルートを選択中..."
 		modifierDescription.Text = "荷物条件は確認中。ルート決定後に制限時間が始まります。"
 		modifierFrame.Visible = false
