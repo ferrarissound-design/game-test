@@ -463,7 +463,13 @@ ProximityPromptService.PromptShown:Connect(function(prompt, inputType)
 		inputText = prompt.GamepadKeyCode.Name:gsub("Button", "")
 	end
 
-	promptButton.Text = string.format("%s  %s", inputText, prompt.ActionText)
+	local actionText = prompt.ActionText
+	if prompt.Name == "DeliverPrompt" and currentHouseName
+		and prompt.Parent and prompt.Parent.Parent and prompt.Parent.Parent.Name == currentHouseName
+		and player:GetAttribute("NightDeliveryOddityId") == "silent_house" then
+		actionText = "静かに置く"
+	end
+	promptButton.Text = string.format("%s  %s", inputText, actionText)
 	promptButton.Visible = true
 end)
 
@@ -806,6 +812,11 @@ deliveryEvent.OnClientEvent:Connect(function(action, payload)
 			payload.baseReward or 0,
 			payload.bagCapacity or 1
 		)
+		if payload.recipient then
+			jobLabel.Text ..= "  •  Recipient: " .. tostring(payload.recipient)
+		elseif payload.oddityInstruction then
+			jobLabel.Text ..= "  •  " .. tostring(payload.oddityInstruction)
+		end
 		jobLabel.TextColor3 = currentJobTypeId == "special"
 			and Color3.fromRGB(214, 156, 255)
 			or (currentJobTypeId == "rush" and Color3.fromRGB(255, 207, 110) or Color3.fromRGB(157, 190, 225))
@@ -813,7 +824,11 @@ deliveryEvent.OnClientEvent:Connect(function(action, payload)
 		setWaypoint(currentHouseName)
 		showCoreRouteChoice(payload.jobSerial, payload.shortcutReward)
 		updateStats()
-		if payload.neighborhoodThreadTitle then
+		if payload.oddityInstruction then
+			showToast(tostring(payload.oddityInstruction))
+		elseif payload.recipient then
+			showToast("Recipient: " .. tostring(payload.recipient))
+		elseif payload.neighborhoodThreadTitle then
 			showToast("🧩 街のつながり: " .. tostring(payload.neighborhoodThreadTitle))
 		elseif currentJobTypeId == "special" then
 			showToast("🟣 深夜特別便！ 高報酬のレア依頼だ。")
@@ -869,6 +884,9 @@ deliveryEvent.OnClientEvent:Connect(function(action, payload)
 		if (payload.neighborhoodCallbackBonus or 0) > 0 then
 			bonusText ..= string.format("  つながり +%d", payload.neighborhoodCallbackBonus)
 		end
+		if (payload.oddityBonus or 0) > 0 then
+			bonusText ..= string.format("  +%d", payload.oddityBonus)
+		end
 
 		local unlockText = ""
 		if payload.districtUnlocked then
@@ -906,7 +924,11 @@ deliveryEvent.OnClientEvent:Connect(function(action, payload)
 		shiftProgress = payload.shiftProgress or shiftProgress
 		shiftTarget = payload.shiftTarget or shiftTarget
 		currentRankName = payload.rankName or currentRankName
-		showToast(string.format("配達完了！ +%d Coins%s%s%s", payload.reward or 0, bonusText, extraText, unlockText))
+		if payload.oddityId then
+			showToast("配達完了")
+		else
+			showToast(string.format("配達完了！ +%d Coins%s%s%s", payload.reward or 0, bonusText, extraText, unlockText))
+		end
 
 		blockingTravelObjectiveActive = false
 		destinationEventObjectiveActive = false
