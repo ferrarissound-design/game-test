@@ -1663,6 +1663,9 @@ end
 
 local function startNightShift(player)
 	if player:GetAttribute("NightShiftActive") == true then return end
+	-- Keep the legacy ShiftWins completion bonus aligned with the same six-delivery night.
+	-- It is session progress, so it must never carry a partial previous night forward.
+	playerShiftProgress[player] = 0
 	playerShiftOddities[player] = {count = 0, visited = {}}
 	player:SetAttribute("NightShiftOddities", 0)
 	player:SetAttribute("NightShiftNumber", (player:GetAttribute("NightShiftNumber") or 0) + 1)
@@ -1792,6 +1795,24 @@ local function generateJobOffers(player, phase)
 			end
 			local candidates = jobHouseCandidates(player, jobType, used)
 			if #candidates == 0 then break end
+			local repeatOfferCandidate = false
+			local oddityShift = playerShiftOddities[player]
+			if index > 1 and not (forcedHouse and index == 2)
+				and oddityShift and oddityShift.count < MAX_ODDITIES_PER_SHIFT
+				and (phase == "LateNight" or phase == "FinalRun")
+				and math.random() < (phase == "FinalRun" and 0.55 or 0.35) then
+				local repeats = {}
+				for _, candidate in ipairs(candidates) do
+					if oddityShift.visited[candidate.Name]
+						and (candidate:GetAttribute("HouseType") or "Normal") == "Normal" then
+						table.insert(repeats, candidate)
+					end
+				end
+				if #repeats > 0 then
+					candidates = repeats
+					repeatOfferCandidate = true
+				end
+			end
 			if index == 1 then
 				local ordinary = {}
 				for _, candidate in ipairs(candidates) do
@@ -1811,7 +1832,7 @@ local function generateJobOffers(player, phase)
 			if forcedHouse and index == 2 and isHouseUnlocked(player, forcedHouse) and not used[forcedHouse.Name] then
 				house = forcedHouse
 			end
-			local cargo = index == 1 and CARGO_MODIFIERS[1] or chooseOfferCargo()
+			local cargo = (index == 1 or repeatOfferCandidate) and CARGO_MODIFIERS[1] or chooseOfferCargo()
 			if forcedHouse and index == 2 then cargo = chooseOfferCargo() end
 			local distance = getDeliveryDistance(house)
 			local houseType = house:GetAttribute("HouseType") or "Normal"
@@ -1882,17 +1903,11 @@ local function confirmJob(player, selected, neighborhoodCallback)
 	local isAnomaly = not neighborhoodCallback and not oddityId and math.random() <= RULES.RareAnomalyChance
 	local districtId = target:GetAttribute("DistrictId") or "central"
 	local districtName = target:GetAttribute("DistrictName") or DISTRICT_NAMES[districtId] or districtId
+	-- Weather and night-condition gameplay must match the shared world the player can see.
+	-- Later phases already become busier through event/offer weighting; do not create a
+	-- per-job rain/fog/blackout/festival rule that disagrees with Lighting or navigation.
 	local weather = currentWeather
 	local nightRule = currentNightRule
-	-- Local job conditions preserve independent player shifts and the shared sky.
-	if phase == "LateNight" or phase == "FinalRun" then
-		if math.random() <= (phase == "FinalRun" and 0.16 or 0.10) then
-			weather = WEATHER_TYPES[math.random(1, #WEATHER_TYPES)]
-		end
-		if math.random() <= (phase == "FinalRun" and 0.16 or 0.10) then
-			nightRule = RULES.chooseWeighted(RULES.NightConditions, currentNightRule.id)
-		end
-	end
 	local baseTimeLimit = getJobTimeLimit(jobType, target)
 	local jobSerial = (player:GetAttribute("NightDeliveryJobSerial") or 0) + 1
 
@@ -2429,15 +2444,16 @@ local function completeDelivery(player, houseName)
 		reward += neighborhoodTip
 	end
 
+	-- The legacy ShiftWins reward now follows the same six completed deliveries as Night Shift.
+	-- A late delivery can lower the grade, but it must not leave a hidden 5/6 counter that pays
+	-- out during the next night.
 	local shiftBonus = 0
-	if remaining > 0 then
-		playerShiftProgress[player] = (playerShiftProgress[player] or 0) + 1
-		if playerShiftProgress[player] >= SHIFT_TARGET then
-			playerShiftProgress[player] = 0
-			shiftBonus = SHIFT_REWARD
-			reward += shiftBonus
-			player:SetAttribute("ShiftWins", (player:GetAttribute("ShiftWins") or 0) + 1)
-		end
+	playerShiftProgress[player] = (playerShiftProgress[player] or 0) + 1
+	if playerShiftProgress[player] >= SHIFT_TARGET then
+		playerShiftProgress[player] = 0
+		shiftBonus = SHIFT_REWARD
+		reward += shiftBonus
+		player:SetAttribute("ShiftWins", (player:GetAttribute("ShiftWins") or 0) + 1)
 	end
 
 	local stats = getStats(player)
