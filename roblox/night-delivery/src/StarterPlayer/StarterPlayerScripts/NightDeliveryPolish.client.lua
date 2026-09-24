@@ -180,9 +180,28 @@ shiftClose.TextColor3 = Color3.fromRGB(18, 24, 34)
 shiftClose.ZIndex = 91
 shiftClose.Parent = shiftResult
 addCorner(shiftClose, 10)
+local shiftAcknowledgePending = false
 shiftClose.Activated:Connect(function()
-	shiftResult.Visible = false
+	if shiftAcknowledgePending then return end
+	shiftAcknowledgePending = true
+	shiftClose.Active = false
+	shiftClose.Text = "確認中..."
 	deliveryEvent:FireServer("AcknowledgeNightShift")
+	task.delay(2, function()
+		if shiftAcknowledgePending and player:GetAttribute("NightShiftResultPending") == true then
+			shiftAcknowledgePending = false
+			shiftClose.Active = true
+			shiftClose.Text = "次の夜勤へ（配達所で受注）"
+		end
+	end)
+end)
+player:GetAttributeChangedSignal("NightShiftResultPending"):Connect(function()
+	if shiftAcknowledgePending and player:GetAttribute("NightShiftResultPending") == false then
+		shiftAcknowledgePending = false
+		shiftResult.Visible = false
+		shiftClose.Active = true
+		shiftClose.Text = "次の夜勤へ（配達所で受注）"
+	end
 end)
 
 local phaseTimes = {EarlyNight = "20:30", MidNight = "22:30", LateNight = "0:00", FinalRun = "1:30"}
@@ -707,20 +726,28 @@ end
 local quickEventButton = makeEventChoiceButton("QuickChoice", 0.04, Color3.fromRGB(57, 86, 113))
 local carefulEventButton = makeEventChoiceButton("CarefulChoice", 0.50, Color3.fromRGB(54, 112, 91))
 local destinationEventSerial = nil
+local destinationChoicePending = false
 
 local function submitDestinationEvent(choice)
-	if not destinationEventSerial then
+	if not destinationEventSerial or destinationChoicePending then
 		return
 	end
 	local jobSerial = destinationEventSerial
-	destinationEventSerial = nil
+	destinationChoicePending = true
 	quickEventButton.Active = false
 	carefulEventButton.Active = false
 	deliveryEvent:FireServer("ResolveDestinationEvent", {
 		jobSerial = jobSerial,
 		choice = choice,
 	})
-	destinationEventFrame.Visible = false
+	task.delay(1.5, function()
+		if destinationChoicePending and destinationEventSerial == jobSerial
+			and destinationEventFrame.Visible then
+			destinationChoicePending = false
+			quickEventButton.Active = true
+			carefulEventButton.Active = true
+		end
+	end)
 end
 
 quickEventButton.Activated:Connect(function()
@@ -916,16 +943,31 @@ local function showNextStops(payload)
 		button.TextSize = 13
 		button.Font = Enum.Font.GothamBold
 		button.TextWrapped = true
+		button.Active = true
 		button.ZIndex = 66
 		button.Text = string.format("%s  ・  %d studs  ・  +%d Coins", tostring(stop.displayName or "配達先"), tonumber(stop.distance) or 0, tonumber(stop.reward) or 0)
 		button.Parent = nextStopFrame
 		addCorner(button, 9)
 		button.Activated:Connect(function()
+			if not button.Active then return end
+			for _, choiceButton in ipairs(nextStopButtons) do choiceButton.Active = false end
+			local previousText = button.Text
+			button.Text = "確認中..."
 			deliveryEvent:FireServer("ChooseNextStop", {
 				jobSerial = tonumber(payload.jobSerial),
 				houseName = selectedHouseName,
 			})
-			nextStopFrame.Visible = false
+			task.delay(1.5, function()
+				if nextStopFrame.Visible and button.Parent then
+					if tonumber(player:GetAttribute("NightDeliveryJobSerial")) == tonumber(payload.jobSerial)
+						and not player:GetAttribute("NightDeliveryHouseName") then
+						button.Text = previousText
+						for _, choiceButton in ipairs(nextStopButtons) do choiceButton.Active = true end
+					else
+						nextStopFrame.Visible = false
+					end
+				end
+			end)
 		end)
 		table.insert(nextStopButtons, button)
 	end
@@ -1491,6 +1533,7 @@ deliveryEvent.OnClientEvent:Connect(function(action, payload)
 	payload = type(payload) == "table" and payload or {}
 
 	if action == "JobAssigned" then
+		nextStopFrame.Visible = false
 		clearTravelEvent(false, true)
 		clearEventObjective()
 		currentJobTypeId = payload.jobTypeId or "standard"
@@ -1634,6 +1677,7 @@ deliveryEvent.OnClientEvent:Connect(function(action, payload)
 	elseif action == "NextStopOptions" then
 		showNextStops(payload)
 	elseif action == "DestinationEvent" then
+		destinationChoicePending = false
 		sideOfferSerial += 1
 		sideOfferFrame.Visible = false
 		sideOfferHouseName = nil
@@ -1648,6 +1692,8 @@ deliveryEvent.OnClientEvent:Connect(function(action, payload)
 		carefulEventButton.Active = true
 		destinationEventFrame.Visible = true
 	elseif action == "DestinationEventObjective" then
+		destinationChoicePending = false
+		destinationEventSerial = nil
 		destinationEventFrame.Visible = false
 		showEventObjective(payload)
 	elseif action == "DestinationEventHazard" then

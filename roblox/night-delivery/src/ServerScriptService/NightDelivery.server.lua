@@ -2291,6 +2291,19 @@ local function completeDelivery(player, houseName)
 	end
 	if job.destinationEvent and job.destinationEventChoice then
 		if job.destinationEventObjectiveComplete ~= true then
+			local _, objectiveLabel = getDestinationEventObjective(
+				job.destinationEvent.id, job.destinationEventChoice, deliveryPoint
+			)
+			sendStatus(player, "DestinationEventObjective", {
+				jobSerial = job.jobSerial,
+				eventId = job.destinationEvent.id,
+				choice = job.destinationEventChoice,
+				position = job.destinationEventObjectivePosition,
+				label = objectiveLabel,
+				reward = job.destinationEventReward,
+				hazardPosition = job.destinationEventHazardPosition,
+				hazardRadius = job.destinationEventHazardRadius,
+			})
 			return
 		end
 	elseif not isNearPart(player, deliveryPoint, 13) then
@@ -2316,15 +2329,16 @@ local function completeDelivery(player, houseName)
 			end
 			job.sideOffer = nil
 			job.destinationEventPrompted = true
-			sendStatus(player, "DestinationEvent", {
-				jobSerial = job.jobSerial,
-				id = job.destinationEvent.id,
-				title = job.destinationEvent.title,
-				body = job.destinationEvent.body,
-				quickLabel = job.destinationEvent.quickLabel,
-				carefulLabel = job.destinationEvent.carefulLabel,
-			})
 		end
+		-- The house prompt can reopen an unconfirmed choice after a rejected request.
+		sendStatus(player, "DestinationEvent", {
+			jobSerial = job.jobSerial,
+			id = job.destinationEvent.id,
+			title = job.destinationEvent.title,
+			body = job.destinationEvent.body,
+			quickLabel = job.destinationEvent.quickLabel,
+			carefulLabel = job.destinationEvent.carefulLabel,
+		})
 		return
 	end
 
@@ -3149,6 +3163,7 @@ deliveryEvent.OnServerEvent:Connect(function(player, action, payload)
 	local lastAction = remoteLastAction[player] or 0
 	local immediateActions = {
 		ChooseRoute = true,
+		AcknowledgeNightShift = true,
 		AcceptJobOffer = true,
 		RequestJobOffers = true,
 		ResolveDestinationEvent = true,
@@ -3169,8 +3184,11 @@ deliveryEvent.OnServerEvent:Connect(function(player, action, payload)
 	elseif action == "AcceptJobOffer" then
 		local state = playerJobOffers[player]
 		if not requirePlayerReady(player) or playerJobs[player] or not state
-			or type(payload) ~= "table" or type(payload.offerId) ~= "string"
-			or not isNearPart(player, jobCounterRef, 14) then return end
+			or type(payload) ~= "table" or type(payload.offerId) ~= "string" then return end
+		if not isNearPart(player, jobCounterRef, 14) then
+			sendStatus(player, "JobOfferRejected", {reason = "Depotの近くで仕事を選ぼう。"})
+			return
+		end
 		for _, offer in ipairs(state.offers) do
 			if offer.id == payload.offerId then
 				local house = housesFolder:FindFirstChild(offer.houseName)
@@ -3256,6 +3274,7 @@ deliveryEvent.OnServerEvent:Connect(function(player, action, payload)
 		local house = housesFolder:FindFirstChild(job.houseName)
 		local point = house and house:FindFirstChild("DeliveryPoint")
 		if not isNearPart(player, point, 13) then
+			sendStatus(player, "Message", {text = "配達先の近くで届け方を選ぼう。"})
 			return
 		end
 		local choice = tostring(payload.choice or "")

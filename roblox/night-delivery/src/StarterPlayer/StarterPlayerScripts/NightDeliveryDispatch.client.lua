@@ -157,6 +157,16 @@ end
 player:GetAttributeChangedSignal("JobOffersActive"):Connect(requestPending)
 event.OnClientEvent:Connect(function(action, payload)
 	if action == "JobOffers" then show(type(payload) == "table" and payload or {})
+	elseif action == "JobOfferRejected" and shade.Visible then
+		accepting = false
+		header.Text = (player:GetAttribute("NightShiftPhase") == "FinalRun" and "LAST DELIVERY\n" or "DISPATCH BOARD\n")
+			.. tostring(type(payload) == "table" and payload.reason or "Depotで仕事を選ぼう。")
+		for _, card in ipairs(cards:GetChildren()) do
+			if card:IsA("Frame") then
+				local button = card:FindFirstChildOfClass("TextButton")
+				if button then button.Text = "ACCEPT" end
+			end
+		end
 	elseif action == "JobAssigned" or action == "NightShiftComplete" then hide() end
 end)
 if workspace.CurrentCamera then
