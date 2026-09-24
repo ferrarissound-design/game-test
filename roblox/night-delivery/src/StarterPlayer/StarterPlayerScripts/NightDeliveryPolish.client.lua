@@ -1389,9 +1389,9 @@ local function updateMissionCard(missions)
 	end
 
 	if not nextMission then
-		missionHeader.Text = "今夜の目標"
+		missionHeader.Text = "セッション目標"
 		missionName.Text = "セッション目標 COMPLETE"
-		missionProgress.Text = "15件達成。ここからは自己ベストの夜。"
+		missionProgress.Text = "15件達成。ここからは自己ベスト更新を狙おう。"
 		missionName.TextColor3 = Color3.fromRGB(255, 215, 126)
 		return
 	end
