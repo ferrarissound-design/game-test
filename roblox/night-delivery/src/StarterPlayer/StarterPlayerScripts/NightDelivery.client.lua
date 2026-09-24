@@ -33,12 +33,200 @@ local currentTargetPart = nil
 local blockingTravelObjectiveActive = false
 local destinationEventObjectiveActive = false
 local bikeActive = false
+local routeJobSerial = nil
+local routeShortcutReward = 80
 
 local gui = Instance.new("ScreenGui")
 gui.Name = "NightDeliveryUI"
 gui.ResetOnSpawn = false
 gui.IgnoreGuiInset = false
 gui.Parent = player:WaitForChild("PlayerGui")
+
+-- Core route chooser.
+-- This lives in the main gameplay client instead of relying on the optional
+-- polish HUD, so accepting a parcel can never leave the player unable to
+-- choose a route.
+local routeGui = Instance.new("ScreenGui")
+routeGui.Name = "NightDeliveryRouteUI"
+routeGui.ResetOnSpawn = false
+routeGui.IgnoreGuiInset = false
+routeGui.DisplayOrder = 100
+routeGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+routeGui.Parent = player.PlayerGui
+
+local routeFrame = Instance.new("Frame")
+routeFrame.Name = "RouteChoice"
+routeFrame.Size = UDim2.new(0.88, 0, 0, 220)
+routeFrame.AnchorPoint = Vector2.new(0.5, 0.5)
+routeFrame.Position = UDim2.fromScale(0.5, 0.5)
+routeFrame.BackgroundColor3 = Color3.fromRGB(18, 24, 34)
+routeFrame.BackgroundTransparency = 0.03
+routeFrame.Visible = false
+routeFrame.ZIndex = 100
+routeFrame.Parent = routeGui
+
+local routeSizeConstraint = Instance.new("UISizeConstraint")
+routeSizeConstraint.MinSize = Vector2.new(280, 220)
+routeSizeConstraint.MaxSize = Vector2.new(460, 220)
+routeSizeConstraint.Parent = routeFrame
+
+local routeCorner = Instance.new("UICorner")
+routeCorner.CornerRadius = UDim.new(0, 16)
+routeCorner.Parent = routeFrame
+
+local routeStroke = Instance.new("UIStroke")
+routeStroke.Color = Color3.fromRGB(105, 171, 230)
+routeStroke.Transparency = 0.18
+routeStroke.Thickness = 1.5
+routeStroke.Parent = routeFrame
+
+local routeTitle = Instance.new("TextLabel")
+routeTitle.Size = UDim2.new(1, -24, 0, 30)
+routeTitle.Position = UDim2.fromOffset(12, 10)
+routeTitle.BackgroundTransparency = 1
+routeTitle.Text = "どのルートで届ける？"
+routeTitle.TextColor3 = Color3.fromRGB(246, 250, 255)
+routeTitle.Font = Enum.Font.GothamBold
+routeTitle.TextSize = 19
+routeTitle.TextXAlignment = Enum.TextXAlignment.Left
+routeTitle.ZIndex = 101
+routeTitle.Parent = routeFrame
+
+local routeHint = Instance.new("TextLabel")
+routeHint.Size = UDim2.new(1, -24, 0, 32)
+routeHint.Position = UDim2.fromOffset(12, 42)
+routeHint.BackgroundTransparency = 1
+routeHint.Text = "荷物を受け取った。先に配達ルートを選ぼう。"
+routeHint.TextColor3 = Color3.fromRGB(191, 205, 224)
+routeHint.Font = Enum.Font.Gotham
+routeHint.TextSize = 12
+routeHint.TextWrapped = true
+routeHint.TextXAlignment = Enum.TextXAlignment.Left
+routeHint.ZIndex = 101
+routeHint.Parent = routeFrame
+
+local lanternRouteButton = Instance.new("TextButton")
+lanternRouteButton.Name = "LanternRoute"
+lanternRouteButton.Size = UDim2.new(1, -24, 0, 58)
+lanternRouteButton.Position = UDim2.fromOffset(12, 86)
+lanternRouteButton.BackgroundColor3 = Color3.fromRGB(54, 76, 89)
+lanternRouteButton.Text = "街灯の道  ・  時間に余裕  ・  追加報酬なし"
+lanternRouteButton.TextColor3 = Color3.fromRGB(241, 247, 252)
+lanternRouteButton.TextSize = 14
+lanternRouteButton.TextWrapped = true
+lanternRouteButton.Font = Enum.Font.GothamBold
+lanternRouteButton.ZIndex = 101
+lanternRouteButton.Parent = routeFrame
+
+local lanternCorner = Instance.new("UICorner")
+lanternCorner.CornerRadius = UDim.new(0, 10)
+lanternCorner.Parent = lanternRouteButton
+
+local shortcutRouteButton = Instance.new("TextButton")
+shortcutRouteButton.Name = "ShortcutRoute"
+shortcutRouteButton.Size = UDim2.new(1, -24, 0, 58)
+shortcutRouteButton.Position = UDim2.fromOffset(12, 152)
+shortcutRouteButton.BackgroundColor3 = Color3.fromRGB(103, 70, 51)
+shortcutRouteButton.TextColor3 = Color3.fromRGB(255, 239, 219)
+shortcutRouteButton.TextSize = 14
+shortcutRouteButton.TextWrapped = true
+shortcutRouteButton.Font = Enum.Font.GothamBold
+shortcutRouteButton.ZIndex = 101
+shortcutRouteButton.Parent = routeFrame
+
+local shortcutCorner = Instance.new("UICorner")
+shortcutCorner.CornerRadius = UDim.new(0, 10)
+shortcutCorner.Parent = shortcutRouteButton
+
+local function showCoreRouteChoice(jobSerial, shortcutReward)
+	routeJobSerial = tonumber(jobSerial)
+	routeShortcutReward = tonumber(shortcutReward) or 80
+	if not routeJobSerial then
+		return
+	end
+	lanternRouteButton.Active = true
+	lanternRouteButton.AutoButtonColor = true
+	shortcutRouteButton.Active = true
+	shortcutRouteButton.AutoButtonColor = true
+	lanternRouteButton.Text = "街灯の道  ・  時間に余裕  ・  追加報酬なし"
+	shortcutRouteButton.Text = string.format(
+		"裏路地の近道  ・  制限時間短め  ・  成功で +%d Coins",
+		routeShortcutReward
+	)
+	routeFrame.Visible = true
+	print("[NightDelivery] core route chooser shown", routeJobSerial)
+end
+
+local function hideCoreRouteChoice()
+	routeFrame.Visible = false
+	routeJobSerial = nil
+end
+
+local function submitCoreRoute(routeId)
+	if not routeFrame.Visible or not routeJobSerial then
+		return
+	end
+	lanternRouteButton.Active = false
+	lanternRouteButton.AutoButtonColor = false
+	shortcutRouteButton.Active = false
+	shortcutRouteButton.AutoButtonColor = false
+	routeHint.Text = "ルートを確定しています..."
+	deliveryEvent:FireServer("ChooseRoute", {
+		jobSerial = routeJobSerial,
+		routeId = routeId,
+	})
+
+	local submittedSerial = routeJobSerial
+	task.delay(1.5, function()
+		if routeFrame.Visible
+			and routeJobSerial == submittedSerial
+			and player:GetAttribute("NightDeliveryOrderStartedAt") == nil then
+			routeHint.Text = "まだ確定していません。もう一度ルートを選べます。"
+			lanternRouteButton.Active = true
+			lanternRouteButton.AutoButtonColor = true
+			shortcutRouteButton.Active = true
+			shortcutRouteButton.AutoButtonColor = true
+		end
+	end)
+end
+
+lanternRouteButton.Activated:Connect(function()
+	submitCoreRoute("lantern")
+end)
+
+shortcutRouteButton.Activated:Connect(function()
+	submitCoreRoute("shortcut")
+end)
+
+local function recoverCoreRouteChoice()
+	local jobSerial = tonumber(player:GetAttribute("NightDeliveryJobSerial"))
+	local houseName = tostring(player:GetAttribute("NightDeliveryHouseName") or "")
+	local startedAt = player:GetAttribute("NightDeliveryOrderStartedAt")
+	if jobSerial and jobSerial > 0 and houseName ~= "" and startedAt == nil then
+		local world = workspace:FindFirstChild("NightDeliveryWorld")
+		local shortcutReward = 80
+		if world and tostring(world:GetAttribute("NightConditionId") or "") == "roadwork" then
+			shortcutReward += 40
+		end
+		if not routeFrame.Visible or routeJobSerial ~= jobSerial then
+			routeHint.Text = "荷物を受け取った。先に配達ルートを選ぼう。"
+			showCoreRouteChoice(jobSerial, shortcutReward)
+		end
+	elseif startedAt ~= nil then
+		hideCoreRouteChoice()
+	end
+end
+
+player:GetAttributeChangedSignal("NightDeliveryJobSerial"):Connect(function()
+	task.defer(recoverCoreRouteChoice)
+end)
+player:GetAttributeChangedSignal("NightDeliveryHouseName"):Connect(function()
+	task.defer(recoverCoreRouteChoice)
+end)
+player:GetAttributeChangedSignal("NightDeliveryOrderStartedAt"):Connect(function()
+	task.defer(recoverCoreRouteChoice)
+end)
+task.defer(recoverCoreRouteChoice)
 
 local panel = Instance.new("Frame")
 panel.Name = "ObjectivePanel"
@@ -620,6 +808,7 @@ deliveryEvent.OnClientEvent:Connect(function(action, payload)
 			or (currentJobTypeId == "rush" and Color3.fromRGB(255, 207, 110) or Color3.fromRGB(157, 190, 225))
 
 		setWaypoint(currentHouseName)
+		showCoreRouteChoice(payload.jobSerial, payload.shortcutReward)
 		updateStats()
 		if payload.neighborhoodThreadTitle then
 			showToast("🧩 街のつながり: " .. tostring(payload.neighborhoodThreadTitle))
@@ -631,6 +820,8 @@ deliveryEvent.OnClientEvent:Connect(function(action, payload)
 			showToast("荷物を受け取った。黄色く光る家へ届けよう。")
 		end
 	elseif action == "JobRouteChosen" then
+		hideCoreRouteChoice()
+		routeHint.Text = "荷物を受け取った。先に配達ルートを選ぼう。"
 		expiresAt = payload.expiresAt
 		jobLabel.Text ..= "  •  " .. (payload.routeTitle or "選択ルート")
 		if payload.routeId == "shortcut" then
@@ -656,6 +847,8 @@ deliveryEvent.OnClientEvent:Connect(function(action, payload)
 			end
 		end
 	elseif action == "Delivered" then
+		hideCoreRouteChoice()
+		routeHint.Text = "荷物を受け取った。先に配達ルートを選ぼう。"
 		local bonusText = ""
 		if (payload.streakBonus or 0) > 0 then
 			bonusText = string.format("  連続 +%d", payload.streakBonus)
