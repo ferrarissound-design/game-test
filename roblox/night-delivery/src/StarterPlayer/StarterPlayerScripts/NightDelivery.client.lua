@@ -25,7 +25,7 @@ local activeJobWeatherName = nil
 local activeJobWeatherMultiplier = nil
 local currentRankName = "新人"
 local shiftProgress = 0
-local shiftTarget = 5
+local shiftTarget = 6
 local expiresAt = nil
 local currentHighlight = nil
 local currentBillboard = nil
@@ -144,6 +144,7 @@ local function showCoreRouteChoice(jobSerial, shortcutReward)
 	if not routeJobSerial then
 		return
 	end
+	routeHint.Text = "荷物を受け取った。先に配達ルートを選ぼう。"
 	lanternRouteButton.Active = true
 	lanternRouteButton.AutoButtonColor = true
 	shortcutRouteButton.Active = true
@@ -374,7 +375,7 @@ local shiftLabel = Instance.new("TextLabel")
 shiftLabel.Size = UDim2.new(1, -20, 0, 20)
 shiftLabel.Position = UDim2.fromOffset(10, 71)
 shiftLabel.BackgroundTransparency = 1
-shiftLabel.Text = "新人  •  夜勤 0/5"
+shiftLabel.Text = "新人  •  夜勤 0/6"
 shiftLabel.TextColor3 = Color3.fromRGB(225, 205, 154)
 shiftLabel.Font = Enum.Font.GothamMedium
 shiftLabel.TextSize = 12
@@ -1003,7 +1004,7 @@ deliveryEvent.OnClientEvent:Connect(function(action, payload)
 	elseif action == "Welcome" then
 		currentRankName = payload.rankName or currentRankName
 		shiftProgress = payload.shiftProgress or 0
-		shiftTarget = payload.shiftTarget or 5
+		shiftTarget = payload.shiftTarget or 6
 		currentWeatherName = payload.weatherName or currentWeatherName
 		currentWeatherMultiplier = payload.weatherMultiplier or currentWeatherMultiplier
 		updateWeatherVisual()
