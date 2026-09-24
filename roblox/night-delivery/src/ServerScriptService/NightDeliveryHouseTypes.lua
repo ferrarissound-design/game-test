@@ -76,6 +76,7 @@ local function highRise(model, origin)
 	for i, step in ipairs({{-4, -17, 2.5}, {-7, -17, 5}, {-10, -17, 7.5}, {-13, -14, 9}}) do
 		part(model, "RoofShortcut_" .. i, Vector3.new(5, step[3], 5), origin + Vector3.new(step[1], step[3] / 2, step[2]), Color3.fromRGB(166, 127, 78), Enum.Material.WoodPlanks)
 	end
+	part(model, "RoofShortcutBridge", Vector3.new(5, 0.5, 5), origin + Vector3.new(-14, 9.25, -9), metal, Enum.Material.Metal)
 	local target = part(model, "DeliveryPoint", Vector3.new(6, 0.5, 6), origin + Vector3.new(-4, 18.75, 1), Color3.fromRGB(97, 185, 163), Enum.Material.Neon)
 	sign(model, origin + Vector3.new(-16, 0, -20), "屋上配達：左の非常階段へ\n足場の近道もある")
 	return body, target
