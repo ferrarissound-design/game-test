@@ -57,8 +57,86 @@ local ORDER_MODIFIERS = {
 }
 
 local playerState = {}
+local getStats
+local SHIFT_TARGET_DELIVERIES = 6
+local PERFECT_COMBO_BONUS = 40
 
-local function getStats(player)
+local function rankShift(shift)
+	local total = math.max(1, shift.deliveries)
+	local perfectRate = shift.perfect / total
+	local score = perfectRate * 65 + math.min(shift.events, 3) * 5
+		+ math.min(shift.maxCombo, 4) * 4 - shift.poor * 12
+	if score >= 78 and shift.poor == 0 and shift.perfect >= 4 then return "S" end
+	if score >= 55 then return "A" end
+	if score >= 30 then return "B" end
+	return "C"
+end
+
+local function trackNightShift(player, grade, elapsed, earnedBonus)
+	if player:GetAttribute("NightShiftActive") ~= true then return end
+	local state = playerState[player]
+	local serial = tonumber(player:GetAttribute("NightShiftLastDeliverySerial"))
+	if not serial or state.lastShiftSerial == serial then return end
+	state.lastShiftSerial = serial
+	local shift = state.shift
+	if not shift or shift.number ~= player:GetAttribute("NightShiftNumber") then
+		shift = {
+			number = player:GetAttribute("NightShiftNumber") or 1,
+			deliveries = 0, perfect = 0, good = 0, poor = 0,
+			events = 0, destinationSuccess = 0, combo = 0, maxCombo = 0,
+			bestTime = nil,
+		}
+		state.shift = shift
+	end
+	shift.deliveries += 1
+	-- The existing S/A/B/C grade is authoritative: S=Perfect, A/B=Good, C=Poor.
+	if grade == "S" then
+		shift.perfect += 1
+		shift.combo += 1
+		shift.maxCombo = math.max(shift.maxCombo, shift.combo)
+	elseif grade == "C" then
+		shift.poor += 1
+		shift.combo = 0
+	else
+		shift.good += 1
+		shift.combo = 0
+	end
+	shift.bestTime = math.min(shift.bestTime or math.huge, elapsed)
+	shift.events = player:GetAttribute("NightShiftTravelEvents") or 0
+	if player:GetAttribute("NightShiftLastDestinationSuccess") == true then
+		shift.destinationSuccess += 1
+	end
+	local comboBonus = grade == "S" and shift.combo > 0 and shift.combo % 3 == 0
+		and PERFECT_COMBO_BONUS or 0
+	local coins = getStats(player)
+	if comboBonus > 0 and coins then coins.Value += comboBonus end
+	local earned = (player:GetAttribute("NightShiftCoinsEarned") or 0) + earnedBonus + comboBonus
+	player:SetAttribute("NightShiftCoinsEarned", earned)
+	player:SetAttribute("NightShiftDeliveries", shift.deliveries)
+	local phase = shift.deliveries >= SHIFT_TARGET_DELIVERIES - 1 and "FinalRun"
+		or shift.deliveries >= 4 and "LateNight"
+		or shift.deliveries >= 2 and "MidNight" or "EarlyNight"
+	player:SetAttribute("NightShiftPhase", phase)
+	deliveryEvent:FireClient(player, "NightShiftProgress", {
+		completed = shift.deliveries, target = SHIFT_TARGET_DELIVERIES,
+		phase = phase, combo = shift.combo, comboBonus = comboBonus,
+	})
+	if shift.deliveries >= SHIFT_TARGET_DELIVERIES then
+		player:SetAttribute("NightShiftActive", false)
+		player:SetAttribute("NightShiftResultPending", true)
+		deliveryEvent:FireClient(player, "NightShiftComplete", {
+			number = shift.number, deliveries = shift.deliveries,
+			perfect = shift.perfect, good = shift.good, poor = shift.poor,
+			events = shift.events, destinationSuccess = shift.destinationSuccess,
+			kindness = player:GetAttribute("NightShiftKindnessGained") or 0,
+			bestTime = shift.bestTime, maxCombo = shift.maxCombo, coins = earned,
+			rank = rankShift(shift), startedAt = player:GetAttribute("NightShiftStartedAt"),
+		})
+		state.shift = nil
+	end
+end
+
+getStats = function(player)
 	local leaderstats = player:FindFirstChild("leaderstats")
 	if not leaderstats then
 		return nil, nil
@@ -389,6 +467,7 @@ local function finishTrackedOrder(player)
 	if totalBonus > 0 then
 		coins.Value += totalBonus
 	end
+	trackNightShift(player, grade, elapsed, totalBonus + missionBonus)
 
 	deliveryEvent:FireClient(player, "PolishDeliveryResult", {
 		grade = grade,
