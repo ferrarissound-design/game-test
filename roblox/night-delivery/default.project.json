@@ -2,6 +2,12 @@
   "name": "NightDelivery",
   "tree": {
     "$className": "DataModel",
+    "ReplicatedStorage": {
+      "$className": "ReplicatedStorage",
+      "NightDeliveryDogAppearance": {
+        "$path": "src/ReplicatedStorage/NightDeliveryDogAppearance.lua"
+      }
+    },
     "ServerScriptService": {
       "$className": "ServerScriptService",
       "NightDelivery": {

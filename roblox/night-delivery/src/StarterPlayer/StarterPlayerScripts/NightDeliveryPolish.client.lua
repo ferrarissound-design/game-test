@@ -10,6 +10,7 @@ local UserInputService = game:GetService("UserInputService")
 local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
 local deliveryEvent = ReplicatedStorage:WaitForChild("NightDeliveryEvent")
+local DogAppearance = require(ReplicatedStorage:WaitForChild("NightDeliveryDogAppearance"))
 
 local currentTarget = nil
 local currentHouseName = nil
@@ -913,12 +914,10 @@ local function showEventAppearance(eventId)
 		addLocalEventPart(eventAppearance, "ParcelLocker", Vector3.new(2.2, 1.6, 1.4), point.Position + Vector3.new(3.4, 1.05, -0.4), Color3.fromRGB(102, 127, 151))
 		addLocalEventPart(eventAppearance, "LockerSlot", Vector3.new(1.2, 0.55, 0.12), point.Position + Vector3.new(3.4, 1.1, -1.16), Color3.fromRGB(37, 47, 58), Enum.PartType.Block)
 	elseif eventId == "dog" then
-		local dogPosition = point.Position + Vector3.new(6.5, 0.8, 0)
-		local dogBody = addLocalEventPart(eventAppearance, "DogBody", Vector3.new(2, 1.25, 1.1), dogPosition, Color3.fromRGB(150, 105, 70))
-		addLocalEventPart(eventAppearance, "DogHead", Vector3.new(0.95, 0.95, 0.95), dogPosition + Vector3.new(1.05, 0.42, 0), Color3.fromRGB(171, 125, 83), Enum.PartType.Ball)
-		for _, offset in ipairs({Vector3.new(-0.6, -0.55, -0.3), Vector3.new(0.6, -0.55, -0.3), Vector3.new(-0.6, -0.55, 0.3), Vector3.new(0.6, -0.55, 0.3)}) do
-			addLocalEventPart(eventAppearance, "DogLeg", Vector3.new(0.3, 0.7, 0.3), dogPosition + offset, Color3.fromRGB(123, 84, 59))
-		end
+		local dogGroundPosition = point.Position + Vector3.new(6.5, 0.05, 0)
+		local characterRoot = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
+		local dogLookTarget = characterRoot and characterRoot.Position or point.Position
+		local _, dogBody = DogAppearance.create(eventAppearance, dogGroundPosition, dogLookTarget)
 		local alertZone = addLocalEventPart(
 			eventAppearance,
 			"DogAlertZone",
@@ -930,7 +929,7 @@ local function showEventAppearance(eventId)
 		)
 		alertZone.Orientation = Vector3.new(0, 0, 90)
 		alertZone.Material = Enum.Material.Neon
-		addEventBillboard(dogBody, "赤い範囲に入ると吠える", Color3.fromRGB(255, 190, 170))
+		addEventBillboard(dogBody, "⚠ 吠える犬！ 赤い範囲に注意", Color3.fromRGB(255, 190, 170))
 	elseif eventId == "work" then
 		local barrier = addLocalEventPart(
 			eventAppearance,
