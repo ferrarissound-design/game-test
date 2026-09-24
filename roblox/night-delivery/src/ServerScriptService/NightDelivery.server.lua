@@ -8,8 +8,10 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Lighting = game:GetService("Lighting")
 local DataStoreService = game:GetService("DataStoreService")
 local RunService = game:GetService("RunService")
+local HttpService = game:GetService("HttpService")
 local RULES = require(script.Parent:WaitForChild("NightDeliveryRules"))
 local HOUSE_TYPES = require(script.Parent:WaitForChild("NightDeliveryHouseTypes"))
+local CARGO_MODIFIERS = require(script.Parent:WaitForChild("NightDeliveryCargoModifiers"))
 
 local REMOTE_NAME = "NightDeliveryEvent"
 local WORLD_NAME = "NightDeliveryWorld"
@@ -37,6 +39,7 @@ local SPECIAL_JOB_UNLOCK_DELIVERIES = 8
 local WAREHOUSE_UNLOCK_DELIVERIES = 15
 local SHIFT_TARGET = 6
 local SHIFT_TARGET_DELIVERIES = 6
+local JOB_OFFER_COUNT = 3
 local PERFECT_COMBO_BONUS = 40
 local SHIFT_REWARD = 300
 local COOP_RANGE = 36
@@ -169,6 +172,7 @@ if RunService:IsStudio() then
 end
 
 local playerJobs = {}
+local playerJobOffers = {}
 local playerLastHouse = {}
 local playerResidentVisits = {}
 local playerLastDestinationEvent = {}
@@ -1698,98 +1702,168 @@ local function selectOddity(player, phase, neighborhoodCallback, candidates)
 	return id, pool[math.random(1, #pool)]
 end
 
-local function assignJob(player)
-	if not requirePlayerReady(player) then
-		return
-	end
-	if not isNearPart(player, jobCounterRef, 14) then
-		return
-	end
-	if player:GetAttribute("NightShiftResultPending") == true then
-		sendStatus(player, "Message", {text = "夜勤結果を確認してから次の依頼を受けよう。"})
-		return
-	end
-	if playerJobs[player] then
-		sendStatus(player, "Message", {
-			text = "すでに配達中だよ。今の荷物を先に届けよう。",
-		})
-		return
-	end
-
+local function jobHouseCandidates(player, jobType, used)
+	local candidates, fallback = {}, {}
 	local houses = housesFolder:GetChildren()
-	if #houses == 0 then
-		return
-	end
-
-	local jobType = chooseJobType(player)
-	local candidates = {}
-	local fallbackCandidates = {}
-	local lastHouse = playerLastHouse[player]
-
 	for _, house in ipairs(houses) do
-		if isHouseUnlocked(player, house) and (house.Name ~= lastHouse or #houses == 1) then
-			table.insert(fallbackCandidates, house)
+		if isHouseUnlocked(player, house) and not used[house.Name]
+			and (house.Name ~= playerLastHouse[player] or #houses == 1) then
+			table.insert(fallback, house)
 			local distance = getDeliveryDistance(house)
 			local matchesRoute = (jobType.id == "express" or jobType.id == "rush") and distance <= 210
 				or jobType.id == "long" and distance >= 185
 				or jobType.id ~= "express" and jobType.id ~= "rush" and jobType.id ~= "long"
-			if matchesRoute then
-				table.insert(candidates, house)
+			if matchesRoute then table.insert(candidates, house) end
+		end
+	end
+	if #fallback == 0 then
+		for _, house in ipairs(houses) do
+			if isHouseUnlocked(player, house) and not used[house.Name] then
+				table.insert(fallback, house)
 			end
 		end
 	end
+	return #candidates > 0 and candidates or fallback
+end
 
-	if #candidates == 0 then
-		candidates = fallbackCandidates
+local function chooseOfferCargo()
+	local forced = RunService:IsStudio() and tostring(world:GetAttribute("QAForceModifierId") or "") or ""
+	local total = 0
+	for _, modifier in ipairs(CARGO_MODIFIERS) do
+		if modifier.id == forced then return modifier end
+		total += modifier.weight
 	end
-	if #candidates == 0 then
-		return
+	local roll = math.random() * total
+	for _, modifier in ipairs(CARGO_MODIFIERS) do
+		roll -= modifier.weight
+		if roll <= 0 then return modifier end
 	end
+	return CARGO_MODIFIERS[1]
+end
 
-	startNightShift(player)
+local function offerDifficulty(house, distance, cargo)
+	local obby = (house:GetAttribute("HouseType") or "Normal") ~= "Normal"
+	if obby or (distance >= 185 and cargo.id ~= "none") then return "Difficult" end
+	if distance >= 185 or cargo.id ~= "none" then return "Normal" end
+	return "Easy"
+end
+
+local OFFER_HOUSE_LABELS = {
+	Construction = "Construction Site", HighRise = "High Rise", BlockedAlley = "Back Alley",
+	WarehouseRoute = "Warehouse", RooftopGap = "Rooftop",
+}
+
+local function offerPublicData(offer)
+	return {
+		id = offer.id, location = offer.location, baseReward = offer.jobType.baseReward + offer.bonus,
+		distance = offer.distance, cargo = offer.cargo.title,
+		difficulty = offer.difficulty,
+	}
+end
+
+local function sendJobOffers(player)
+	local state = playerJobOffers[player]
+	if not state then return end
+	local public = {}
+	for _, offer in ipairs(state.offers) do table.insert(public, offerPublicData(offer)) end
+	sendStatus(player, "JobOffers", {serial = state.serial, lastDelivery = state.phase == "FinalRun", offers = public})
+end
+
+local function clearJobOffers(player)
+	playerJobOffers[player] = nil
+	player:SetAttribute("JobOffersActive", false)
+end
+
+local function generateJobOffers(player, phase)
+	local serial = (player:GetAttribute("JobOffersSerial") or 0) + 1
+	local offers, used = {}, {}
+	local forcedName = RunService:IsStudio() and tostring(world:GetAttribute("QAForceHouseName") or "") or ""
+	local forcedHouse = housesFolder:FindFirstChild(forcedName)
+	for index = 1, JOB_OFFER_COUNT do
+		local selected
+		local bestScore = -math.huge
+		for attempt = 1, 10 do
+			local jobType = chooseJobType(player)
+			-- Later phases offer a little more variety; the first slot preserves a safe option.
+			if index == 1 then jobType = JOB_TYPES[1] end
+			if index > 1 and (phase == "LateNight" or phase == "FinalRun")
+				and math.random() < (phase == "FinalRun" and 0.35 or 0.20) then
+				jobType = JOB_TYPES[4]
+			end
+			local candidates = jobHouseCandidates(player, jobType, used)
+			if #candidates == 0 then break end
+			if index == 1 then
+				local ordinary = {}
+				for _, candidate in ipairs(candidates) do
+					if (candidate:GetAttribute("HouseType") or "Normal") == "Normal"
+						and (candidate ~= forcedHouse or #candidates == 1) then
+						table.insert(ordinary, candidate)
+					end
+				end
+				if #ordinary > 0 then candidates = ordinary end
+				local nearby = {}
+				for _, candidate in ipairs(candidates) do
+					if getDeliveryDistance(candidate) < 185 then table.insert(nearby, candidate) end
+				end
+				if #nearby > 0 then candidates = nearby end
+			end
+			local house = candidates[math.random(1, #candidates)]
+			if forcedHouse and index == 2 and isHouseUnlocked(player, forcedHouse) and not used[forcedHouse.Name] then
+				house = forcedHouse
+			end
+			local cargo = index == 1 and CARGO_MODIFIERS[1] or chooseOfferCargo()
+			if forcedHouse and index == 2 then cargo = chooseOfferCargo() end
+			local distance = getDeliveryDistance(house)
+			local houseType = house:GetAttribute("HouseType") or "Normal"
+			local difficulty = offerDifficulty(house, distance, cargo)
+			local score = math.random()
+			for _, previous in ipairs(offers) do
+				if previous.difficulty ~= difficulty then score += 3 end
+				if previous.cargo.id ~= cargo.id then score += 2 end
+				if previous.houseType ~= houseType then score += 2 end
+				if (previous.distanceMeters >= 185) ~= (distance >= 185) then score += 2 end
+				if previous.jobType.id ~= jobType.id then score += 1 end
+			end
+			if phase == "FinalRun" and index > 1 and houseType ~= "Normal" then score += 3 end
+			if phase == "LateNight" and index > 1 and houseType ~= "Normal" then score += 1 end
+			if forcedHouse and index == 2 and house == forcedHouse then score += 100 end
+			if score > bestScore then
+				bestScore = score
+				local bonus = (distance >= 185 and 15 or 0) + (houseType ~= "Normal" and 20 or 0)
+				selected = {
+					id = HttpService:GenerateGUID(false),
+					houseName = house.Name, houseType = houseType, jobType = jobType,
+					cargo = cargo, distanceMeters = distance, distance = distance >= 185 and "Far" or "Near",
+					difficulty = difficulty, bonus = bonus,
+					location = OFFER_HOUSE_LABELS[houseType] or house:GetAttribute("DistrictName")
+						or DISTRICT_NAMES[house:GetAttribute("DistrictId") or "central"] or "Residential",
+				}
+			end
+		end
+		if not selected then break end
+		used[selected.houseName] = true
+		table.insert(offers, selected)
+	end
+	if #offers == 0 then return end
+	playerJobOffers[player] = {serial = serial, phase = phase, offers = offers}
+	player:SetAttribute("JobOffersSerial", serial)
+	player:SetAttribute("JobOffersActive", true)
+	sendJobOffers(player)
+end
+
+local function confirmJob(player, selected, neighborhoodCallback)
+	local target = selected and housesFolder:FindFirstChild(selected.houseName)
+	if not target or not isHouseUnlocked(player, target) then return false end
+	local jobType = selected.jobType
 	local phase = shiftPhase(player)
 	player:SetAttribute("NightShiftPhase", phase)
-	local neighborhoodCallback = playerPendingNeighborhoodStory[player]
-	local callbackHouse = neighborhoodCallback
-		and housesFolder:FindFirstChild(neighborhoodCallback.targetHouseName)
-		or nil
-	if neighborhoodCallback and (
-		not callbackHouse
-		or callbackHouse:GetAttribute("DistrictId") == "warehouse"
-		or not isHouseUnlocked(player, callbackHouse)
-	) then
-		local sourceId = neighborhoodCallback.sourceId
-		callbackHouse = nil
-		playerPendingNeighborhoodStory[player] = nil
-		neighborhoodCallback = queueNeighborhoodStory(player, sourceId)
-		callbackHouse = neighborhoodCallback
-			and housesFolder:FindFirstChild(neighborhoodCallback.targetHouseName)
-			or nil
+	-- An oddity is decided only after acceptance and never changes the selected address.
+	-- A repeat address therefore occurs only when this particular address was visited.
+	local oddityId = nil
+	if selected.cargo.id == "none" then
+		oddityId = selectOddity(player, phase, neighborhoodCallback, {target})
 	end
-
-	if neighborhoodCallback then
-		jobType = JOB_TYPES[1]
-	end
-	local target = callbackHouse or candidates[math.random(1, #candidates)]
-	if phase == "FinalRun" and not callbackHouse and math.random() <= 0.52 then
-		local special = {}
-		for _, house in ipairs(candidates) do
-			if (house:GetAttribute("HouseType") or "Normal") ~= "Normal" then
-				table.insert(special, house)
-			end
-		end
-		if #special > 0 then target = special[math.random(1, #special)] end
-	end
-	if RunService:IsStudio() then
-		local forcedHouse = housesFolder:FindFirstChild(tostring(world:GetAttribute("QAForceHouseName") or ""))
-		if forcedHouse then
-			target = forcedHouse
-		end
-	end
-	-- Story callbacks win; oddities use ordinary houses and suppress other narrative events.
-	local oddityId, oddityHouse = selectOddity(player, phase, neighborhoodCallback, houses)
-	if oddityId and oddityHouse then
-		target = oddityHouse
+	if oddityId then
 		playerShiftOddities[player].count += 1
 		player:SetAttribute("NightShiftOddities", playerShiftOddities[player].count)
 	end
@@ -1824,7 +1898,7 @@ local function assignJob(player)
 
 	player:SetAttribute("NightDeliveryTimeLimit", nil)
 	player:SetAttribute("NightDeliveryOrderStartedAt", nil)
-	player:SetAttribute("NightDeliveryRequestedModifier", (neighborhoodCallback or oddityId) and "none" or nil)
+	player:SetAttribute("NightDeliveryRequestedModifier", selected.cargo.id)
 	player:SetAttribute("NightDeliveryOddityId", oddityId)
 	player:SetAttribute("NightDeliveryOddityActive", oddityId ~= nil)
 	player:SetAttribute("NightDeliveryBikeBlocked", false)
@@ -1834,6 +1908,7 @@ local function assignJob(player)
 	player:SetAttribute("NightDeliveryJobSerial", jobSerial)
 	playerJobs[player] = {
 		jobSerial = jobSerial,
+		offerBonus = selected.bonus or 0,
 		houseName = target.Name,
 		displayName = target:GetAttribute("DisplayName") or target.Name,
 		districtId = districtId,
@@ -1890,7 +1965,7 @@ local function assignJob(player)
 		weatherName = weather.name,
 		weatherMultiplier = weather.rewardMultiplier,
 		baseTimeLimit = baseTimeLimit,
-		baseReward = jobType.baseReward,
+		baseReward = jobType.baseReward + (selected.bonus or 0),
 		bagCapacity = playerJobs[player].bagCapacity,
 		nightCondition = playerJobs[player].nightConditionName,
 		nightConditionId = playerJobs[player].nightConditionId,
@@ -1907,6 +1982,39 @@ local function assignJob(player)
 	if isAnomaly then
 		sendStatus(player, "RareAnomaly", {title = "宛名が一瞬、読めなくなった"})
 	end
+	return true
+end
+
+local function assignJob(player)
+	if not requirePlayerReady(player) or not isNearPart(player, jobCounterRef, 14) then return end
+	if player:GetAttribute("NightShiftResultPending") == true then
+		sendStatus(player, "Message", {text = "夜勤結果を確認してから次の依頼を受けよう。"})
+		return
+	end
+	if playerJobs[player] then
+		sendStatus(player, "Message", {text = "すでに配達中だよ。今の荷物を先に届けよう。"})
+		return
+	end
+	if playerJobOffers[player] then sendJobOffers(player); return end
+	if #housesFolder:GetChildren() == 0 then return end
+	startNightShift(player)
+	local phase = shiftPhase(player)
+	player:SetAttribute("NightShiftPhase", phase)
+	local callback = playerPendingNeighborhoodStory[player]
+	local callbackHouse = callback and housesFolder:FindFirstChild(callback.targetHouseName)
+	if callback and (not callbackHouse or callbackHouse:GetAttribute("DistrictId") == "warehouse"
+		or not isHouseUnlocked(player, callbackHouse)) then
+		playerPendingNeighborhoodStory[player] = nil
+		callback = queueNeighborhoodStory(player, callback.sourceId)
+		callbackHouse = callback and housesFolder:FindFirstChild(callback.targetHouseName)
+	end
+	if callback and callbackHouse then
+		clearJobOffers(player)
+		confirmJob(player, {houseName = callbackHouse.Name, jobType = JOB_TYPES[1],
+			cargo = CARGO_MODIFIERS[1], bonus = 0}, callback)
+		return
+	end
+	generateJobOffers(player, phase)
 end
 
 local DESTINATION_EVENT_OBJECTIVES = {
@@ -2297,6 +2405,7 @@ local function completeDelivery(player, houseName)
 	local coopBonus = math.floor(reward * (COOP_BONUS_PER_HELPER * helperCount))
 	local oddityBonus = ODDITY_BONUS[job.oddityId] or 0
 	reward += coopBonus + destinationEventBonus + neighborhoodCallbackBonus + oddityBonus
+	if not job.isSideRequest then reward += job.offerBonus or 0 end
 
 	-- A small chance of a grateful resident tipping the courier keeps ordinary jobs surprising.
 	local tipChance = nightConditionId == "tip" and 30 or 14
@@ -3040,6 +3149,8 @@ deliveryEvent.OnServerEvent:Connect(function(player, action, payload)
 	local lastAction = remoteLastAction[player] or 0
 	local immediateActions = {
 		ChooseRoute = true,
+		AcceptJobOffer = true,
+		RequestJobOffers = true,
 		ResolveDestinationEvent = true,
 		CompleteDestinationEventObjective = true,
 		ResolveTravelEvent = true,
@@ -3052,7 +3163,25 @@ deliveryEvent.OnServerEvent:Connect(function(player, action, payload)
 	end
 	remoteLastAction[player] = now
 
-	if action == "AcknowledgeNightShift" then
+	if action == "RequestJobOffers" then
+		if player:GetAttribute("NightShiftResultPending") ~= true then sendJobOffers(player) end
+		return
+	elseif action == "AcceptJobOffer" then
+		local state = playerJobOffers[player]
+		if not requirePlayerReady(player) or playerJobs[player] or not state
+			or type(payload) ~= "table" or type(payload.offerId) ~= "string"
+			or not isNearPart(player, jobCounterRef, 14) then return end
+		for _, offer in ipairs(state.offers) do
+			if offer.id == payload.offerId then
+				local house = housesFolder:FindFirstChild(offer.houseName)
+				if not house or not isHouseUnlocked(player, house) then return end
+				clearJobOffers(player) -- consume before JobAssigned; duplicate clicks cannot start a second job
+				confirmJob(player, offer, nil)
+				return
+			end
+		end
+		return
+	elseif action == "AcknowledgeNightShift" then
 		if player:GetAttribute("NightShiftActive") == false and player:GetAttribute("NightShiftResultPending") == true then
 			player:SetAttribute("NightShiftResultPending", false)
 		end
@@ -3349,6 +3478,9 @@ local function setupPlayer(player)
 	player:SetAttribute("NightDeliveryJobSerial", 0)
 	player:SetAttribute("NightDeliveryCompletedJobSerial", 0)
 	player:SetAttribute("NightShiftActive", false)
+	player:SetAttribute("JobOffersActive", false)
+	player:SetAttribute("JobOffersSerial", 0)
+	playerJobOffers[player] = nil
 	player:SetAttribute("NightShiftResultPending", false)
 	player:SetAttribute("NightShiftDeliveries", 0)
 	player:SetAttribute("NightShiftTarget", SHIFT_TARGET_DELIVERIES)
@@ -3418,6 +3550,7 @@ end
 Players.PlayerRemoving:Connect(function(player)
 	saveData(player)
 	playerJobs[player] = nil
+	playerJobOffers[player] = nil
 	playerLastHouse[player] = nil
 	playerResidentVisits[player] = nil
 	playerLastDestinationEvent[player] = nil

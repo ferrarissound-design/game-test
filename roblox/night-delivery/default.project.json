@@ -19,6 +19,9 @@
       "NightDeliveryHouseTypes": {
         "$path": "src/ServerScriptService/NightDeliveryHouseTypes.lua"
       },
+      "NightDeliveryCargoModifiers": {
+        "$path": "src/ServerScriptService/NightDeliveryCargoModifiers.lua"
+      },
       "NightDeliveryPolish": {
         "$path": "src/ServerScriptService/NightDeliveryPolish.server.lua"
       },
@@ -38,6 +41,9 @@
         },
         "NightDeliveryBikeClient": {
           "$path": "src/StarterPlayer/StarterPlayerScripts/NightDeliveryBike.client.lua"
+        },
+        "NightDeliveryDispatchClient": {
+          "$path": "src/StarterPlayer/StarterPlayerScripts/NightDeliveryDispatch.client.lua"
         }
       }
     }
