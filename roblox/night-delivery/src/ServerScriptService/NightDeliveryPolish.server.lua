@@ -128,6 +128,7 @@ local function trackNightShift(player, grade, elapsed, earnedBonus)
 			number = shift.number, deliveries = shift.deliveries,
 			perfect = shift.perfect, good = shift.good, poor = shift.poor,
 			events = shift.events, destinationSuccess = shift.destinationSuccess,
+			oddities = player:GetAttribute("NightShiftOddities") or 0,
 			kindness = player:GetAttribute("NightShiftKindnessGained") or 0,
 			bestTime = shift.bestTime, maxCombo = shift.maxCombo, coins = earned,
 			rank = rankShift(shift), startedAt = player:GetAttribute("NightShiftStartedAt"),

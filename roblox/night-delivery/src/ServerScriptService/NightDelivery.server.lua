@@ -46,6 +46,10 @@ local HELPER_REWARD = 25
 local WEATHER_CHANGE_SECONDS = 150
 local AUTOSAVE_SECONDS = 120
 local REMOTE_COOLDOWN_SECONDS = 0.12
+local ODDITY_CHANCE = {LateNight = 0.09, FinalRun = 0.16}
+local MAX_ODDITIES_PER_SHIFT = 1
+local ODDITY_IDS = {"silent_house", "unknown_recipient", "repeat_address"}
+local ODDITY_BONUS = {silent_house = 50, unknown_recipient = 0, repeat_address = 0}
 
 local DISTRICT_NAMES = {
 	central = "住宅街",
@@ -161,6 +165,7 @@ if RunService:IsStudio() then
 	world:SetAttribute("QAForceShiftDeliveryCount", -1)
 	world:SetAttribute("QAForceNightPhase", "")
 	world:SetAttribute("QAForceFinalDelivery", false)
+	world:SetAttribute("QAForceOddityId", "")
 end
 
 local playerJobs = {}
@@ -169,6 +174,7 @@ local playerResidentVisits = {}
 local playerLastDestinationEvent = {}
 local playerLastTravelEvent = {}
 local playerPendingNeighborhoodStory = {}
+local playerShiftOddities = {}
 local currentNightRule = RULES.NightConditions[1]
 local playerStreak = {}
 local playerShiftProgress = {}
@@ -1653,6 +1659,8 @@ end
 
 local function startNightShift(player)
 	if player:GetAttribute("NightShiftActive") == true then return end
+	playerShiftOddities[player] = {count = 0, visited = {}}
+	player:SetAttribute("NightShiftOddities", 0)
 	player:SetAttribute("NightShiftNumber", (player:GetAttribute("NightShiftNumber") or 0) + 1)
 	player:SetAttribute("NightShiftDeliveries", 0)
 	player:SetAttribute("NightShiftCoinsEarned", 0)
@@ -1661,6 +1669,33 @@ local function startNightShift(player)
 	player:SetAttribute("NightShiftStartedAt", workspace:GetServerTimeNow())
 	player:SetAttribute("NightShiftPhase", "EarlyNight")
 	player:SetAttribute("NightShiftActive", true)
+end
+
+-- Only completed homes count as previous addresses. All selection stays server-side.
+local function selectOddity(player, phase, neighborhoodCallback, candidates)
+	local shift = playerShiftOddities[player]
+	if neighborhoodCallback or not shift or shift.count >= MAX_ODDITIES_PER_SHIFT then return nil, nil end
+	local normalHouses = {}
+	local repeatHouses = {}
+	for _, house in ipairs(candidates) do
+		if isHouseUnlocked(player, house) and (house:GetAttribute("HouseType") or "Normal") == "Normal" then
+			table.insert(normalHouses, house)
+			if shift.visited[house.Name] then table.insert(repeatHouses, house) end
+		end
+	end
+	if #normalHouses == 0 then return nil, nil end
+	local forced = RunService:IsStudio() and tostring(world:GetAttribute("QAForceOddityId") or "") or ""
+	local id
+	if table.find(ODDITY_IDS, forced) then
+		id = forced
+	elseif math.random() < (ODDITY_CHANCE[phase] or 0) then
+		local eligible = {"silent_house", "unknown_recipient"}
+		if #repeatHouses > 0 then table.insert(eligible, "repeat_address") end
+		id = eligible[math.random(1, #eligible)]
+	end
+	if not id or (id == "repeat_address" and #repeatHouses == 0) then return nil, nil end
+	local pool = id == "repeat_address" and repeatHouses or normalHouses
+	return id, pool[math.random(1, #pool)]
 end
 
 local function assignJob(player)
@@ -1751,19 +1786,26 @@ local function assignJob(player)
 			target = forcedHouse
 		end
 	end
+	-- Story callbacks win; oddities use ordinary houses and suppress other narrative events.
+	local oddityId, oddityHouse = selectOddity(player, phase, neighborhoodCallback, houses)
+	if oddityId and oddityHouse then
+		target = oddityHouse
+		playerShiftOddities[player].count += 1
+		player:SetAttribute("NightShiftOddities", playerShiftOddities[player].count)
+	end
 	local targetHouseType = target:GetAttribute("HouseType") or "Normal"
 	local destinationEvent = nil
 	local forcedDestinationEvent = getStudioForcedEntry("QAForceDestinationEventId", RULES.DestinationEvents)
 	if targetHouseType ~= "Normal" then
 		-- Existing event offsets assume a ground-level front porch.
-	elseif not neighborhoodCallback and forcedDestinationEvent then
+	elseif not neighborhoodCallback and not oddityId and forcedDestinationEvent then
 		destinationEvent = forcedDestinationEvent
 		playerLastDestinationEvent[player] = destinationEvent.id
-	elseif not neighborhoodCallback and math.random() <= shiftChance(player, RULES.DestinationEventChance, 0.02, 0.05, 0.08) then
+	elseif not neighborhoodCallback and not oddityId and math.random() <= shiftChance(player, RULES.DestinationEventChance, 0.02, 0.05, 0.08) then
 		destinationEvent = RULES.chooseWeighted(RULES.DestinationEvents, playerLastDestinationEvent[player])
 		playerLastDestinationEvent[player] = destinationEvent.id
 	end
-	local isAnomaly = not neighborhoodCallback and math.random() <= RULES.RareAnomalyChance
+	local isAnomaly = not neighborhoodCallback and not oddityId and math.random() <= RULES.RareAnomalyChance
 	local districtId = target:GetAttribute("DistrictId") or "central"
 	local districtName = target:GetAttribute("DistrictName") or DISTRICT_NAMES[districtId] or districtId
 	local weather = currentWeather
@@ -1782,7 +1824,9 @@ local function assignJob(player)
 
 	player:SetAttribute("NightDeliveryTimeLimit", nil)
 	player:SetAttribute("NightDeliveryOrderStartedAt", nil)
-	player:SetAttribute("NightDeliveryRequestedModifier", neighborhoodCallback and "none" or nil)
+	player:SetAttribute("NightDeliveryRequestedModifier", (neighborhoodCallback or oddityId) and "none" or nil)
+	player:SetAttribute("NightDeliveryOddityId", oddityId)
+	player:SetAttribute("NightDeliveryOddityActive", oddityId ~= nil)
 	player:SetAttribute("NightDeliveryBikeBlocked", false)
 	player:SetAttribute("NightDeliveryNavSoft", false)
 	player:SetAttribute("NightDeliveryJobType", jobType.id)
@@ -1804,7 +1848,8 @@ local function assignJob(player)
 		bagCapacity = math.clamp(1 + (player:GetAttribute("BagStyleLevel") or 0), 1, 3),
 		extraStops = {},
 		completedHouseNames = {},
-		residentName = target:GetAttribute("ResidentName") or "住人",
+		residentName = (oddityId == "unknown_recipient" or oddityId == "repeat_address")
+			and "???" or (target:GetAttribute("ResidentName") or "住人"),
 		residentFirstLine = target:GetAttribute("ResidentFirstLine") or "配達ありがとう。",
 		residentReturnLine = target:GetAttribute("ResidentReturnLine") or "今夜もありがとう。",
 		routeChoice = nil,
@@ -1818,7 +1863,7 @@ local function assignJob(player)
 		destinationEventHazardPosition = nil,
 		destinationEventHazardRadius = nil,
 		destinationEventHazardTriggered = false,
-		travelEventStarted = neighborhoodCallback ~= nil,
+		travelEventStarted = neighborhoodCallback ~= nil or oddityId ~= nil,
 		travelEventActive = false,
 		travelEventResolved = false,
 		travelEventsSolved = 0,
@@ -1827,6 +1872,7 @@ local function assignJob(player)
 		travelEventId = nil,
 		neighborhoodCallback = neighborhoodCallback,
 		isAnomaly = isAnomaly,
+		oddityId = oddityId,
 	}
 
 	playerLastHouse[player] = target.Name
@@ -1854,6 +1900,9 @@ local function assignJob(player)
 		houseTypeLabel = HOUSE_TYPES.Definitions[targetHouseType].label,
 		neighborhoodThreadTitle = neighborhoodCallback and neighborhoodCallback.title or nil,
 		neighborhoodKindness = player:GetAttribute("NeighborhoodKindness") or 0,
+		oddityId = oddityId,
+		recipient = (oddityId == "unknown_recipient" or oddityId == "repeat_address") and "???" or nil,
+		oddityInstruction = oddityId == "silent_house" and "インターホンは押さず、玄関前に静かに置いてください。" or nil,
 	})
 	if isAnomaly then
 		sendStatus(player, "RareAnomaly", {title = "宛名が一瞬、読めなくなった"})
@@ -2175,7 +2224,7 @@ local function completeDelivery(player, houseName)
 	playerResidentVisits[player] = visits
 	local visitCount = visits[job.houseName] or 0
 	visits[job.houseName] = visitCount + 1
-	local residentReaction = visitCount == 0 and job.residentFirstLine or job.residentReturnLine
+	local residentReaction = job.oddityId and "配達完了" or (visitCount == 0 and job.residentFirstLine or job.residentReturnLine)
 	local neighborhoodCallback = job.neighborhoodCallback
 	local neighborhoodCallbackBonus = 0
 	local neighborhoodKindnessGained = 0
@@ -2246,7 +2295,8 @@ local function completeDelivery(player, houseName)
 	end
 
 	local coopBonus = math.floor(reward * (COOP_BONUS_PER_HELPER * helperCount))
-	reward += coopBonus + destinationEventBonus + neighborhoodCallbackBonus
+	local oddityBonus = ODDITY_BONUS[job.oddityId] or 0
+	reward += coopBonus + destinationEventBonus + neighborhoodCallbackBonus + oddityBonus
 
 	-- A small chance of a grateful resident tipping the courier keeps ordinary jobs surprising.
 	local tipChance = nightConditionId == "tip" and 30 or 14
@@ -2306,6 +2356,8 @@ local function completeDelivery(player, houseName)
 
 	job.completedHouseNames = job.completedHouseNames or {}
 	job.completedHouseNames[houseName] = true
+	local shift = playerShiftOddities[player]
+	if shift then shift.visited[houseName] = true end
 	local hasNextStops = type(job.extraStops) == "table" and #job.extraStops > 0
 	job.sideOffer = nil
 	if hasNextStops then
@@ -2321,6 +2373,8 @@ local function completeDelivery(player, houseName)
 	player:SetAttribute("NightDeliveryBikeBlocked", false)
 	player:SetAttribute("NightDeliveryNavSoft", false)
 	player:SetAttribute("NightDeliveryRequestedModifier", nil)
+	player:SetAttribute("NightDeliveryOddityId", nil)
+	player:SetAttribute("NightDeliveryOddityActive", false)
 	clearParcelVisual(player)
 
 	sendStatus(player, "Delivered", {
@@ -2350,6 +2404,8 @@ local function completeDelivery(player, houseName)
 		nightConditionBonus = nightConditionBonus,
 		coopBonus = coopBonus,
 		neighborhoodTip = neighborhoodTip,
+		oddityId = job.oddityId,
+		oddityBonus = oddityBonus,
 		helperCount = helperCount,
 		shiftBonus = shiftBonus,
 		shiftProgress = playerShiftProgress[player] or 0,
@@ -2394,7 +2450,7 @@ local function sendSideRequestOffer(player, jobSerial)
 		job.sideOffer = nil
 	end
 	if not job or job.jobSerial ~= jobSerial or not job.houseName
-		or job.sideOffer or job.travelEventActive or job.neighborhoodCallback
+		or job.sideOffer or job.travelEventActive or job.neighborhoodCallback or job.oddityId
 		or job.destinationEventPrompted or job.destinationEventChoice
 		or playerPendingNeighborhoodStory[player]
 		or (player:GetAttribute("NightShiftDeliveries") or 0) + #job.extraStops >= SHIFT_TARGET_DELIVERIES - 1
@@ -2494,6 +2550,7 @@ local function startNextStop(player, job, stopIndex)
 	job.routeTitle = nil
 	job.shortcutReward = ROUTE_CHOICES.shortcut.reward + (currentNightRule.id == "roadwork" and 40 or 0)
 	job.isAnomaly = math.random() <= RULES.RareAnomalyChance
+	job.oddityId = nil
 	job.isSideRequest = true
 	local targetPoint = target:FindFirstChild("DeliveryPoint")
 	local character = player.Character
@@ -2523,6 +2580,8 @@ local function startNextStop(player, job, stopIndex)
 	player:SetAttribute("NightDeliveryNavSoft", false)
 	player:SetAttribute("NightDeliveryJobType", job.jobTypeId)
 	player:SetAttribute("NightDeliveryHouseName", target.Name)
+	player:SetAttribute("NightDeliveryOddityId", nil)
+	player:SetAttribute("NightDeliveryOddityActive", false)
 	player:SetAttribute("NightDeliveryJobSerial", job.jobSerial)
 	addParcelVisual(player, job.jobTypeId)
 	sendStatus(player, "JobAssigned", {
@@ -3295,6 +3354,9 @@ local function setupPlayer(player)
 	player:SetAttribute("NightShiftTarget", SHIFT_TARGET_DELIVERIES)
 	player:SetAttribute("NightShiftNumber", 0)
 	player:SetAttribute("NightShiftPhase", "EarlyNight")
+	player:SetAttribute("NightShiftOddities", 0)
+	player:SetAttribute("NightDeliveryOddityId", nil)
+	player:SetAttribute("NightDeliveryOddityActive", false)
 	player:SetAttribute("NightDeliveryJobType", nil)
 	player:SetAttribute("NightDeliveryHouseName", nil)
 	player:SetAttribute("NightDeliveryBikeBlocked", false)
@@ -3309,6 +3371,7 @@ local function setupPlayer(player)
 	player:SetAttribute("NightDeliveryRumorClueLevel", data.rumorClueLevel)
 	player:SetAttribute("NeighborhoodKindness", data.neighborhoodKindness or 0)
 	playerPendingNeighborhoodStory[player] = nil
+	playerShiftOddities[player] = nil
 	if data.pendingNeighborhoodStory then
 		playerPendingNeighborhoodStory[player] = buildNeighborhoodStory(
 			data.pendingNeighborhoodStory.sourceId,
@@ -3360,6 +3423,7 @@ Players.PlayerRemoving:Connect(function(player)
 	playerLastDestinationEvent[player] = nil
 	playerLastTravelEvent[player] = nil
 	playerPendingNeighborhoodStory[player] = nil
+	playerShiftOddities[player] = nil
 	playerStreak[player] = nil
 	playerShiftProgress[player] = nil
 	remoteLastAction[player] = nil

@@ -1532,10 +1532,11 @@ deliveryEvent.OnClientEvent:Connect(function(action, payload)
 	elseif action == "NightShiftComplete" then
 		local elapsed = math.max(0, math.floor(tonumber(payload.bestTime) or 0))
 		local body = string.format(
-			"NIGHT SHIFT COMPLETE  #%d\n\nDeliveries     %d\nPerfect         %d    Good %d    Poor %d\nEvents Solved   %d    Destination %d\nKindness +%d    Best Time %d:%02d\nMax Combo      %d\nCoins Earned    %d\n\nSHIFT RANK  %s",
+			"NIGHT SHIFT COMPLETE  #%d\n\nDeliveries     %d\nPerfect         %d    Good %d    Poor %d\nEvents Solved   %d    Destination %d\nOddities       %d\nKindness +%d    Best Time %d:%02d\nMax Combo      %d\nCoins Earned    %d\n\nSHIFT RANK  %s",
 			tonumber(payload.number) or 1, tonumber(payload.deliveries) or 0,
 			tonumber(payload.perfect) or 0, tonumber(payload.good) or 0, tonumber(payload.poor) or 0,
 			tonumber(payload.events) or 0, tonumber(payload.destinationSuccess) or 0,
+			tonumber(payload.oddities) or 0,
 			tonumber(payload.kindness) or 0, math.floor(elapsed / 60), elapsed % 60,
 			tonumber(payload.maxCombo) or 0, tonumber(payload.coins) or 0, tostring(payload.rank or "C")
 		)
