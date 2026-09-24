@@ -41,7 +41,7 @@ local GRADE_ORDER = {
 local SESSION_MISSIONS = {
 	{id = "warmup", name = "夜の肩慣らし", target = 3, reward = 150},
 	{id = "steady", name = "街に馴染む", target = 8, reward = 350},
-	{id = "ace", name = "一晩のエース", target = 15, reward = 700},
+	{id = "ace", name = "配達エース", target = 15, reward = 700},
 }
 
 local ORDER_MODIFIERS = require(script.Parent:WaitForChild("NightDeliveryCargoModifiers"))
