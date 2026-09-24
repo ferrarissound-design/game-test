@@ -21,6 +21,7 @@ local orderStartedAt = nil
 local orderExpiresAt = nil
 local currentModifier = nil
 local pendingRouteSerial = nil
+local modifierRequestGeneration = 0
 local eventObjectivePart = nil
 local eventObjectiveSerial = nil
 local eventObjectiveReady = false
@@ -254,18 +255,18 @@ routeChoiceFrame.Position = UDim2.fromScale(0.5, 0.5)
 routeChoiceFrame.BackgroundColor3 = Color3.fromRGB(20, 26, 38)
 routeChoiceFrame.BackgroundTransparency = 0.04
 routeChoiceFrame.Visible = false
-routeChoiceFrame.ZIndex = 35
+routeChoiceFrame.ZIndex = 80
 routeChoiceFrame.Parent = gui
 addCorner(routeChoiceFrame, 16)
 addStroke(routeChoiceFrame, Color3.fromRGB(110, 164, 214), 0.25, 1.4)
 
 local routeChoiceTitle = makeLabel(routeChoiceFrame, UDim2.new(1, -24, 0, 30), UDim2.fromOffset(12, 10), "どのルートで届ける？", 18, Enum.Font.GothamBold)
 routeChoiceTitle.TextColor3 = Color3.fromRGB(245, 248, 255)
-routeChoiceTitle.ZIndex = 36
+routeChoiceTitle.ZIndex = 81
 
 local routeChoiceHint = makeLabel(routeChoiceFrame, UDim2.new(1, -24, 0, 32), UDim2.fromOffset(12, 42), "選んだルートで制限時間と追加報酬が変わるよ。", 12, Enum.Font.Gotham)
 routeChoiceHint.TextColor3 = Color3.fromRGB(190, 204, 224)
-routeChoiceHint.ZIndex = 36
+routeChoiceHint.ZIndex = 81
 
 local lanternRouteButton = Instance.new("TextButton")
 lanternRouteButton.Name = "LanternRoute"
@@ -277,7 +278,7 @@ lanternRouteButton.TextColor3 = Color3.fromRGB(238, 244, 250)
 lanternRouteButton.TextSize = 14
 lanternRouteButton.TextWrapped = true
 lanternRouteButton.Font = Enum.Font.GothamBold
-lanternRouteButton.ZIndex = 36
+lanternRouteButton.ZIndex = 81
 lanternRouteButton.Parent = routeChoiceFrame
 addCorner(lanternRouteButton, 10)
 
@@ -291,12 +292,12 @@ shortcutRouteButton.TextColor3 = Color3.fromRGB(255, 239, 219)
 shortcutRouteButton.TextSize = 14
 shortcutRouteButton.TextWrapped = true
 shortcutRouteButton.Font = Enum.Font.GothamBold
-shortcutRouteButton.ZIndex = 36
+shortcutRouteButton.ZIndex = 81
 shortcutRouteButton.Parent = routeChoiceFrame
 addCorner(shortcutRouteButton, 10)
 
 local function submitRouteChoice(routeId)
-	if not routeChoiceFrame.Visible or not pendingRouteSerial or not currentModifier then
+	if not routeChoiceFrame.Visible or not pendingRouteSerial then
 		return
 	end
 	lanternRouteButton.Active = false
@@ -313,6 +314,31 @@ end)
 shortcutRouteButton.Activated:Connect(function()
 	submitRouteChoice("shortcut")
 end)
+
+-- Modifier details are informational only. A delayed response must never
+-- prevent the player from choosing a route and starting the delivery.
+local function requestOrderModifier(jobSerial)
+	modifierRequestGeneration += 1
+	local generation = modifierRequestGeneration
+
+	local function request(attempt)
+		if generation ~= modifierRequestGeneration
+			or tonumber(pendingRouteSerial) ~= tonumber(jobSerial)
+			or currentModifier then
+			return
+		end
+		deliveryEvent:FireServer("PolishRequestOrderModifier", {
+			jobSerial = jobSerial,
+		})
+		if attempt < 3 then
+			task.delay(0.45, function()
+				request(attempt + 1)
+			end)
+		end
+	end
+
+	request(1)
+end
 
 -- Story clue card appears after a delivery milestone.
 local rumorFrame = Instance.new("Frame")
@@ -1322,19 +1348,19 @@ deliveryEvent.OnClientEvent:Connect(function(action, payload)
 		orderExpiresAt = payload.expiresAt
 		setTarget(payload.houseName, payload.displayName)
 		modifierTitle.Text = "ルートを選択中..."
-		modifierDescription.Text = "ルート決定後に制限時間が始まります。"
+		modifierDescription.Text = "荷物条件は確認中。ルート決定後に制限時間が始まります。"
 		modifierFrame.Visible = false
+		currentModifier = nil
 		pendingRouteSerial = payload.jobSerial
-		lanternRouteButton.Active = false
-		shortcutRouteButton.Active = false
+		routeChoiceFrame.Position = UDim2.fromScale(0.5, 0.5)
+		lanternRouteButton.Active = true
+		shortcutRouteButton.Active = true
 		shortcutRouteButton.Text = string.format(
 			"裏路地の近道\n制限時間短め\n成功で +%d Coins",
 			tonumber(payload.shortcutReward) or 80
 		)
 		routeChoiceFrame.Visible = true
-		deliveryEvent:FireServer("PolishRequestOrderModifier", {
-			jobSerial = payload.jobSerial,
-		})
+		requestOrderModifier(payload.jobSerial)
 
 		if introFrame.Visible then
 			introFrame.Visible = false
@@ -1368,6 +1394,7 @@ deliveryEvent.OnClientEvent:Connect(function(action, payload)
 		orderStartedAt = nil
 		orderExpiresAt = nil
 		pendingRouteSerial = nil
+		modifierRequestGeneration += 1
 		routeChoiceFrame.Visible = false
 	elseif action == "TravelEventStarted" then
 		if tonumber(payload.jobSerial) == tonumber(pendingRouteSerial) then
@@ -1509,10 +1536,6 @@ deliveryEvent.OnClientEvent:Connect(function(action, payload)
 	elseif action == "PolishOrderModifier" then
 		if tonumber(payload.jobSerial) == tonumber(pendingRouteSerial) then
 			showModifier(payload)
-			if routeChoiceFrame.Visible then
-				lanternRouteButton.Active = true
-				shortcutRouteButton.Active = true
-			end
 		end
 	elseif action == "PolishDeliveryResult" then
 		showResult(payload)
