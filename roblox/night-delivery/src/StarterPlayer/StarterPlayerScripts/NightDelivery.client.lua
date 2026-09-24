@@ -785,6 +785,9 @@ deliveryEvent.OnClientEvent:Connect(function(action, payload)
 		destinationEventObjectiveActive = false
 		currentHouseName = payload.houseName
 		currentDisplayName = payload.displayName
+		if payload.houseType and payload.houseType ~= "Normal" then
+			currentDisplayName = currentDisplayName .. "（" .. tostring(payload.houseTypeLabel or "Obby") .. "）"
+		end
 		currentDistrictName = payload.districtName
 		currentJobTypeName = payload.jobTypeName
 		currentJobTypeId = payload.jobTypeId
@@ -821,7 +824,7 @@ deliveryEvent.OnClientEvent:Connect(function(action, payload)
 		end
 	elseif action == "JobRouteChosen" then
 		hideCoreRouteChoice()
-		routeHint.Text = "荷物を受け取った。先に配達ルートを選ぼう。"
+		routeHint.Text = "ルート選択済み。黄色い目印の配達先へ向かおう。"
 		expiresAt = payload.expiresAt
 		jobLabel.Text ..= "  •  " .. (payload.routeTitle or "選択ルート")
 		if payload.routeId == "shortcut" then

@@ -1,5 +1,13 @@
 # Night Delivery — Playable MVP
 
+## 配達先タイプの試験区画
+
+配達先は `NightDelivery.server.lua` の `houseDefinitions` にある `houseType` で設定します。省略時は `Normal` です。現在の試験区画は青い家 (`Construction`) と紫の家 (`HighRise`) で、ほかは通常住宅 (`Normal`) です。種類ごとの形状と追加所要時間は `src/ServerScriptService/NightDeliveryHouseTypes.lua` にあります。既存の `NightDelivery.server.lua` が各区画の `DeliveryPoint` と配達プロンプトを生成し、ジョブ、報酬、進行を管理します。Workspace の `NightDeliveryWorld/Houses` は起動時にコードから生成されます。
+
+工事中住宅は右側を回って裏口へ行く安全ルートと、木箱・足場・柵の上を通る近道があります。高所配達は左側の非常階段から屋上へ向かい、手前の足場から途中の階段へ移る近道があります。既存の配達ルート選択（街灯の道／裏路地の近道）は制限時間と報酬の選択であり、Obby内の物理的な経路はどちらを選んでも自由に選べます。新タイプでは既存の玄関向けランダム配達先イベントと道中イベントを出しません。
+
+Studioで特定の家を繰り返し試す場合、Play中に `workspace.NightDeliveryWorld` の `QAForceHouseName` を `BlueHouse` または `PurpleHouse` にしてから配達所で次の依頼を受けます。空文字に戻すと通常の抽選です。既存の依頼がある間は変更されません。別の住宅・地区を追加するときは `houseDefinitions` の定義と `NightDeliveryHouseTypes` の生成関数を増やしてください。地区名と解放条件は現在の `NightDelivery.server.lua` の `DISTRICT_NAMES` / `isHouseUnlocked` が管理します。
+
 短い配達、街の変化、報酬と強化をひとつの遊べるループにまとめたRoblox向けゲームです。
 
 ## ゲームの核

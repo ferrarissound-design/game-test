@@ -9,6 +9,7 @@ local Lighting = game:GetService("Lighting")
 local DataStoreService = game:GetService("DataStoreService")
 local RunService = game:GetService("RunService")
 local RULES = require(script.Parent:WaitForChild("NightDeliveryRules"))
+local HOUSE_TYPES = require(script.Parent:WaitForChild("NightDeliveryHouseTypes"))
 
 local REMOTE_NAME = "NightDeliveryEvent"
 local WORLD_NAME = "NightDeliveryWorld"
@@ -150,6 +151,7 @@ housesFolder.Parent = world
 
 if RunService:IsStudio() then
 	world:SetAttribute("QAForceDestinationEventId", "")
+	world:SetAttribute("QAForceHouseName", "")
 	world:SetAttribute("QAForceTravelEventId", "")
 	world:SetAttribute("QAForceModifierId", "")
 	world:SetAttribute("QAForceWeatherId", "")
@@ -794,12 +796,15 @@ local function createResident(model, position, frontZ, resident)
 	corner.Parent = label
 end
 
-local function createHouse(id, displayName, districtId, position, bodyColor)
+local function createHouse(id, displayName, districtId, position, bodyColor, houseType)
+	houseType = houseType or "Normal"
+	assert(HOUSE_TYPES.Definitions[houseType], "Unknown HouseType: " .. houseType)
 	local model = Instance.new("Model")
 	model.Name = id
 	model:SetAttribute("DisplayName", displayName)
 	model:SetAttribute("DistrictId", districtId)
 	model:SetAttribute("DistrictName", DISTRICT_NAMES[districtId] or districtId)
+	model:SetAttribute("HouseType", houseType)
 	model:SetAttribute("WorldThemeId", selectedWorldTheme.id)
 	model:SetAttribute("WorldThemeName", selectedWorldTheme.name)
 	model.Parent = housesFolder
@@ -809,7 +814,10 @@ local function createHouse(id, displayName, districtId, position, bodyColor)
 
 	local body
 	local frontZ
-	if districtId == "warehouse" then
+	if houseType == "HighRise" then
+		body = HOUSE_TYPES.build(model, houseType, position)
+		frontZ = -9.3
+	elseif districtId == "warehouse" then
 		body, frontZ = createWarehouseHouse(model, position, bodyColor, variant)
 	elseif selectedWorldTheme.id == "japanese" then
 		body, frontZ = createJapaneseHouse(model, position, bodyColor, variant)
@@ -837,6 +845,14 @@ local function createHouse(id, displayName, districtId, position, bodyColor)
 		model,
 		Enum.Material.Concrete
 	)
+	if houseType == "Construction" then
+		local _, backPoint = HOUSE_TYPES.build(model, houseType, position, frontZ)
+		porch:Destroy()
+		porch = backPoint
+	elseif houseType == "HighRise" then
+		porch:Destroy()
+		porch = model:FindFirstChild("DeliveryPoint")
+	end
 
 	local prompt = Instance.new("ProximityPrompt")
 	prompt.Name = "DeliverPrompt"
@@ -850,7 +866,7 @@ local function createHouse(id, displayName, districtId, position, bodyColor)
 	prompt.Parent = porch
 
 	local resident = RESIDENTS_BY_HOUSE[id]
-	if resident then
+	if resident and houseType == "Normal" then
 		createResident(model, position, frontZ, resident)
 	end
 
@@ -1137,11 +1153,11 @@ local function createWorld()
 	shopPrompt.Parent = shopPad
 
 	local houseDefinitions = {
-		{name = "BlueHouse", displayName = "青い家", districtId = "central", position = Vector3.new(-72, 0, 46), color = Color3.fromRGB(74, 111, 154)},
+		{name = "BlueHouse", displayName = "青い家", districtId = "central", position = Vector3.new(-72, 0, 46), color = Color3.fromRGB(74, 111, 154), houseType = "Construction"},
 		{name = "RedHouse", displayName = "赤い家", districtId = "central", position = Vector3.new(72, 0, 60), color = Color3.fromRGB(146, 76, 72)},
 		{name = "GreenHouse", displayName = "緑の家", districtId = "central", position = Vector3.new(-78, 0, 102), color = Color3.fromRGB(77, 124, 94)},
 		{name = "YellowHouse", displayName = "黄色い家", districtId = "central", position = Vector3.new(76, 0, -8), color = Color3.fromRGB(151, 127, 69)},
-		{name = "PurpleHouse", displayName = "紫の家", districtId = "central", position = Vector3.new(78, 0, -72), color = Color3.fromRGB(111, 81, 137)},
+		{name = "PurpleHouse", displayName = "紫の家", districtId = "central", position = Vector3.new(78, 0, -72), color = Color3.fromRGB(111, 81, 137), houseType = "HighRise"},
 		{name = "WhiteHouse", displayName = "白い家", districtId = "central", position = Vector3.new(-112, 0, 96), color = Color3.fromRGB(180, 184, 190)},
 		{name = "OrangeHouse", displayName = "橙の家", districtId = "central", position = Vector3.new(118, 0, 96), color = Color3.fromRGB(173, 107, 65)},
 		{name = "MintHouse", displayName = "ミントの家", districtId = "central", position = Vector3.new(112, 0, 24), color = Color3.fromRGB(93, 151, 145)},
@@ -1157,7 +1173,7 @@ local function createWorld()
 
 	local prompts = {}
 	for _, definition in ipairs(houseDefinitions) do
-		local _, prompt = createHouse(definition.name, definition.displayName, definition.districtId, definition.position, definition.color)
+		local _, prompt = createHouse(definition.name, definition.displayName, definition.districtId, definition.position, definition.color, definition.houseType)
 		table.insert(prompts, {
 			houseName = definition.name,
 			displayName = definition.displayName,
@@ -1515,7 +1531,9 @@ local function getJobTimeLimitForDistance(jobType, distance)
 end
 
 local function getJobTimeLimit(jobType, house)
-	return getJobTimeLimitForDistance(jobType, getDeliveryDistance(house))
+	local houseType = house and house:GetAttribute("HouseType") or "Normal"
+	local extraSeconds = HOUSE_TYPES.Definitions[houseType] and HOUSE_TYPES.Definitions[houseType].extraSeconds or 0
+	return getJobTimeLimitForDistance(jobType, getDeliveryDistance(house)) + extraSeconds
 end
 
 local function buildNeighborhoodStory(sourceId, targetHouseName)
@@ -1669,9 +1687,18 @@ local function assignJob(player)
 		jobType = JOB_TYPES[1]
 	end
 	local target = callbackHouse or candidates[math.random(1, #candidates)]
+	if RunService:IsStudio() then
+		local forcedHouse = housesFolder:FindFirstChild(tostring(world:GetAttribute("QAForceHouseName") or ""))
+		if forcedHouse and isHouseUnlocked(player, forcedHouse) then
+			target = forcedHouse
+		end
+	end
+	local targetHouseType = target:GetAttribute("HouseType") or "Normal"
 	local destinationEvent = nil
 	local forcedDestinationEvent = getStudioForcedEntry("QAForceDestinationEventId", RULES.DestinationEvents)
-	if not neighborhoodCallback and forcedDestinationEvent then
+	if targetHouseType ~= "Normal" then
+		-- Existing event offsets assume a ground-level front porch.
+	elseif not neighborhoodCallback and forcedDestinationEvent then
 		destinationEvent = forcedDestinationEvent
 		playerLastDestinationEvent[player] = destinationEvent.id
 	elseif not neighborhoodCallback and math.random() <= RULES.DestinationEventChance then
@@ -1753,6 +1780,8 @@ local function assignJob(player)
 		nightCondition = playerJobs[player].nightConditionName,
 		nightConditionId = playerJobs[player].nightConditionId,
 		shortcutReward = playerJobs[player].shortcutReward,
+		houseType = targetHouseType,
+		houseTypeLabel = HOUSE_TYPES.Definitions[targetHouseType].label,
 		neighborhoodThreadTitle = neighborhoodCallback and neighborhoodCallback.title or nil,
 		neighborhoodKindness = player:GetAttribute("NeighborhoodKindness") or 0,
 	})
@@ -1896,6 +1925,9 @@ local function scheduleTravelEvent(player, jobSerial)
 		end
 
 		local house = housesFolder:FindFirstChild(job.houseName)
+		if house and (house:GetAttribute("HouseType") or "Normal") ~= "Normal" then
+			return
+		end
 		local destination = house and house:FindFirstChild("DeliveryPoint")
 		local character = player.Character
 		local root = character and character:FindFirstChild("HumanoidRootPart")
@@ -2381,17 +2413,20 @@ local function startNextStop(player, job, stopIndex)
 	local sideDistance = root and targetPoint
 		and (root.Position - targetPoint.Position).Magnitude
 		or getDeliveryDistance(target)
+	local stopHouseType = target:GetAttribute("HouseType") or "Normal"
+	local extraSeconds = HOUSE_TYPES.Definitions[stopHouseType].extraSeconds
 	job.baseTimeLimit = math.min(
 		getJobTimeLimitForDistance(findJobType(job.jobTypeId), sideDistance),
 		stop.timeLimit or 35
-	)
+	) + extraSeconds
 	job.routeChoice = nil
 	job.expiresAt = nil
 	job.startedAt = nil
 	local forcedDestinationEvent = getStudioForcedEntry("QAForceDestinationEventId", RULES.DestinationEvents)
-	job.destinationEvent = forcedDestinationEvent
+	job.destinationEvent = stopHouseType ~= "Normal" and nil or forcedDestinationEvent
 		or (math.random() <= RULES.DestinationEventChance
 			and RULES.chooseWeighted(RULES.DestinationEvents, playerLastDestinationEvent[player]) or nil)
+	if stopHouseType ~= "Normal" then job.destinationEvent = nil end
 	if job.destinationEvent then playerLastDestinationEvent[player] = job.destinationEvent.id end
 	player:SetAttribute("NightDeliveryTimeLimit", nil)
 	player:SetAttribute("NightDeliveryOrderStartedAt", nil)
@@ -2406,6 +2441,8 @@ local function startNextStop(player, job, stopIndex)
 		houseName = target.Name,
 		jobSerial = job.jobSerial,
 		displayName = job.displayName,
+		houseType = stopHouseType,
+		houseTypeLabel = HOUSE_TYPES.Definitions[stopHouseType].label,
 		districtId = target:GetAttribute("DistrictId") or "central",
 		districtName = target:GetAttribute("DistrictName") or "住宅街",
 		jobTypeId = job.jobTypeId,
@@ -3051,7 +3088,9 @@ deliveryEvent.OnServerEvent:Connect(function(player, action, payload)
 		job.routeReward = routeId == "shortcut"
 			and (job.shortcutReward or route.reward)
 			or route.reward
-		job.timeLimit = math.clamp(math.ceil(job.baseTimeLimit * route.timeMultiplier), 10, 90)
+		local targetHouse = housesFolder:FindFirstChild(job.houseName)
+		local isObby = targetHouse and (targetHouse:GetAttribute("HouseType") or "Normal") ~= "Normal"
+		job.timeLimit = math.clamp(math.ceil(job.baseTimeLimit * route.timeMultiplier), 10, isObby and 130 or 90)
 		job.startedAt = os.clock()
 		job.expiresAt = workspace:GetServerTimeNow() + job.timeLimit
 		player:SetAttribute("NightDeliveryTimeLimit", job.timeLimit)
