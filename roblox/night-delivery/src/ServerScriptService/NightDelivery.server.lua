@@ -814,9 +814,9 @@ local function createHouse(id, displayName, districtId, position, bodyColor, hou
 
 	local body
 	local frontZ
-	if houseType == "HighRise" then
-		body = HOUSE_TYPES.build(model, houseType, position)
-		frontZ = -9.3
+	local deliveryPoint
+	if HOUSE_TYPES.Definitions[houseType].standalone then
+		body, deliveryPoint, frontZ = HOUSE_TYPES.build(model, houseType, position)
 	elseif districtId == "warehouse" then
 		body, frontZ = createWarehouseHouse(model, position, bodyColor, variant)
 	elseif selectedWorldTheme.id == "japanese" then
@@ -837,21 +837,16 @@ local function createHouse(id, displayName, districtId, position, bodyColor, hou
 		body, frontZ = createJapaneseHouse(model, position, bodyColor, variant)
 	end
 
-	local porch = makePart(
-		"DeliveryPoint",
-		Vector3.new(5.5, 0.5, 4),
-		position + Vector3.new(0, 0.25, frontZ - 3),
-		Color3.fromRGB(76, 88, 96),
-		model,
-		Enum.Material.Concrete
-	)
-	if houseType == "Construction" then
-		local _, backPoint = HOUSE_TYPES.build(model, houseType, position, frontZ)
-		porch:Destroy()
-		porch = backPoint
-	elseif houseType == "HighRise" then
-		porch:Destroy()
-		porch = model:FindFirstChild("DeliveryPoint")
+	if not deliveryPoint then
+		local _, customPoint = HOUSE_TYPES.build(model, houseType, position, frontZ)
+		deliveryPoint = customPoint or makePart(
+			"DeliveryPoint",
+			Vector3.new(5.5, 0.5, 4),
+			position + Vector3.new(0, 0.25, frontZ - 3),
+			Color3.fromRGB(76, 88, 96),
+			model,
+			Enum.Material.Concrete
+		)
 	end
 
 	local prompt = Instance.new("ProximityPrompt")
@@ -861,9 +856,9 @@ local function createHouse(id, displayName, districtId, position, bodyColor, hou
 	prompt.KeyboardKeyCode = Enum.KeyCode.E
 	prompt.Style = Enum.ProximityPromptStyle.Custom
 	prompt.HoldDuration = 0.2
-	prompt.MaxActivationDistance = 10
+	prompt.MaxActivationDistance = houseType == "RooftopGap" and 6 or 10
 	prompt.RequiresLineOfSight = false
-	prompt.Parent = porch
+	prompt.Parent = deliveryPoint
 
 	local resident = RESIDENTS_BY_HOUSE[id]
 	if resident and houseType == "Normal" then
@@ -1154,18 +1149,18 @@ local function createWorld()
 
 	local houseDefinitions = {
 		{name = "BlueHouse", displayName = "青い家", districtId = "central", position = Vector3.new(-72, 0, 46), color = Color3.fromRGB(74, 111, 154), houseType = "Construction"},
-		{name = "RedHouse", displayName = "赤い家", districtId = "central", position = Vector3.new(72, 0, 60), color = Color3.fromRGB(146, 76, 72)},
+		{name = "RedHouse", displayName = "赤い家", districtId = "central", position = Vector3.new(72, 0, 60), color = Color3.fromRGB(146, 76, 72), houseType = "RooftopGap"},
 		{name = "GreenHouse", displayName = "緑の家", districtId = "central", position = Vector3.new(-78, 0, 102), color = Color3.fromRGB(77, 124, 94)},
 		{name = "YellowHouse", displayName = "黄色い家", districtId = "central", position = Vector3.new(76, 0, -8), color = Color3.fromRGB(151, 127, 69)},
 		{name = "PurpleHouse", displayName = "紫の家", districtId = "central", position = Vector3.new(78, 0, -72), color = Color3.fromRGB(111, 81, 137), houseType = "HighRise"},
 		{name = "WhiteHouse", displayName = "白い家", districtId = "central", position = Vector3.new(-112, 0, 96), color = Color3.fromRGB(180, 184, 190)},
 		{name = "OrangeHouse", displayName = "橙の家", districtId = "central", position = Vector3.new(118, 0, 96), color = Color3.fromRGB(173, 107, 65)},
-		{name = "MintHouse", displayName = "ミントの家", districtId = "central", position = Vector3.new(112, 0, 24), color = Color3.fromRGB(93, 151, 145)},
+		{name = "MintHouse", displayName = "ミントの家", districtId = "central", position = Vector3.new(112, 0, 24), color = Color3.fromRGB(93, 151, 145), houseType = "BlockedAlley"},
 		{name = "RiverBlueHouse", displayName = "川辺の青い家", districtId = "riverside", position = Vector3.new(-150, 0, 157), color = Color3.fromRGB(71, 105, 148)},
 		{name = "RiverPinkHouse", displayName = "川辺の桃色の家", districtId = "riverside", position = Vector3.new(-82, 0, 157), color = Color3.fromRGB(158, 101, 119)},
 		{name = "RiverTealHouse", displayName = "川辺の青緑の家", districtId = "riverside", position = Vector3.new(82, 0, 157), color = Color3.fromRGB(72, 132, 133)},
 		{name = "RiverCreamHouse", displayName = "川辺のクリームの家", districtId = "riverside", position = Vector3.new(150, 0, 157), color = Color3.fromRGB(181, 161, 119)},
-		{name = "Warehouse01", displayName = "第1倉庫", districtId = "warehouse", position = Vector3.new(-150, 0, -145), color = Color3.fromRGB(92, 101, 112)},
+		{name = "Warehouse01", displayName = "第1倉庫", districtId = "warehouse", position = Vector3.new(-150, 0, -145), color = Color3.fromRGB(92, 101, 112), houseType = "WarehouseRoute"},
 		{name = "Warehouse02", displayName = "第2倉庫", districtId = "warehouse", position = Vector3.new(-78, 0, -145), color = Color3.fromRGB(110, 91, 81)},
 		{name = "Warehouse03", displayName = "第3倉庫", districtId = "warehouse", position = Vector3.new(78, 0, -145), color = Color3.fromRGB(82, 105, 99)},
 		{name = "Warehouse04", displayName = "第4倉庫", districtId = "warehouse", position = Vector3.new(150, 0, -145), color = Color3.fromRGB(105, 91, 118)},
@@ -1689,7 +1684,7 @@ local function assignJob(player)
 	local target = callbackHouse or candidates[math.random(1, #candidates)]
 	if RunService:IsStudio() then
 		local forcedHouse = housesFolder:FindFirstChild(tostring(world:GetAttribute("QAForceHouseName") or ""))
-		if forcedHouse and isHouseUnlocked(player, forcedHouse) then
+		if forcedHouse then
 			target = forcedHouse
 		end
 	end
@@ -2055,6 +2050,13 @@ local function completeDelivery(player, houseName)
 
 	local targetHouse = housesFolder:FindFirstChild(job.houseName)
 	local deliveryPoint = targetHouse and targetHouse:FindFirstChild("DeliveryPoint")
+	local targetType = targetHouse and targetHouse:GetAttribute("HouseType")
+	if (targetType == "RooftopGap" or targetType == "WarehouseRoute") and deliveryPoint then
+		local root = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
+		if not root or math.abs(root.Position.Y - deliveryPoint.Position.Y) > 6 then
+			return
+		end
+	end
 	if job.destinationEvent and job.destinationEventChoice then
 		if job.destinationEventObjectiveComplete ~= true then
 			return

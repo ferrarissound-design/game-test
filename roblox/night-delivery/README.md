@@ -2,11 +2,13 @@
 
 ## 配達先タイプの試験区画
 
-配達先は `NightDelivery.server.lua` の `houseDefinitions` にある `houseType` で設定します。省略時は `Normal` です。現在の試験区画は青い家 (`Construction`) と紫の家 (`HighRise`) で、ほかは通常住宅 (`Normal`) です。種類ごとの形状と追加所要時間は `src/ServerScriptService/NightDeliveryHouseTypes.lua` にあります。既存の `NightDelivery.server.lua` が各区画の `DeliveryPoint` と配達プロンプトを生成し、ジョブ、報酬、進行を管理します。Workspace の `NightDeliveryWorld/Houses` は起動時にコードから生成されます。
+配達先は `NightDelivery.server.lua` の `houseDefinitions` にある `houseType` で設定します。省略時は `Normal` です。試験区画は青い家 (`Construction`)、紫の家 (`HighRise`)、ミントの家 (`BlockedAlley`)、第1倉庫 (`WarehouseRoute`)、赤い家 (`RooftopGap`) です。種類ごとの形状、追加所要時間、生成関数は `src/ServerScriptService/NightDeliveryHouseTypes.lua` にあります。既存の `NightDelivery.server.lua` が各区画の `DeliveryPoint` に配達プロンプトを付け、ジョブ、報酬、進行を管理します。Workspace の `NightDeliveryWorld/Houses` は起動時にコードから生成されます。
 
 工事中住宅は右側を回って裏口へ行く安全ルートと、木箱・足場・柵の上を通る近道があります。高所配達は左側の非常階段から屋上へ向かい、手前の足場から途中の階段へ移る近道があります。既存の配達ルート選択（街灯の道／裏路地の近道）は制限時間と報酬の選択であり、Obby内の物理的な経路はどちらを選んでも自由に選べます。新タイプでは既存の玄関向けランダム配達先イベントと道中イベントを出しません。
 
-Studioで特定の家を繰り返し試す場合、Play中に `workspace.NightDeliveryWorld` の `QAForceHouseName` を `BlueHouse` または `PurpleHouse` にしてから配達所で次の依頼を受けます。空文字に戻すと通常の抽選です。既存の依頼がある間は変更されません。別の住宅・地区を追加するときは `houseDefinitions` の定義と `NightDeliveryHouseTypes` の生成関数を増やしてください。地区名と解放条件は現在の `NightDelivery.server.lua` の `DISTRICT_NAMES` / `isHouseUnlocked` が管理します。
+路地裏は左を大回りする安全な通路と、ゴミ箱・小足場・配管・柵を越える短い通路があります。倉庫は右側の木箱、パレット、コンテナ、棚、金属足場を使って奥の上階搬入口へ上がります。屋根渡りは外階段で低い屋根に出て、看板の足場を挟んで隣の屋根へ渡ります。中央の落下受けと復帰用の段差があります。これらは地形として生成され、依頼や完了判定は共通です。
+
+Studioで特定の家を繰り返し試す場合、Play中に `workspace.NightDeliveryWorld` の `QAForceHouseName` を `BlueHouse`、`PurpleHouse`、`MintHouse`、`Warehouse01`、`RedHouse` のいずれかにしてから配達所で次の依頼を受けます。Studioでは未解放の倉庫も強制指定できます。空文字に戻すと通常の抽選です。既存の依頼がある間は変更されません。各住宅で配達所の受注→ルート選択→目的地表示→足場の通行→配達→評価と報酬を確認し、落下後の復帰とスマホ操作も試してください。別の住宅・地区を追加するときは `houseDefinitions` の定義と `NightDeliveryHouseTypes.Definitions` の生成関数を増やしてください。地区名と通常プレイ時の解放条件は現在の `NightDelivery.server.lua` の `DISTRICT_NAMES` / `isHouseUnlocked` が管理します。
 
 短い配達、街の変化、報酬と強化をひとつの遊べるループにまとめたRoblox向けゲームです。
 

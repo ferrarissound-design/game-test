@@ -1,12 +1,6 @@
 -- Geometry only. NightDelivery.server.lua remains the sole owner of jobs and prompts.
 local HouseTypes = {}
 
-HouseTypes.Definitions = {
-	Normal = {label = "通常住宅", extraSeconds = 0},
-	Construction = {label = "工事中住宅・裏口", extraSeconds = 38},
-	HighRise = {label = "高所配達・屋上", extraSeconds = 46},
-}
-
 local function part(model, name, size, center, color, material)
 	local item = Instance.new("Part")
 	item.Name = name
@@ -82,13 +76,89 @@ local function highRise(model, origin)
 	return body, target
 end
 
-function HouseTypes.build(model, houseType, origin, frontZ)
-	if houseType == "Construction" then
-		return nil, construction(model, origin, frontZ)
-	elseif houseType == "HighRise" then
-		return highRise(model, origin)
+local function blockedAlley(model, origin, frontZ)
+	local metal = Color3.fromRGB(86, 98, 107)
+	local bin = Color3.fromRGB(69, 112, 103)
+	local alleyZ = frontZ - 13
+	-- A walled, cluttered shortcut. The left outside edge stays open for a walk around the house.
+	for _, x in ipairs({-10, 10}) do
+		part(model, "AlleyWall_" .. x, Vector3.new(0.7, 6, 17), origin + Vector3.new(x, 3, alleyZ - 2), metal, Enum.Material.Brick)
 	end
-	return nil, nil
+	part(model, "RoadworkBarrier", Vector3.new(18, 5, 0.8), origin + Vector3.new(0, 2.5, alleyZ), Color3.fromRGB(215, 143, 70), Enum.Material.Metal)
+	part(model, "Dumpster", Vector3.new(6, 2.5, 5), origin + Vector3.new(-2, 1.25, alleyZ - 9), bin, Enum.Material.Metal)
+	part(model, "ParcelStack", Vector3.new(3, 2.5, 4), origin + Vector3.new(5, 1.25, alleyZ - 8), Color3.fromRGB(149, 119, 82), Enum.Material.WoodPlanks)
+	part(model, "SmallPlatform", Vector3.new(7, 3.5, 5), origin + Vector3.new(-2, 1.75, alleyZ - 4), metal, Enum.Material.Metal)
+	part(model, "PipeWalk", Vector3.new(8, 4.5, 5), origin + Vector3.new(-2, 2.25, alleyZ), Color3.fromRGB(99, 116, 125), Enum.Material.Metal)
+	part(model, "WallCrossing", Vector3.new(8, 5.5, 5), origin + Vector3.new(-2, 2.75, alleyZ + 4), metal, Enum.Material.Brick)
+	part(model, "AlleyLanding", Vector3.new(9, 2.5, 5), origin + Vector3.new(-2, 1.25, alleyZ + 9), metal, Enum.Material.Metal)
+	-- The rear path joins either approach; it stays beyond the existing solid house body.
+	part(model, "BackPassage", Vector3.new(29, 0.3, 6), origin + Vector3.new(-4, 0.2, 15), metal)
+	local target = part(model, "DeliveryPoint", Vector3.new(6, 0.5, 6), origin + Vector3.new(0, 0.25, 15), Color3.fromRGB(93, 176, 147), Enum.Material.Neon)
+	sign(model, origin + Vector3.new(-14, 0, alleyZ - 10), "路地裏：左を大回り\nゴミ箱から柵を越えて近道")
+	return nil, target
+end
+
+local function warehouseRoute(model, origin)
+	local steel = Color3.fromRGB(78, 106, 120)
+	local wood = Color3.fromRGB(137, 102, 66)
+	local rust = Color3.fromRGB(178, 92, 65)
+	-- A loading-yard ascent around the warehouse's right wall, ending at a rear upper dock.
+	part(model, "LoadingCrate", Vector3.new(6, 2.5, 6), origin + Vector3.new(16, 1.25, -21), wood, Enum.Material.WoodPlanks)
+	part(model, "PalletStack", Vector3.new(7, 4.5, 6), origin + Vector3.new(16, 2.25, -15), wood, Enum.Material.WoodPlanks)
+	part(model, "FreightContainer", Vector3.new(7, 7.5, 8), origin + Vector3.new(16, 3.75, -8), rust, Enum.Material.Metal)
+	part(model, "StorageShelf", Vector3.new(7, 10.5, 7), origin + Vector3.new(16, 5.25, 0), steel, Enum.Material.Metal)
+	part(model, "MetalCatwalk", Vector3.new(8, 0.6, 8), origin + Vector3.new(16, 13.2, 8), steel, Enum.Material.DiamondPlate)
+	part(model, "CatwalkSupport", Vector3.new(0.7, 12.9, 0.7), origin + Vector3.new(19, 6.45, 8), steel, Enum.Material.Metal)
+	part(model, "UpperLoadingDock", Vector3.new(12, 0.6, 11), origin + Vector3.new(12, 16.2, 15), steel, Enum.Material.DiamondPlate)
+	for _, x in ipairs({7, 17}) do
+		part(model, "DockSupport_" .. x, Vector3.new(0.8, 15.9, 0.8), origin + Vector3.new(x, 7.95, 18), steel, Enum.Material.Metal)
+	end
+	local target = part(model, "DeliveryPoint", Vector3.new(6, 0.5, 6), origin + Vector3.new(9, 16.75, 16), Color3.fromRGB(97, 185, 163), Enum.Material.Neon)
+	sign(model, origin + Vector3.new(17, 0, -27), "倉庫奥の上階へ\n木箱→パレット→コンテナ→金属足場")
+	return nil, target
+end
+
+local function rooftopGap(model, origin)
+	local brick = Color3.fromRGB(142, 128, 119)
+	local roof = Color3.fromRGB(90, 105, 117)
+	local body = part(model, "Body", Vector3.new(18, 9, 16), origin + Vector3.new(0, 4.5, 0), brick, Enum.Material.Brick)
+	part(model, "StartingRoof", Vector3.new(19, 0.6, 17), origin + Vector3.new(0, 9.3, 0), roof, Enum.Material.Slate)
+	part(model, "NeighborBuilding", Vector3.new(18, 9, 16), origin + Vector3.new(26, 4.5, 0), brick, Enum.Material.Brick)
+	part(model, "NeighborRoof", Vector3.new(19, 0.6, 17), origin + Vector3.new(26, 9.3, 0), roof, Enum.Material.Slate)
+	-- A broad exterior stair on the first building. The short horizontal gaps are each 1-2 studs.
+	for i = 1, 6 do
+		part(model, "FirstRoofStair_" .. i, Vector3.new(6, i * 1.5, 3.2), origin + Vector3.new(-12, i * 0.75, -18 + (i - 1) * 2.1), roof, Enum.Material.Metal)
+	end
+	part(model, "FirstRoofLanding", Vector3.new(7, 0.6, 7), origin + Vector3.new(-9, 9.3, -6), roof, Enum.Material.Metal)
+	part(model, "BillboardBridge", Vector3.new(5, 0.6, 7), origin + Vector3.new(13, 9.3, 0), Color3.fromRGB(180, 136, 77), Enum.Material.Metal)
+	-- Falling between roofs lands on a catch deck, with steps back to the far roof.
+	part(model, "RecoveryDeck", Vector3.new(10, 0.6, 12), origin + Vector3.new(13, 4.8, 0), roof, Enum.Material.Metal)
+	part(model, "RecoveryStep1", Vector3.new(6, 6, 5), origin + Vector3.new(14, 3, 7), roof, Enum.Material.Metal)
+	part(model, "RecoveryStep2", Vector3.new(6, 8, 5), origin + Vector3.new(17, 4, 11), roof, Enum.Material.Metal)
+	part(model, "RecoveryStep3", Vector3.new(6, 9, 5), origin + Vector3.new(20, 4.5, 11), roof, Enum.Material.Metal)
+	local target = part(model, "DeliveryPoint", Vector3.new(6, 0.5, 6), origin + Vector3.new(29, 9.85, 1), Color3.fromRGB(97, 185, 163), Enum.Material.Neon)
+	sign(model, origin + Vector3.new(-13, 0, -23), "屋根を横へ渡って配達\n落ちても中央から登り直せる")
+	return body, target, -8.3
+end
+
+HouseTypes.Definitions = {
+	Normal = {label = "通常住宅", extraSeconds = 0, build = function() return nil, nil end},
+	Construction = {label = "工事中住宅・裏口", extraSeconds = 38, build = function(model, origin, frontZ)
+		return nil, construction(model, origin, frontZ)
+	end},
+	HighRise = {label = "高所配達・屋上", extraSeconds = 46, standalone = true, build = function(model, origin)
+		local body, target = highRise(model, origin)
+		return body, target, -9.3
+	end},
+	BlockedAlley = {label = "路地裏・裏口", extraSeconds = 32, build = blockedAlley},
+	WarehouseRoute = {label = "倉庫・上階搬入口", extraSeconds = 45, build = warehouseRoute},
+	RooftopGap = {label = "屋根渡り・配達", extraSeconds = 42, standalone = true, build = rooftopGap},
+}
+
+function HouseTypes.build(model, houseType, origin, frontZ)
+	local definition = HouseTypes.Definitions[houseType]
+	assert(definition, "Unknown HouseType: " .. tostring(houseType))
+	return definition.build(model, origin, frontZ)
 end
 
 return HouseTypes
