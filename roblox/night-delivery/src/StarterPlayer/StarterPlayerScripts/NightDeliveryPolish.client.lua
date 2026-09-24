@@ -237,7 +237,7 @@ missionFrame.Parent = gui
 addCorner(missionFrame, 12)
 addStroke(missionFrame, Color3.fromRGB(112, 128, 155), 0.5, 1)
 
-local missionHeader = makeLabel(missionFrame, UDim2.new(1, -18, 0, 24), UDim2.fromOffset(10, 6), "今夜の目標", 12, Enum.Font.GothamBold)
+local missionHeader = makeLabel(missionFrame, UDim2.new(1, -18, 0, 24), UDim2.fromOffset(10, 6), "セッション目標", 12, Enum.Font.GothamBold)
 missionHeader.TextColor3 = Color3.fromRGB(168, 183, 209)
 
 local missionName = makeLabel(missionFrame, UDim2.new(1, -18, 0, 24), UDim2.fromOffset(10, 27), "読み込み中...", 14, Enum.Font.GothamBold)
@@ -1134,10 +1134,9 @@ local function clearTarget()
 	navFrame.Visible = false
 end
 
--- Route-choice recovery watchdog.
--- Job assignment is also mirrored into Player attributes by the server, so the
--- player must never become stuck if a JobAssigned RemoteEvent callback is
--- missed or interrupted before the route UI becomes visible.
+-- The core NightDelivery.client.lua owns the only interactive route chooser.
+-- This polish layer still mirrors job state and requests the authoritative cargo
+-- modifier, but it must never expose a second ChooseRoute UI.
 local lastRecoveredRouteKey = nil
 
 local function ensureRouteChoiceFromAttributes()
@@ -1168,20 +1167,9 @@ local function ensureRouteChoiceFromAttributes()
 		setTarget(houseName, displayName)
 	end
 
-	local world = workspace:FindFirstChild("NightDeliveryWorld")
-	local shortcutReward = 80
-	if world and tostring(world:GetAttribute("NightConditionId") or "") == "roadwork" then
-		shortcutReward += 40
-	end
-
-	routeChoiceFrame.Position = UDim2.fromScale(0.5, 0.5)
-	routeChoiceFrame.Visible = true
-	lanternRouteButton.Active = true
-	shortcutRouteButton.Active = true
-	shortcutRouteButton.Text = string.format(
-		"裏路地の近道\n制限時間短め\n成功で +%d Coins",
-		shortcutReward
-	)
+	-- Route selection is intentionally invisible here. Core UI recovers it from
+	-- the same Player attributes, while this layer only keeps navigation/modifier state.
+	routeChoiceFrame.Visible = false
 
 	local recoveryKey = string.format("%d:%s", jobSerial, houseName)
 	if recoveryKey ~= lastRecoveredRouteKey then
@@ -1401,9 +1389,9 @@ local function updateMissionCard(missions)
 	end
 
 	if not nextMission then
-		missionHeader.Text = "今夜の目標"
+		missionHeader.Text = "セッション目標"
 		missionName.Text = "セッション目標 COMPLETE"
-		missionProgress.Text = "15件達成。ここからは自己ベストの夜。"
+		missionProgress.Text = "15件達成。ここからは自己ベスト更新を狙おう。"
 		missionName.TextColor3 = Color3.fromRGB(255, 215, 126)
 		return
 	end
@@ -1550,14 +1538,8 @@ deliveryEvent.OnClientEvent:Connect(function(action, payload)
 		modifierFrame.Visible = false
 		currentModifier = nil
 		pendingRouteSerial = payload.jobSerial
-		routeChoiceFrame.Position = UDim2.fromScale(0.5, 0.5)
-		lanternRouteButton.Active = true
-		shortcutRouteButton.Active = true
-		shortcutRouteButton.Text = string.format(
-			"裏路地の近道\n制限時間短め\n成功で +%d Coins",
-			tonumber(payload.shortcutReward) or 80
-		)
-		routeChoiceFrame.Visible = true
+		-- Core gameplay UI is the sole route-choice owner.
+		routeChoiceFrame.Visible = false
 		requestOrderModifier(payload.jobSerial)
 		if payload.lastDelivery then announceShift("LAST DELIVERY  今夜最後の配達") end
 
