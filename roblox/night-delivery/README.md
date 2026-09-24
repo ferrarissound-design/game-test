@@ -267,3 +267,45 @@ Studioで5〜10分プレイし、配達のテンポと操作感を確認して�
 - Analyticsを見た報酬調整
 
 **受注して走る。届けて稼ぐ。街を広げて、次の夜へ。**
+
+## Dispatch Board / Job Offers
+
+At the Depot, a normal shift delivery presents up to three server-generated contracts. The
+player chooses one before the existing `JobAssigned` → route choice → delivery flow.
+Story callback deliveries with a fixed address bypass the board. The first offer uses a
+standard parcel and prefers an ordinary house; later offers favor variety and slightly
+more distant or special addresses in LateNight and FinalRun. The displayed Coins amount
+is the guaranteed job-type base plus a 15 Coin far-distance and/or 20 Coin special-house
+bonus. Timing, weather, cargo grade, route, and story rewards continue to use their
+existing independent payout rules. Cargo bonuses remain conditional on the actual grade.
+
+The server stores the current offers per player and accepts only an ID from that set while
+at the Depot. Prompting again shows the same offers; respawning keeps them. The offers
+are consumed before job creation. `JobOffersActive` and monotonic `JobOffersSerial` are
+session attributes used for UI recovery. `JobOffers` and `AcceptJobOffer` use the existing
+`NightDeliveryEvent` RemoteEvent; `RequestJobOffers` resends a pending board. A new
+`NightDeliveryCargoModifiers` module shares cargo definitions between dispatch and the
+existing polish reward system. No DataStore schema changes are needed.
+
+### Studio QA (manual; not yet run in Studio)
+
+1. Sync Rojo and use the Depot prompt: verify three readable cards on desktop and
+   iPhone portrait, with varied addresses/cargo/difficulty. Re-prompt and respawn before
+   accepting: confirm the IDs and card contents do not change.
+2. Accept a card repeatedly, then try its old ID again and another player's ID: only one
+   `JobAssigned` and the chosen house/cargo must result. Verify a remote selection from
+   outside the Depot is rejected.
+3. Complete route choice, `JobRouteChosen` and delivery: the previous route recovery and
+   “choose your route first” behavior must still work. Check Coin base, one dispatch
+   bonus, one modifier payout, and one increment of `NightShiftDeliveries`.
+4. Use `QAForceHouseName` to put an unlocked Obby house into the second slot, and
+   `QAForceModifierId` for its cargo; verify the chosen address and modifier are honored.
+   Test side offers and multi-stop completion independently of dispatch.
+5. Trigger a Neighborhood Story callback: it should assign its fixed house directly.
+   Force `QAForceOddityId` on a normal-cargo ordinary offer in LateNight; verify the
+   oddity appears after acceptance and does not change the chosen house. Repeat Address
+   needs a previously completed address. Test weather, destination and travel events.
+6. Use `QAForceNightPhase` for EarlyNight, LateNight and FinalRun: check candidate mix,
+   a safe option, `LAST DELIVERY` on the board and existing route UI, then complete all
+   six deliveries through the Shift Result. Leave and rejoin while offers are pending to
+   confirm no session offer survives; test with two simultaneous players.
