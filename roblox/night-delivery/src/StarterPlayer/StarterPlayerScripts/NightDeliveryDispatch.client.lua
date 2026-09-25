@@ -123,9 +123,17 @@ local function show(payload)
 		corner.CornerRadius = UDim.new(0, 9)
 		corner.Parent = card
 		label(card, tostring(offer.location or "Residential"), UDim2.fromOffset(11, 5), UDim2.new(1, -115, 0, 22), 15, true)
-		label(card, string.format("%d Coins  •  %s", tonumber(offer.baseReward) or 0, tostring(offer.distance or "Near")),
+		local rewardText = string.format("%d Coins", tonumber(offer.baseReward) or 0)
+		if (tonumber(offer.cargoReward) or 0) > 0 then
+			rewardText ..= string.format(" + 条件%d", tonumber(offer.cargoReward) or 0)
+		end
+		label(card, string.format("%s  •  %s", rewardText, tostring(offer.distance or "Near")),
 			UDim2.fromOffset(11, 31), UDim2.new(1, -115, 0, 20), 13, true)
-		label(card, string.format("%s  •  %s", tostring(offer.cargo or "Normal"), tostring(offer.difficulty or "Easy")),
+		local detailText = string.format("%s  •  %s", tostring(offer.cargo or "Normal"), tostring(offer.difficulty or "Easy"))
+		if (tonumber(offer.walkingBonus) or 0) > 0 then
+			detailText ..= string.format("  •  徒歩+%d", tonumber(offer.walkingBonus) or 0)
+		end
+		label(card, detailText,
 			UDim2.fromOffset(11, 56), UDim2.new(1, -115, 0, 20), 12, false)
 		local accept = Instance.new("TextButton")
 		accept.Size = UDim2.new(0, 90, 0, 44)

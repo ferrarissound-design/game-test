@@ -956,6 +956,9 @@ deliveryEvent.OnClientEvent:Connect(function(action, payload)
 		elseif payload.oddityInstruction then
 			jobLabel.Text ..= "  •  " .. tostring(payload.oddityInstruction)
 		end
+		if (payload.walkingBonusPreview or 0) > 0 then
+			jobLabel.Text ..= string.format("  •  🚶 徒歩成功 +%d", payload.walkingBonusPreview)
+		end
 		jobLabel.TextColor3 = currentJobTypeId == "special"
 			and Color3.fromRGB(214, 156, 255)
 			or (currentJobTypeId == "rush" and Color3.fromRGB(255, 207, 110) or Color3.fromRGB(157, 190, 225))
@@ -1019,6 +1022,9 @@ deliveryEvent.OnClientEvent:Connect(function(action, payload)
 		end
 		if (payload.sideRequestBonus or 0) > 0 then
 			bonusText ..= string.format("  追加便 +%d", payload.sideRequestBonus)
+		end
+		if (payload.walkingBonus or 0) > 0 then
+			bonusText ..= string.format("  🚶 徒歩 +%d", payload.walkingBonus)
 		end
 		if (payload.neighborhoodCallbackBonus or 0) > 0 then
 			bonusText ..= string.format("  つながり +%d", payload.neighborhoodCallbackBonus)
@@ -1090,9 +1096,9 @@ deliveryEvent.OnClientEvent:Connect(function(action, payload)
 		bikeActive = payload.active == true
 		updateStats()
 		if bikeActive then
-			showToast("🚲 自転車モードON。移動速度アップ！")
+			showToast("🚲 自転車ON。速く着いて時間ボーナスを狙おう。")
 		else
-			showToast("自転車モードOFF。")
+			showToast("🚶 徒歩モード。時間内に届ければ徒歩手当あり。")
 		end
 	elseif action == "SpeedUpgraded" then
 		showToast(string.format("速度Lv.%d に強化！", payload.level or 0))
