@@ -35,6 +35,28 @@ local destinationEventObjectiveActive = false
 local bikeActive = false
 local routeJobSerial = nil
 local routeShortcutReward = 80
+local playerControls = nil
+
+local function setRouteMovementLocked(locked)
+	local ok, controls = pcall(function()
+		if not playerControls then
+			local playerScripts = player:WaitForChild("PlayerScripts")
+			local playerModule = require(playerScripts:WaitForChild("PlayerModule"))
+			playerControls = playerModule:GetControls()
+		end
+		return playerControls
+	end)
+	if not ok or not controls then
+		warn("[NightDelivery] could not access player controls for route chooser")
+		return
+	end
+
+	if locked then
+		controls:Disable()
+	else
+		controls:Enable()
+	end
+end
 
 local gui = Instance.new("ScreenGui")
 gui.Name = "NightDeliveryUI"
@@ -155,12 +177,14 @@ local function showCoreRouteChoice(jobSerial, shortcutReward)
 		routeShortcutReward
 	)
 	routeFrame.Visible = true
+	setRouteMovementLocked(true)
 	print("[NightDelivery] core route chooser shown", routeJobSerial)
 end
 
 local function hideCoreRouteChoice()
 	routeFrame.Visible = false
 	routeJobSerial = nil
+	setRouteMovementLocked(false)
 end
 
 local function submitCoreRoute(routeId)
