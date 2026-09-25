@@ -36,7 +36,7 @@ local bikeActive = false
 local routeJobSerial = nil
 local routeShortcutReward = 80
 local playerControls = nil
-local bikeActive = player:GetAttribute("BikeActive") == true
+bikeActive = player:GetAttribute("BikeActive") == true
 local bikeAudioCharacter = nil
 local bikeAudioHumanoid = nil
 local bikeRollingSound = nil
