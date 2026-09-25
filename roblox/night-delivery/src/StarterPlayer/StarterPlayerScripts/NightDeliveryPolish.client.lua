@@ -1719,7 +1719,7 @@ deliveryEvent.OnClientEvent:Connect(function(action, payload)
 			end
 		end
 	elseif action == "NightConditionChanged" then
-		nightBadge.Visible = true
+		nightBadge.Visible = not missionExpanded
 		nightName.Text = "☾ " .. tostring(payload.name or "静かな夜")
 		nightDescription.Text = tostring(payload.description or "")
 		if not currentHouseName then
@@ -1751,7 +1751,7 @@ deliveryEvent.OnClientEvent:Connect(function(action, payload)
 		end
 	elseif action == "Welcome" then
 		if payload.nightConditionName then
-			nightBadge.Visible = true
+			nightBadge.Visible = not missionExpanded
 			nightName.Text = "☾ " .. tostring(payload.nightConditionName)
 			nightDescription.Text = tostring(payload.nightConditionDescription or "")
 		end
