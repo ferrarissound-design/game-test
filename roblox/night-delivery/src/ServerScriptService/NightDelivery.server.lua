@@ -40,6 +40,7 @@ local WAREHOUSE_UNLOCK_DELIVERIES = 15
 local SHIFT_TARGET = 6
 local SHIFT_TARGET_DELIVERIES = 6
 local JOB_OFFER_COUNT = 3
+local JOB_COUNTER_INTERACTION_RANGE = 14
 local PERFECT_COMBO_BONUS = 40
 local SHIFT_REWARD = 300
 local COOP_RANGE = 36
@@ -2066,7 +2067,7 @@ local function confirmJob(player, selected, neighborhoodCallback)
 end
 
 local function assignJob(player)
-	if not requirePlayerReady(player) or not isNearPart(player, jobCounterRef, 14) then return end
+	if not requirePlayerReady(player) or not isNearPart(player, jobCounterRef, JOB_COUNTER_INTERACTION_RANGE) then return end
 	if player:GetAttribute("NightShiftResultPending") == true then
 		sendStatus(player, "Message", {text = "夜勤結果を確認してから次の依頼を受けよう。"})
 		return
@@ -2721,9 +2722,37 @@ end
 local function startNextStop(player, job, stopIndex)
 	local stop = job.extraStops[stopIndex]
 	if not stop then return end
-	table.remove(job.extraStops, stopIndex)
 	local target = housesFolder:FindFirstChild(stop.houseName)
-	if not target then return end
+	if not target then
+		-- Do not leave the batch in a state where it has no active house and no usable next stop.
+		table.remove(job.extraStops, stopIndex)
+		local options = {}
+		for _, remainingStop in ipairs(job.extraStops) do
+			local house = housesFolder:FindFirstChild(remainingStop.houseName)
+			if house then
+				local point = house:FindFirstChild("DeliveryPoint")
+				local character = player.Character
+				local root = character and character:FindFirstChild("HumanoidRootPart")
+				table.insert(options, {
+					houseName = remainingStop.houseName,
+					displayName = remainingStop.displayName,
+					distance = root and point and math.floor((root.Position - point.Position).Magnitude) or 0,
+					reward = remainingStop.reward or 0,
+				})
+			end
+		end
+		if #options == 0 then
+			playerJobs[player] = nil
+			sendStatus(player, "Message", {text = "追加配達先を読み込めなかったため、この配達バッチを終了したよ。"})
+		end
+		sendStatus(player, "NextStopOptions", {
+			jobSerial = job.jobSerial,
+			stops = options,
+			bagCapacity = job.bagCapacity,
+		})
+		return
+	end
+	table.remove(job.extraStops, stopIndex)
 
 	job.jobSerial = (player:GetAttribute("NightDeliveryJobSerial") or 0) + 1
 	job.houseName = target.Name
@@ -3279,7 +3308,7 @@ deliveryEvent.OnServerEvent:Connect(function(player, action, payload)
 		local state = playerJobOffers[player]
 		if not requirePlayerReady(player) or playerJobs[player] or not state
 			or type(payload) ~= "table" or type(payload.offerId) ~= "string" then return end
-		if not isNearPart(player, jobCounterRef, 14) then
+		if not isNearPart(player, jobCounterRef, JOB_COUNTER_INTERACTION_RANGE) then
 			sendStatus(player, "JobOfferRejected", {reason = "Depotの近くで仕事を選ぼう。"})
 			return
 		end
@@ -3478,6 +3507,13 @@ deliveryEvent.OnServerEvent:Connect(function(player, action, payload)
 			or not route
 			or type(payload) ~= "table"
 			or tonumber(payload.jobSerial) ~= job.jobSerial then
+			return
+		end
+		-- Initial jobs must begin at the Depot so a client cannot walk to the destination
+		-- before starting the timer. Side-request stops intentionally choose their route
+		-- from the previous delivery location instead.
+		if not job.isSideRequest and not isNearPart(player, jobCounterRef, JOB_COUNTER_INTERACTION_RANGE) then
+			sendStatus(player, "Message", {text = "配達所の近くでルートを選ぼう。"})
 			return
 		end
 

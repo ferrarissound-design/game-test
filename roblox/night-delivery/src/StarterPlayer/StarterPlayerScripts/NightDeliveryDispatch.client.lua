@@ -5,6 +5,7 @@ local RunService = game:GetService("RunService")
 
 local player = Players.LocalPlayer
 local event = ReplicatedStorage:WaitForChild("NightDeliveryEvent")
+local JOB_COUNTER_INTERACTION_RANGE = 14
 local gui = Instance.new("ScreenGui")
 gui.Name = "NightDeliveryDispatch"
 gui.ResetOnSpawn = false
@@ -181,7 +182,7 @@ RunService.Heartbeat:Connect(function(dt)
 	local world = workspace:FindFirstChild("NightDeliveryWorld")
 	local depot = world and world:FindFirstChild("Depot")
 	local pad = depot and depot:FindFirstChild("JobCounter", true)
-	if root and pad and (root.Position - pad.Position).Magnitude > 24 then closeOffers() end
+	if root and pad and (root.Position - pad.Position).Magnitude > JOB_COUNTER_INTERACTION_RANGE then closeOffers() end
 end)
 
 local function requestPending()
