@@ -41,6 +41,11 @@ local SHIFT_TARGET = 6
 local SHIFT_TARGET_DELIVERIES = 6
 local JOB_OFFER_COUNT = 3
 local JOB_COUNTER_INTERACTION_RANGE = 14
+local WALKING_BONUS_NEAR_DISTANCE = 120
+local WALKING_BONUS_MID_DISTANCE = 185
+local WALKING_BONUS_NEAR = 20
+local WALKING_BONUS_MID = 35
+local WALKING_BONUS_FAR = 55
 local PERFECT_COMBO_BONUS = 40
 local SHIFT_REWARD = 300
 local COOP_RANGE = 36
@@ -1598,6 +1603,20 @@ local function getDeliveryDistance(house)
 	return (deliveryPoint.Position - counter.Position).Magnitude
 end
 
+local function getWalkingBonusForDistance(distance, modifierId)
+	if modifierId == "oversized" then
+		-- Oversized cargo already forces walking, so it should not receive a free transport bonus.
+		return 0
+	end
+	distance = math.max(0, tonumber(distance) or 0)
+	if distance <= WALKING_BONUS_NEAR_DISTANCE then
+		return WALKING_BONUS_NEAR
+	elseif distance <= WALKING_BONUS_MID_DISTANCE then
+		return WALKING_BONUS_MID
+	end
+	return WALKING_BONUS_FAR
+end
+
 local function getJobTimeLimitForDistance(jobType, distance)
 	local profile = JOB_TIME_PROFILES[jobType.id] or JOB_TIME_PROFILES.standard
 	local estimatedWalkingTime = math.max(0, tonumber(distance) or 0) * ROUTE_DISTANCE_FACTOR / BASE_WALK_SPEED
@@ -1822,10 +1841,14 @@ local OFFER_HOUSE_LABELS = {
 }
 
 local function offerPublicData(offer)
+	local house = housesFolder:FindFirstChild(offer.houseName)
+	local transportDistance = offer.distanceMeters or getDeliveryDistance(house)
 	return {
 		id = offer.id, location = offer.location, baseReward = offer.jobType.baseReward + offer.bonus,
 		distance = offer.distance, cargo = offer.cargo.title,
 		difficulty = offer.difficulty,
+		cargoReward = offer.cargo.reward or 0,
+		walkingBonus = getWalkingBonusForDistance(transportDistance, offer.cargo.id),
 	}
 end
 
@@ -1974,6 +1997,7 @@ local function confirmJob(player, selected, neighborhoodCallback)
 	-- per-job rain/fog/blackout/festival rule that disagrees with Lighting or navigation.
 	local weather = currentWeather
 	local nightRule = currentNightRule
+	local transportDistance = getDeliveryDistance(target)
 	local baseTimeLimit = getJobTimeLimit(jobType, target)
 	local jobSerial = (player:GetAttribute("NightDeliveryJobSerial") or 0) + 1
 
@@ -2001,6 +2025,9 @@ local function confirmJob(player, selected, neighborhoodCallback)
 		nightConditionId = nightRule.id,
 		nightConditionName = nightRule.name,
 		baseTimeLimit = baseTimeLimit,
+		transportDistance = transportDistance,
+		transportModifierId = selected.cargo.id,
+		usedBike = false,
 		bagCapacity = math.clamp(1 + (player:GetAttribute("BagStyleLevel") or 0), 1, 3),
 		extraStops = {},
 		completedHouseNames = {},
@@ -2047,6 +2074,7 @@ local function confirmJob(player, selected, neighborhoodCallback)
 		weatherMultiplier = weather.rewardMultiplier,
 		baseTimeLimit = baseTimeLimit,
 		baseReward = jobType.baseReward + (selected.bonus or 0),
+		walkingBonusPreview = getWalkingBonusForDistance(transportDistance, selected.cargo.id),
 		bagCapacity = playerJobs[player].bagCapacity,
 		nightCondition = playerJobs[player].nightConditionName,
 		nightConditionId = playerJobs[player].nightConditionId,
@@ -2507,6 +2535,12 @@ local function completeDelivery(player, houseName)
 	reward += coopBonus + destinationEventBonus + neighborhoodCallbackBonus + oddityBonus
 	if not job.isSideRequest then reward += job.offerBonus or 0 end
 
+	local walkingBonus = 0
+	if remaining > 0 and job.usedBike ~= true then
+		walkingBonus = getWalkingBonusForDistance(job.transportDistance, job.transportModifierId)
+		reward += walkingBonus
+	end
+
 	-- A small chance of a grateful resident tipping the courier keeps ordinary jobs surprising.
 	local tipChance = nightConditionId == "tip" and 30 or 14
 	local neighborhoodTip = 0
@@ -2600,6 +2634,8 @@ local function completeDelivery(player, houseName)
 		routeBonus = routeBonus,
 		destinationEventBonus = destinationEventBonus,
 		sideRequestBonus = sideRequestBonus,
+		walkingBonus = walkingBonus,
+		transportMode = job.usedBike == true and "bike" or "foot",
 		destinationEventId = job.destinationEvent and job.destinationEvent.id or nil,
 		destinationEventHazardTriggered = job.destinationEventHazardTriggered == true,
 		neighborhoodCallbackTitle = neighborhoodCallback and neighborhoodCallback.title or nil,
@@ -2796,6 +2832,9 @@ local function startNextStop(player, job, stopIndex)
 	local sideDistance = root and targetPoint
 		and (root.Position - targetPoint.Position).Magnitude
 		or getDeliveryDistance(target)
+	job.transportDistance = sideDistance
+	job.transportModifierId = stop.cargoRuleId
+	job.usedBike = false
 	local stopHouseType = target:GetAttribute("HouseType") or "Normal"
 	local extraSeconds = HOUSE_TYPES.Definitions[stopHouseType].extraSeconds
 	job.baseTimeLimit = math.min(
@@ -2837,6 +2876,7 @@ local function startNextStop(player, job, stopIndex)
 		weatherMultiplier = currentWeather.rewardMultiplier,
 		baseTimeLimit = job.baseTimeLimit,
 		baseReward = findJobType(job.jobTypeId).baseReward,
+		walkingBonusPreview = getWalkingBonusForDistance(sideDistance, stop.cargoRuleId),
 		bagCapacity = job.bagCapacity,
 		orderModifierId = job.forcedModifierId,
 		nightCondition = job.nightConditionName,
@@ -2863,6 +2903,12 @@ local function toggleBike(player)
 	end
 	local active = not (player:GetAttribute("BikeActive") == true)
 	player:SetAttribute("BikeActive", active)
+	if active then
+		local currentJob = playerJobs[player]
+		if currentJob and currentJob.routeChoice then
+			currentJob.usedBike = true
+		end
+	end
 	applyMovementSpeed(player)
 	addBikeVisual(player)
 
@@ -3517,6 +3563,7 @@ deliveryEvent.OnServerEvent:Connect(function(player, action, payload)
 			return
 		end
 
+		job.usedBike = player:GetAttribute("BikeActive") == true
 		job.routeChoice = routeId
 		job.routeTitle = route.title
 		job.routeReward = routeId == "shortcut"
