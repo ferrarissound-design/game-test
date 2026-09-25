@@ -36,6 +36,113 @@ local bikeActive = false
 local routeJobSerial = nil
 local routeShortcutReward = 80
 local playerControls = nil
+bikeActive = player:GetAttribute("BikeActive") == true
+local bikeAudioCharacter = nil
+local bikeAudioHumanoid = nil
+local bikeRollingSound = nil
+local bikeIsMoving = false
+local bikeRunSoundVolumes = {}
+local bikeAudioConnections = {}
+
+local BIKE_CHAIN_SOUND_ID = "rbxassetid://9114229845"
+
+local function clearBikeAudio()
+	for _, connection in ipairs(bikeAudioConnections) do
+		connection:Disconnect()
+	end
+	table.clear(bikeAudioConnections)
+
+	for runningSound, originalVolume in pairs(bikeRunSoundVolumes) do
+		if runningSound.Parent then
+			runningSound.Volume = originalVolume
+		end
+	end
+	table.clear(bikeRunSoundVolumes)
+
+	if bikeRollingSound then
+		bikeRollingSound:Stop()
+		bikeRollingSound:Destroy()
+		bikeRollingSound = nil
+	end
+	bikeAudioCharacter = nil
+	bikeAudioHumanoid = nil
+	bikeIsMoving = false
+end
+
+local function refreshBikeAudio()
+	local character = bikeAudioCharacter
+	local humanoid = bikeAudioHumanoid
+	if not character or not humanoid then
+		return
+	end
+
+	local riding = player:GetAttribute("BikeActive") == true
+	for _, descendant in ipairs(character:GetDescendants()) do
+		if descendant:IsA("Sound") and descendant.Name == "Running" then
+			if bikeRunSoundVolumes[descendant] == nil then
+				bikeRunSoundVolumes[descendant] = descendant.Volume
+			end
+			descendant.Volume = riding and 0 or bikeRunSoundVolumes[descendant]
+		end
+	end
+
+	local grounded = humanoid.FloorMaterial ~= Enum.Material.Air
+	if bikeRollingSound then
+		if riding and bikeIsMoving and grounded and humanoid.Health > 0 then
+			bikeRollingSound.PlaybackSpeed = math.clamp(humanoid.WalkSpeed / 20, 0.7, 1.25)
+			if not bikeRollingSound.IsPlaying then
+				bikeRollingSound:Play()
+			end
+		else
+			bikeRollingSound:Stop()
+		end
+	end
+end
+
+local function setupBikeAudio(character)
+	clearBikeAudio()
+	local root = character:WaitForChild("HumanoidRootPart", 10)
+	local humanoid = character:WaitForChild("Humanoid", 10)
+	if not root or not humanoid or player.Character ~= character then
+		return
+	end
+
+	bikeAudioCharacter = character
+	bikeAudioHumanoid = humanoid
+	local rollingSound = Instance.new("Sound")
+	rollingSound.Name = "NightDeliveryBikeChain"
+	rollingSound.SoundId = BIKE_CHAIN_SOUND_ID
+	rollingSound.Volume = 0.12
+	rollingSound.PlaybackSpeed = 0.8
+	rollingSound.Looped = true
+	rollingSound.RollOffMaxDistance = 55
+	rollingSound.Parent = root
+	bikeRollingSound = rollingSound
+
+	table.insert(bikeAudioConnections, character.DescendantAdded:Connect(function(descendant)
+		if descendant:IsA("Sound") and descendant.Name == "Running" then
+			task.defer(refreshBikeAudio)
+		end
+	end))
+	table.insert(bikeAudioConnections, humanoid.Running:Connect(function(speed)
+		bikeIsMoving = speed > 1
+		refreshBikeAudio()
+	end))
+	table.insert(bikeAudioConnections, humanoid:GetPropertyChangedSignal("FloorMaterial"):Connect(refreshBikeAudio))
+	refreshBikeAudio()
+end
+
+player:GetAttributeChangedSignal("BikeActive"):Connect(function()
+	bikeActive = player:GetAttribute("BikeActive") == true
+	refreshBikeAudio()
+end)
+player.CharacterAdded:Connect(function(character)
+	task.spawn(setupBikeAudio, character)
+end)
+player.CharacterRemoving:Connect(clearBikeAudio)
+if player.Character then
+	task.spawn(setupBikeAudio, player.Character)
+end
 
 local function setRouteMovementLocked(locked)
 	local ok, controls = pcall(function()
