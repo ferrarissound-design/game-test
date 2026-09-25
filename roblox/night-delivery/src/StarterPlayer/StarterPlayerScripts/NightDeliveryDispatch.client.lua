@@ -1,6 +1,7 @@
 -- Dispatch selection lives ahead of the existing JobAssigned / route-choice UI.
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local RunService = game:GetService("RunService")
 
 local player = Players.LocalPlayer
 local event = ReplicatedStorage:WaitForChild("NightDeliveryEvent")
@@ -32,7 +33,7 @@ limit.MaxSize = Vector2.new(410, 390)
 limit.Parent = board
 
 local header = Instance.new("TextLabel")
-header.Size = UDim2.new(1, -24, 0, 56)
+header.Size = UDim2.new(1, -98, 0, 56)
 header.Position = UDim2.fromOffset(12, 5)
 header.BackgroundTransparency = 1
 header.TextColor3 = Color3.fromRGB(255, 212, 132)
@@ -41,6 +42,20 @@ header.TextSize = 18
 header.TextWrapped = true
 header.Text = "DISPATCH BOARD  •  Choose a job"
 header.Parent = board
+
+local closeButton = Instance.new("TextButton")
+closeButton.Name = "CloseOffers"
+closeButton.Size = UDim2.fromOffset(72, 38)
+closeButton.Position = UDim2.new(1, -82, 0, 12)
+closeButton.BackgroundColor3 = Color3.fromRGB(52, 62, 79)
+closeButton.TextColor3 = Color3.fromRGB(246, 239, 225)
+closeButton.Font = Enum.Font.GothamBold
+closeButton.TextSize = 14
+closeButton.Text = "戻る ×"
+closeButton.Parent = board
+local closeCorner = Instance.new("UICorner")
+closeCorner.CornerRadius = UDim.new(0, 8)
+closeCorner.Parent = closeButton
 
 local cards = Instance.new("Frame")
 cards.Size = UDim2.new(1, -22, 1, -72)
@@ -61,6 +76,14 @@ local function hide()
 	currentSerial = nil
 	accepting = false
 end
+
+local function closeOffers()
+	if not shade.Visible or not currentSerial or accepting then return end
+	local serial = currentSerial
+	hide()
+	event:FireServer("CloseJobOffers", {serial = serial})
+end
+closeButton.Activated:Connect(closeOffers)
 
 local function label(parent, value, position, size, fontSize, bold)
 	local text = Instance.new("TextLabel")
@@ -137,14 +160,29 @@ resize = function()
 	local camera = workspace.CurrentCamera
 	if not camera then return end
 	local viewport = camera.ViewportSize
-	local height = math.min(390, math.max(326, viewport.Y - 40))
-	board.Size = UDim2.fromOffset(math.min(410, math.max(280, viewport.X - 24)), height)
+	local height = math.min(390, math.max(250, viewport.Y - 48))
+	board.Size = UDim2.fromOffset(math.min(410, math.max(240, viewport.X - 24)), height)
 	-- Fit all three buttons on small portrait screens without a scroll view.
 	local cardHeight = math.floor((height - 72 - 14) / 3)
 	for _, child in ipairs(cards:GetChildren()) do
 		if child:IsA("Frame") then child.Size = UDim2.new(1, 0, 0, cardHeight) end
 	end
 end
+
+-- Walking away only cancels the preview; the server still validates proximity on accept.
+local distanceCheck = 0
+RunService.Heartbeat:Connect(function(dt)
+	if not shade.Visible or accepting then return end
+	distanceCheck += dt
+	if distanceCheck < 0.5 then return end
+	distanceCheck = 0
+	local character = player.Character
+	local root = character and character:FindFirstChild("HumanoidRootPart")
+	local world = workspace:FindFirstChild("NightDeliveryWorld")
+	local depot = world and world:FindFirstChild("Depot")
+	local pad = depot and depot:FindFirstChild("JobCounter", true)
+	if root and pad and (root.Position - pad.Position).Magnitude > 24 then closeOffers() end
+end)
 
 local function requestPending()
 	if player:GetAttribute("JobOffersActive") == true then

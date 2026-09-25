@@ -16,16 +16,17 @@ end
 local function sign(model, center, label)
 	local post = part(model, "RouteSign", Vector3.new(0.3, 4, 0.3), center + Vector3.new(0, 2, 0), Color3.fromRGB(220, 188, 83), Enum.Material.Metal)
 	local gui = Instance.new("BillboardGui")
-	gui.Size = UDim2.fromOffset(220, 60)
-	gui.StudsOffset = Vector3.new(0, 3, 0)
-	gui.AlwaysOnTop = true
+	gui.Size = UDim2.fromOffset(145, 42)
+	gui.StudsOffset = Vector3.new(0, 2, 0)
+	gui.MaxDistance = 22
 	gui.Parent = post
 	local text = Instance.new("TextLabel")
 	text.Size = UDim2.fromScale(1, 1)
 	text.BackgroundColor3 = Color3.fromRGB(27, 32, 38)
-	text.BackgroundTransparency = 0.15
+	text.BackgroundTransparency = 0.3
 	text.TextColor3 = Color3.fromRGB(255, 228, 145)
-	text.TextScaled = true
+	text.TextSize = 11
+	text.TextTruncate = Enum.TextTruncate.AtEnd
 	text.TextWrapped = true
 	text.Text = label
 	text.Parent = gui

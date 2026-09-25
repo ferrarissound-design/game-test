@@ -231,7 +231,7 @@ task.defer(recoverCoreRouteChoice)
 
 local panel = Instance.new("Frame")
 panel.Name = "ObjectivePanel"
-panel.Size = UDim2.new(0.46, 0, 0, 112)
+panel.Size = UDim2.fromOffset(170, 72)
 panel.Position = UDim2.fromOffset(10, 10)
 panel.BackgroundColor3 = Color3.fromRGB(22, 27, 38)
 panel.BackgroundTransparency = 0.28
@@ -239,8 +239,8 @@ panel.BorderSizePixel = 0
 panel.Parent = gui
 
 local sizeConstraint = Instance.new("UISizeConstraint")
-sizeConstraint.MinSize = Vector2.new(150, 112)
-sizeConstraint.MaxSize = Vector2.new(300, 112)
+sizeConstraint.MinSize = Vector2.new(130, 72)
+sizeConstraint.MaxSize = Vector2.new(230, 72)
 sizeConstraint.Parent = panel
 
 local corner = Instance.new("UICorner")
@@ -273,11 +273,11 @@ targetLabel.TextColor3 = Color3.fromRGB(210, 219, 232)
 targetLabel.Font = Enum.Font.GothamMedium
 targetLabel.TextSize = 13
 targetLabel.TextXAlignment = Enum.TextXAlignment.Left
-targetLabel.TextWrapped = true
+targetLabel.TextTruncate = Enum.TextTruncate.AtEnd
 targetLabel.Parent = panel
 
 local jobLabel = Instance.new("TextLabel")
-jobLabel.Size = UDim2.new(1, -20, 0, 36)
+jobLabel.Size = UDim2.new(1, -20, 0, 24)
 jobLabel.Position = UDim2.fromOffset(10, 48)
 jobLabel.BackgroundTransparency = 1
 jobLabel.Text = "通常便 / 速達便 / 遠距離便 / 深夜特別便"
@@ -288,10 +288,11 @@ jobLabel.TextXAlignment = Enum.TextXAlignment.Left
 jobLabel.TextYAlignment = Enum.TextYAlignment.Top
 jobLabel.TextWrapped = true
 jobLabel.Parent = panel
+jobLabel.Visible = false -- Details are shown when the job is assigned, then navigation takes over.
 
 local timerLabel = Instance.new("TextLabel")
 timerLabel.Size = UDim2.new(1, -20, 0, 20)
-timerLabel.Position = UDim2.fromOffset(10, 86)
+timerLabel.Position = UDim2.fromOffset(10, 49)
 timerLabel.BackgroundTransparency = 1
 timerLabel.Text = ""
 timerLabel.TextColor3 = Color3.fromRGB(255, 219, 138)
@@ -302,7 +303,7 @@ timerLabel.Parent = panel
 
 local statusPanel = Instance.new("Frame")
 statusPanel.Name = "StatusPanel"
-statusPanel.Size = UDim2.new(0.46, 0, 0, 132)
+statusPanel.Size = UDim2.fromOffset(170, 76)
 statusPanel.AnchorPoint = Vector2.new(1, 0)
 statusPanel.Position = UDim2.new(1, -10, 0, 10)
 statusPanel.BackgroundColor3 = Color3.fromRGB(22, 27, 38)
@@ -311,8 +312,8 @@ statusPanel.BorderSizePixel = 0
 statusPanel.Parent = gui
 
 local statusSizeConstraint = Instance.new("UISizeConstraint")
-statusSizeConstraint.MinSize = Vector2.new(150, 132)
-statusSizeConstraint.MaxSize = Vector2.new(300, 132)
+statusSizeConstraint.MinSize = Vector2.new(130, 76)
+statusSizeConstraint.MaxSize = Vector2.new(230, 76)
 statusSizeConstraint.Parent = statusPanel
 
 local statusCorner = Instance.new("UICorner")
@@ -359,6 +360,7 @@ progressLabel.TextXAlignment = Enum.TextXAlignment.Right
 progressLabel.TextYAlignment = Enum.TextYAlignment.Top
 progressLabel.TextWrapped = true
 progressLabel.Parent = statusPanel
+progressLabel.Visible = false
 
 local weatherLabel = Instance.new("TextLabel")
 weatherLabel.Size = UDim2.new(1, -20, 0, 20)
@@ -370,10 +372,11 @@ weatherLabel.Font = Enum.Font.GothamMedium
 weatherLabel.TextSize = 12
 weatherLabel.TextXAlignment = Enum.TextXAlignment.Right
 weatherLabel.Parent = statusPanel
+weatherLabel.Visible = false
 
 local shiftLabel = Instance.new("TextLabel")
 shiftLabel.Size = UDim2.new(1, -20, 0, 20)
-shiftLabel.Position = UDim2.fromOffset(10, 71)
+shiftLabel.Position = UDim2.fromOffset(10, 49)
 shiftLabel.BackgroundTransparency = 1
 shiftLabel.Text = "新人  •  夜勤 0/6"
 shiftLabel.TextColor3 = Color3.fromRGB(225, 205, 154)
@@ -417,6 +420,9 @@ guide.TextSize = 11
 guide.Text = "黄  配達所  /  青  自転車  /  紫  ショップ"
 guide.BorderSizePixel = 0
 guide.Parent = gui
+task.delay(9, function()
+	if guide.Parent then guide.Visible = false end
+end)
 
 local promptButton = Instance.new("TextButton")
 promptButton.Name = "InteractionPrompt"
@@ -701,9 +707,9 @@ local function setWaypoint(houseName)
 
 	local billboard = Instance.new("BillboardGui")
 	billboard.Name = "LocalDeliveryMarker"
-	billboard.Size = UDim2.fromOffset(185, 48)
+	billboard.Size = UDim2.fromOffset(132, 30)
 	billboard.StudsOffset = Vector3.new(0, 10, 0)
-	billboard.AlwaysOnTop = true
+	billboard.MaxDistance = 90
 	billboard.Adornee = body
 	billboard.Parent = body
 	currentBillboard = billboard
@@ -714,7 +720,8 @@ local function setWaypoint(houseName)
 	label.BackgroundTransparency = 0.1
 	label.Text = "📦 " .. (currentDisplayName or "配達先")
 	label.TextColor3 = Color3.fromRGB(255, 236, 170)
-	label.TextScaled = true
+	label.TextSize = 13
+	label.TextTruncate = Enum.TextTruncate.AtEnd
 	label.Font = Enum.Font.GothamBold
 	label.Parent = billboard
 
@@ -730,10 +737,10 @@ local function updateStats()
 
 	local coinText = coins and coins.Value or 0
 	local deliveryText = deliveries and deliveries.Value or 0
-	local bikeText = bikeActive and "🚲 ON" or "🚲 OFF"
+	local bikeText = bikeActive and "🚲" or ""
 
-	statsLabel.Text = string.format("Coins %d  •  配達 %d  •  %s", coinText, deliveryText, bikeText)
-	shiftLabel.Text = string.format("%s  •  夜勤 %d/%d", currentRankName, shiftProgress, shiftTarget)
+	statsLabel.Text = string.format("%d Coins  •  %d件 %s", coinText, deliveryText, bikeText)
+	shiftLabel.Text = string.format("SHIFT %d/%d", shiftProgress, shiftTarget)
 	local weatherIcon = currentWeatherName == "雨" and "🌧" or (currentWeatherName == "濃霧" and "🌫" or "☀")
 	if currentHouseName and activeJobWeatherName and activeJobWeatherMultiplier then
 		weatherLabel.Text = string.format(
@@ -803,7 +810,7 @@ deliveryEvent.OnClientEvent:Connect(function(action, payload)
 		updateWeatherVisual()
 		expiresAt = payload.expiresAt
 
-		targetLabel.Text = "配達先: " .. (currentDisplayName or currentHouseName)
+		targetLabel.Text = "▲ " .. (currentDisplayName or currentHouseName)
 		jobLabel.Text = string.format(
 			"%s  •  %s  •  %s x%.2f  •  基本 %d  •  バッグ枠 %d",
 			currentDistrictName or "住宅街",
@@ -1063,3 +1070,22 @@ RunService.RenderStepped:Connect(function()
 		end
 	end
 end)
+
+local function layoutCoreHud()
+	local camera = workspace.CurrentCamera
+	if not camera then return end
+	local width = camera.ViewportSize.X
+	local narrow = width < 650
+	local cardWidth = math.max(130, math.min(narrow and 172 or 220, math.floor((width - 30) / 2)))
+	panel.Size = UDim2.fromOffset(cardWidth, 72)
+	statusPanel.Size = UDim2.fromOffset(cardWidth, 76)
+	panel.Position = UDim2.fromOffset(8, 10)
+	statusPanel.Position = UDim2.new(1, -8, 0, 10)
+	statusTitle.TextSize = narrow and 11 or 13
+	statsLabel.TextSize = narrow and 10 or 12
+	shiftLabel.TextSize = narrow and 10 or 12
+end
+if workspace.CurrentCamera then
+	workspace.CurrentCamera:GetPropertyChangedSignal("ViewportSize"):Connect(layoutCoreHud)
+end
+layoutCoreHud()

@@ -776,11 +776,62 @@ local function createResident(model, position, frontZ, resident)
 	model:SetAttribute("ResidentReturnLine", resident.returnLine)
 
 	local basePosition = position + Vector3.new(7.5, 0, frontZ - 3)
+	-- Use Roblox's own R15 avatar rig/face and the existing resident palette and dialogue.
+	-- No catalog asset IDs or loading scripts are required for these stationary neighbors.
+	local description = Instance.new("HumanoidDescription")
+	local skin = Color3.fromRGB(231, 199, 166)
+	description.HeadColor = skin
+	description.LeftArmColor = skin
+	description.RightArmColor = skin
+	description.TorsoColor = resident.color
+	description.LeftLegColor = Color3.fromRGB(48, 55, 68)
+	description.RightLegColor = Color3.fromRGB(48, 55, 68)
+	local ok, avatar = pcall(function()
+		return Players:CreateHumanoidModelFromDescription(description, Enum.HumanoidRigType.R15)
+	end)
+	description:Destroy()
+	if ok and avatar then
+		avatar.Name = "ResidentAvatar"
+		avatar.Parent = model
+		avatar:PivotTo(CFrame.new(basePosition + Vector3.new(0, 3, 0)))
+		local humanoid = avatar:FindFirstChildOfClass("Humanoid")
+		if humanoid then humanoid.DisplayDistanceType = Enum.HumanoidDisplayDistanceType.None end
+		for _, item in ipairs(avatar:GetDescendants()) do
+			if item:IsA("BasePart") then
+				item.Anchored = true
+				item.CanCollide = false
+			end
+		end
+		local head = avatar:FindFirstChild("Head")
+		if head then
+			local tag = Instance.new("BillboardGui")
+			tag.Name = "ResidentNameTag"
+			tag.Size = UDim2.fromOffset(110, 24)
+			tag.StudsOffset = Vector3.new(0, 1.1, 0)
+			tag.MaxDistance = 22
+			tag.Parent = head
+			local label = Instance.new("TextLabel")
+			label.Size = UDim2.fromScale(1, 1)
+			label.BackgroundColor3 = Color3.fromRGB(18, 24, 34)
+			label.BackgroundTransparency = 0.25
+			label.Text = resident.name
+			label.TextColor3 = Color3.fromRGB(247, 240, 220)
+			label.TextSize = 12
+			label.Font = Enum.Font.GothamBold
+			label.Parent = tag
+			return
+		end
+		avatar:Destroy()
+	end
+	-- Minimal fallback for a Studio session where the avatar service is unavailable.
 	local torso = makePart("ResidentTorso", Vector3.new(1.6, 1.9, 0.85), basePosition + Vector3.new(0, 2.0, 0), resident.color, model)
 	torso.CanCollide = false
 	local head = makePart("ResidentHead", Vector3.new(1.2, 1.2, 1.2), basePosition + Vector3.new(0, 3.55, 0), Color3.fromRGB(231, 199, 166), model)
 	head.Shape = Enum.PartType.Ball
 	head.CanCollide = false
+	local hair = makePart("ResidentHair", Vector3.new(1.27, 0.35, 1.27), basePosition + Vector3.new(0, 4.09, 0), Color3.fromRGB(44, 38, 36), model)
+	hair.Shape = Enum.PartType.Ball
+	hair.CanCollide = false
 	for _, x in ipairs({-0.43, 0.43}) do
 		local leg = makePart("ResidentLeg", Vector3.new(0.48, 1.05, 0.55), basePosition + Vector3.new(x, 0.55, 0), Color3.fromRGB(48, 55, 68), model)
 		leg.CanCollide = false
@@ -792,10 +843,9 @@ local function createResident(model, position, frontZ, resident)
 
 	local billboard = Instance.new("BillboardGui")
 	billboard.Name = "ResidentNameTag"
-	billboard.Size = UDim2.fromOffset(150, 30)
+	billboard.Size = UDim2.fromOffset(110, 24)
 	billboard.StudsOffset = Vector3.new(0, 1.0, 0)
-	billboard.AlwaysOnTop = true
-	billboard.MaxDistance = 55
+	billboard.MaxDistance = 22
 	billboard.Parent = head
 	local label = Instance.new("TextLabel")
 	label.Size = UDim2.fromScale(1, 1)
@@ -803,7 +853,7 @@ local function createResident(model, position, frontZ, resident)
 	label.BackgroundTransparency = 0.18
 	label.Text = resident.name
 	label.TextColor3 = Color3.fromRGB(247, 240, 220)
-	label.TextSize = 14
+	label.TextSize = 12
 	label.Font = Enum.Font.GothamBold
 	label.Parent = billboard
 	local corner = Instance.new("UICorner")
@@ -998,7 +1048,7 @@ local function createWorld()
 		"Ground",
 		Vector3.new(460, 1, 410),
 		Vector3.new(0, -0.5, 20),
-		selectedWorldTheme.groundColor,
+		selectedWorldTheme.groundColor:Lerp(Color3.fromRGB(90, 139, 78), 0.78),
 		world,
 		Enum.Material.Grass
 	)
@@ -1020,6 +1070,18 @@ local function createWorld()
 		world,
 		Enum.Material.Pavement
 	)
+	-- Broad continuous concrete edges make asphalt, sidewalk and grass readable on phones.
+	-- Four anchored strips cost far less than scattering decorative grass Parts.
+	for _, side in ipairs({-1, 1}) do
+		local x = side * (17 * selectedWorldTheme.roadScale + 3.2)
+		local walk = makePart("MainSidewalk", Vector3.new(6, 0.18, 260),
+			Vector3.new(x, 0.22, 10), Color3.fromRGB(157, 160, 149), world, Enum.Material.Concrete)
+		walk.CanCollide = false
+		local curb = makePart("MainCurb", Vector3.new(0.4, 0.24, 260),
+			Vector3.new(side * (17 * selectedWorldTheme.roadScale + 0.3), 0.28, 10),
+			Color3.fromRGB(192, 189, 169), world, Enum.Material.Concrete)
+		curb.CanCollide = false
+	end
 
 	makePart(
 		"NorthRoad",
@@ -1875,6 +1937,7 @@ end
 local function confirmJob(player, selected, neighborhoodCallback)
 	local target = selected and housesFolder:FindFirstChild(selected.houseName)
 	if not target or not isHouseUnlocked(player, target) then return false end
+	startNightShift(player)
 	local jobType = selected.jobType
 	local phase = shiftPhase(player)
 	player:SetAttribute("NightShiftPhase", phase)
@@ -2012,9 +2075,7 @@ local function assignJob(player)
 	end
 	if playerJobOffers[player] then sendJobOffers(player); return end
 	if #housesFolder:GetChildren() == 0 then return end
-	startNightShift(player)
 	local phase = shiftPhase(player)
-	player:SetAttribute("NightShiftPhase", phase)
 	local callback = playerPendingNeighborhoodStory[player]
 	local callbackHouse = callback and housesFolder:FindFirstChild(callback.targetHouseName)
 	if callback and (not callbackHouse or callbackHouse:GetAttribute("DistrictId") == "warehouse"
@@ -2024,9 +2085,16 @@ local function assignJob(player)
 		callbackHouse = callback and housesFolder:FindFirstChild(callback.targetHouseName)
 	end
 	if callback and callbackHouse then
-		clearJobOffers(player)
-		confirmJob(player, {houseName = callbackHouse.Name, jobType = JOB_TYPES[1],
-			cargo = CARGO_MODIFIERS[1], bonus = 0}, callback)
+		local serial = (player:GetAttribute("JobOffersSerial") or 0) + 1
+		playerJobOffers[player] = {serial = serial, phase = phase, offers = {{
+			id = HttpService:GenerateGUID(false), houseName = callbackHouse.Name,
+			jobType = JOB_TYPES[1], cargo = CARGO_MODIFIERS[1], bonus = 0,
+			distance = "Near", difficulty = "Story", location = callback.title or "ご近所の依頼",
+			neighborhoodCallback = callback,
+		}}}
+		player:SetAttribute("JobOffersSerial", serial)
+		player:SetAttribute("JobOffersActive", true)
+		sendJobOffers(player)
 		return
 	end
 	generateJobOffers(player, phase)
@@ -3182,6 +3250,7 @@ deliveryEvent.OnServerEvent:Connect(function(player, action, payload)
 		AcknowledgeNightShift = true,
 		AcceptJobOffer = true,
 		RequestJobOffers = true,
+		CloseJobOffers = true,
 		ResolveDestinationEvent = true,
 		CompleteDestinationEventObjective = true,
 		ResolveTravelEvent = true,
@@ -3197,6 +3266,13 @@ deliveryEvent.OnServerEvent:Connect(function(player, action, payload)
 	if action == "RequestJobOffers" then
 		if player:GetAttribute("NightShiftResultPending") ~= true then sendJobOffers(player) end
 		return
+	elseif action == "CloseJobOffers" then
+		local state = playerJobOffers[player]
+		if state and not playerJobs[player] and type(payload) == "table"
+			and tonumber(payload.serial) == state.serial then
+			clearJobOffers(player)
+		end
+		return
 	elseif action == "AcceptJobOffer" then
 		local state = playerJobOffers[player]
 		if not requirePlayerReady(player) or playerJobs[player] or not state
@@ -3210,7 +3286,7 @@ deliveryEvent.OnServerEvent:Connect(function(player, action, payload)
 				local house = housesFolder:FindFirstChild(offer.houseName)
 				if not house or not isHouseUnlocked(player, house) then return end
 				clearJobOffers(player) -- consume before JobAssigned; duplicate clicks cannot start a second job
-				confirmJob(player, offer, nil)
+				confirmJob(player, offer, offer.neighborhoodCallback)
 				return
 			end
 		end
