@@ -106,6 +106,7 @@ navTitle.TextColor3 = Color3.fromRGB(245, 248, 255)
 
 local navDistance = makeLabel(navFrame, UDim2.new(1, -68, 0, 24), UDim2.fromOffset(65, 33), "", 12, Enum.Font.Gotham)
 navDistance.TextColor3 = Color3.fromRGB(160, 185, 212)
+navTitle.TextTruncate = Enum.TextTruncate.AtEnd
 
 local nightBadge = Instance.new("Frame")
 nightBadge.Name = "NightConditionBadge"
@@ -121,6 +122,8 @@ addStroke(nightBadge, Color3.fromRGB(118, 159, 196), 0.5, 1)
 local nightName = makeLabel(nightBadge, UDim2.new(1, -18, 0, 22), UDim2.fromOffset(9, 4), "", 12, Enum.Font.GothamBold)
 local nightDescription = makeLabel(nightBadge, UDim2.new(1, -18, 0, 22), UDim2.fromOffset(9, 26), "", 10, Enum.Font.Gotham)
 nightDescription.TextColor3 = Color3.fromRGB(182, 198, 218)
+nightDescription.Visible = false
+nightName.TextTruncate = Enum.TextTruncate.AtEnd
 
 -- A compact shift clock sits below the top HUD; the center remains navigation space.
 local shiftHud = Instance.new("TextLabel")
@@ -209,7 +212,7 @@ local phaseTitles = {MidNight = "MID NIGHT", LateNight = "LATE NIGHT", FinalRun 
 local lastPhase = nil
 local function updateShiftHud()
 	local active = player:GetAttribute("NightShiftActive") == true
-	shiftHud.Visible = active
+	shiftHud.Visible = false -- The core status card already owns shift progress.
 	if not active then return end
 	local count = player:GetAttribute("NightShiftDeliveries") or 0
 	local target = player:GetAttribute("NightShiftTarget") or 6
@@ -228,9 +231,9 @@ updateShiftHud()
 -- Session mission card.
 local missionFrame = Instance.new("Frame")
 missionFrame.Name = "SessionMission"
-missionFrame.Size = UDim2.fromOffset(255, 82)
-missionFrame.AnchorPoint = Vector2.new(1, 1)
-missionFrame.Position = UDim2.new(1, -14, 1, -54)
+missionFrame.Size = UDim2.fromOffset(220, 36)
+missionFrame.AnchorPoint = Vector2.new(1, 0)
+missionFrame.Position = UDim2.new(1, -10, 0, 92)
 missionFrame.BackgroundColor3 = Color3.fromRGB(20, 25, 35)
 missionFrame.BackgroundTransparency = 0.13
 missionFrame.Parent = gui
@@ -243,6 +246,32 @@ missionHeader.TextColor3 = Color3.fromRGB(168, 183, 209)
 local missionName = makeLabel(missionFrame, UDim2.new(1, -18, 0, 24), UDim2.fromOffset(10, 27), "読み込み中...", 14, Enum.Font.GothamBold)
 local missionProgress = makeLabel(missionFrame, UDim2.new(1, -18, 0, 20), UDim2.fromOffset(10, 52), "", 12, Enum.Font.Gotham)
 missionProgress.TextColor3 = Color3.fromRGB(255, 215, 126)
+missionHeader.Visible = false
+missionProgress.Visible = false
+missionName.Position = UDim2.fromOffset(10, 5)
+missionName.Size = UDim2.new(1, -20, 0, 26)
+missionName.TextTruncate = Enum.TextTruncate.AtEnd
+
+local missionDetails = Instance.new("TextButton")
+missionDetails.Name = "MissionDetails"
+missionDetails.Size = UDim2.fromScale(1, 1)
+missionDetails.BackgroundTransparency = 1
+missionDetails.Text = ""
+missionDetails.Parent = missionFrame
+local missionExpanded = false
+local function setMissionExpanded(expanded)
+	missionExpanded = expanded
+	local camera = workspace.CurrentCamera
+	local narrow = camera and camera.ViewportSize.X < 650
+	local width = narrow and math.min(172, math.floor(camera.ViewportSize.X * 0.47)) or 220
+	missionFrame.Size = UDim2.fromOffset(width, expanded and 82 or 36)
+	missionHeader.Visible = expanded
+	missionProgress.Visible = expanded
+	missionName.Position = UDim2.fromOffset(10, expanded and 27 or 5)
+	nightBadge.Visible = not expanded and nightName.Text ~= ""
+	navFrame.Position = UDim2.new(0.5, 0, 0, narrow and (expanded and 214 or 166) or 96)
+end
+missionDetails.Activated:Connect(function() setMissionExpanded(not missionExpanded) end)
 
 local missionScale = Instance.new("UIScale")
 missionScale.Scale = 1
@@ -1393,10 +1422,11 @@ local function updateMissionCard(missions)
 		missionName.Text = "セッション目標 COMPLETE"
 		missionProgress.Text = "15件達成。ここからは自己ベスト更新を狙おう。"
 		missionName.TextColor3 = Color3.fromRGB(255, 215, 126)
+		missionName.Text = "🎯 セッション目標 COMPLETE"
 		return
 	end
 
-	missionName.Text = nextMission.name
+	missionName.Text = string.format("🎯 %s %d/%d", tostring(nextMission.name), nextMission.progress or 0, nextMission.target or 0)
 	missionName.TextColor3 = Color3.fromRGB(236, 241, 248)
 	missionProgress.Text = string.format("%d / %d件  ・  達成 +%d Coins", nextMission.progress or 0, nextMission.target or 0, nextMission.reward or 0)
 end
@@ -1690,7 +1720,7 @@ deliveryEvent.OnClientEvent:Connect(function(action, payload)
 		end
 	elseif action == "NightConditionChanged" then
 		nightBadge.Visible = true
-		nightName.Text = "今夜: " .. tostring(payload.name or "静かな夜")
+		nightName.Text = "☾ " .. tostring(payload.name or "静かな夜")
 		nightDescription.Text = tostring(payload.description or "")
 		if not currentHouseName then
 			modifierTitle.Text = "今夜: " .. tostring(payload.name or "静かな夜")
@@ -1722,7 +1752,7 @@ deliveryEvent.OnClientEvent:Connect(function(action, payload)
 	elseif action == "Welcome" then
 		if payload.nightConditionName then
 			nightBadge.Visible = true
-			nightName.Text = "今夜: " .. tostring(payload.nightConditionName)
+			nightName.Text = "☾ " .. tostring(payload.nightConditionName)
 			nightDescription.Text = tostring(payload.nightConditionDescription or "")
 		end
 		showTownReveal()
@@ -1821,17 +1851,35 @@ local function updateResponsiveScale()
 	local narrow = viewport.X < 650
 
 	if narrow then
-		navFrame.Size = UDim2.fromOffset(236, 58)
-		nightBadge.Size = UDim2.new(0, 205, 0, 48)
-		nightBadge.Position = UDim2.new(1, -10, 0, 78)
+		navFrame.Size = UDim2.fromOffset(math.min(214, viewport.X - 28), 38)
+		navFrame.Position = UDim2.new(0.5, 0, 0, missionExpanded and 214 or 166)
+		arrow.Size = UDim2.fromOffset(28, 30)
+		arrow.TextSize = 19
+		navTitle.Position = UDim2.fromOffset(38, 2)
+		navTitle.Size = UDim2.new(1, -46, 0, 18)
+		navTitle.TextSize = 12
+		navDistance.Position = UDim2.fromOffset(38, 19)
+		navDistance.Size = UDim2.new(1, -46, 0, 16)
+		navDistance.TextSize = 10
+		navDistance.Visible = true
+		nightBadge.Size = UDim2.fromOffset(172, 28)
+		nightBadge.Position = UDim2.new(1, -10, 0, 134)
+		if missionExpanded then nightBadge.Visible = false end
 		sideOfferFrame.Position = UDim2.new(0.5, 0, 0, 132)
 		travelEventFrame.Position = UDim2.new(0.5, 0, 0, 204)
 		nightName.TextSize = 11
 		nightDescription.TextSize = 9
-		missionFrame.Size = UDim2.fromOffset(210, 76)
+		missionFrame.Position = UDim2.new(1, -10, 0, 92)
+		missionFrame.Size = UDim2.fromOffset(math.min(172, math.floor(viewport.X * 0.47)), missionExpanded and 82 or 36)
+		missionName.Size = UDim2.new(1, -20, 0, 26)
 		missionName.TextSize = 12
 		missionProgress.TextSize = 10
-		modifierFrame.Size = UDim2.fromOffset(218, 66)
+		modifierFrame.Size = UDim2.fromOffset(math.min(172, math.floor(viewport.X * 0.47)), 34)
+		modifierFrame.AnchorPoint = Vector2.new(0, 0)
+		modifierFrame.Position = UDim2.fromOffset(10, 92)
+		modifierDescription.Visible = false
+		modifierTitle.Size = UDim2.new(1, -18, 0, 24)
+		modifierTitle.TextTruncate = Enum.TextTruncate.AtEnd
 		modifierTitle.TextSize = 12
 		modifierDescription.TextSize = 10
 		resultFrame.Size = UDim2.new(0.86, 0, 0, 180)
@@ -1861,16 +1909,30 @@ local function updateResponsiveScale()
 		townSubtitle.TextSize = 11
 	else
 		navFrame.Size = UDim2.fromOffset(300, 64)
-		nightBadge.Size = UDim2.fromOffset(250, 52)
-		nightBadge.Position = UDim2.new(1, -14, 0, 12)
+		navFrame.Position = UDim2.new(0.5, 0, 0, 96)
+		arrow.Size = UDim2.fromOffset(54, 54)
+		arrow.TextSize = 31
+		navTitle.Position = UDim2.fromOffset(65, 6)
+		navTitle.Size = UDim2.new(1, -68, 0, 28)
+		navTitle.TextSize = 14
+		navDistance.Position = UDim2.fromOffset(65, 33)
+		navDistance.Size = UDim2.new(1, -68, 0, 24)
+		navDistance.TextSize = 12
+		navDistance.Visible = true
+		nightBadge.Size = UDim2.fromOffset(220, 28)
+		nightBadge.Position = UDim2.new(1, -14, 0, 136)
 		sideOfferFrame.Position = UDim2.new(0.5, 0, 0, 86)
 		travelEventFrame.Position = UDim2.new(0.5, 0, 0, 154)
 		nightName.TextSize = 12
 		nightDescription.TextSize = 10
-		missionFrame.Size = UDim2.fromOffset(255, 82)
+		missionFrame.Position = UDim2.new(1, -14, 0, 92)
+		missionFrame.Size = UDim2.fromOffset(220, missionExpanded and 82 or 36)
 		missionName.TextSize = 14
 		missionProgress.TextSize = 12
-		modifierFrame.Size = UDim2.fromOffset(270, 72)
+		modifierFrame.Size = UDim2.fromOffset(220, 44)
+		modifierFrame.AnchorPoint = Vector2.new(0, 0)
+		modifierFrame.Position = UDim2.fromOffset(14, 92)
+		modifierDescription.Visible = false
 		modifierTitle.TextSize = 14
 		modifierDescription.TextSize = 12
 		resultFrame.Size = UDim2.fromOffset(360, 190)
