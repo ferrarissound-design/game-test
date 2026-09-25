@@ -93,7 +93,7 @@ addCorner(navFrame, 14)
 addStroke(navFrame, Color3.fromRGB(110, 164, 214), 0.28, 1.2)
 
 local navConstraint = Instance.new("UISizeConstraint")
-navConstraint.MinSize = Vector2.new(230, 58)
+navConstraint.MinSize = Vector2.new(170, 36)
 navConstraint.MaxSize = Vector2.new(340, 68)
 navConstraint.Parent = navFrame
 
