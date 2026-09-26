@@ -2479,7 +2479,8 @@ local function completeDelivery(player, houseName)
 	local targetHouse = housesFolder:FindFirstChild(job.houseName)
 	local deliveryPoint = targetHouse and targetHouse:FindFirstChild("DeliveryPoint")
 	local targetType = targetHouse and targetHouse:GetAttribute("HouseType")
-	if (targetType == "RooftopGap" or targetType == "WarehouseRoute") and deliveryPoint then
+	local targetDefinition = targetType and HOUSE_TYPES.Definitions[targetType]
+	if targetDefinition and targetDefinition.verticalCheck and deliveryPoint then
 		local root = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
 		if not root or math.abs(root.Position.Y - deliveryPoint.Position.Y) > 6 then
 			return
