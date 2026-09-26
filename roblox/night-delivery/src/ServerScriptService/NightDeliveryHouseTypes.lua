@@ -142,18 +142,151 @@ local function rooftopGap(model, origin)
 	return body, target, -8.3
 end
 
+
+local function apartmentStairs(model, origin)
+	local concrete = Color3.fromRGB(145, 150, 147)
+	local rail = Color3.fromRGB(82, 96, 104)
+	local shortcut = Color3.fromRGB(160, 117, 73)
+	local body = part(model, "Body", Vector3.new(22, 14, 18), origin + Vector3.new(0, 7, 0), concrete, Enum.Material.Concrete)
+
+	-- Broad exterior stairs are the safe route. Each rise is forgiving on mobile.
+	for i = 1, 8 do
+		local height = i * 1.5
+		part(
+			model,
+			"ApartmentStair_" .. i,
+			Vector3.new(6, height, 3.2),
+			origin + Vector3.new(-14, height / 2, -23 + (i - 1) * 2),
+			rail,
+			Enum.Material.Metal
+		)
+	end
+	part(model, "ApartmentTopLanding", Vector3.new(8, 0.6, 7), origin + Vector3.new(-10, 12.3, -9.5), rail, Enum.Material.DiamondPlate)
+	part(model, "ApartmentBalcony", Vector3.new(24, 0.6, 5), origin + Vector3.new(0, 12.3, -10.5), rail, Enum.Material.Metal)
+
+	-- The right-side parcel stacks are shorter but require confident jumps.
+	for i, step in ipairs({
+		{13, -20, 3.0},
+		{13, -16.5, 6.0},
+		{13, -13.0, 9.0},
+		{11, -10.5, 12.0},
+	}) do
+		part(
+			model,
+			"ApartmentShortcut_" .. i,
+			Vector3.new(5, step[3], 4.5),
+			origin + Vector3.new(step[1], step[3] / 2, step[2]),
+			shortcut,
+			Enum.Material.WoodPlanks
+		)
+	end
+
+	local target = part(model, "DeliveryPoint", Vector3.new(6, 0.5, 4), origin + Vector3.new(3, 12.85, -10.5), Color3.fromRGB(97, 185, 163), Enum.Material.Neon)
+	sign(model, origin + Vector3.new(-16, 0, -24), "アパート2階へ\n外階段は安全、荷物足場は近道")
+	return body, target, -9.5
+end
+
+local function parkingDeck(model, origin)
+	local concrete = Color3.fromRGB(126, 134, 137)
+	local metal = Color3.fromRGB(77, 91, 101)
+	local warning = Color3.fromRGB(211, 157, 70)
+	local body = part(model, "Body", Vector3.new(25, 0.7, 22), origin + Vector3.new(0, 0.35, 0), concrete, Enum.Material.Concrete)
+
+	for _, x in ipairs({-10, 10}) do
+		for _, z in ipairs({-8, 8}) do
+			part(model, "ParkingColumn", Vector3.new(1, 9, 1), origin + Vector3.new(x, 4.5, z), metal, Enum.Material.Metal)
+		end
+	end
+	part(model, "ParkingUpperDeck", Vector3.new(25, 0.7, 22), origin + Vector3.new(0, 9.35, 0), concrete, Enum.Material.Concrete)
+
+	-- A broad stepped ramp is the low-risk route to the upper deck.
+	for i = 1, 6 do
+		local height = i * 1.5
+		part(
+			model,
+			"ParkingRamp_" .. i,
+			Vector3.new(7, height, 4),
+			origin + Vector3.new(-13, height / 2, -22 + (i - 1) * 3),
+			concrete,
+			Enum.Material.Concrete
+		)
+	end
+	part(model, "ParkingRampLanding", Vector3.new(9, 0.6, 7), origin + Vector3.new(-9, 9.7, -6), metal, Enum.Material.DiamondPlate)
+
+	-- A stack of maintenance crates cuts the corner for faster players.
+	for i, height in ipairs({3, 6, 9}) do
+		part(
+			model,
+			"ParkingShortcut_" .. i,
+			Vector3.new(5, height, 5),
+			origin + Vector3.new(9, height / 2, -16 + (i - 1) * 4),
+			warning,
+			Enum.Material.Metal
+		)
+	end
+
+	local target = part(model, "DeliveryPoint", Vector3.new(6, 0.5, 5), origin + Vector3.new(4, 9.9, 4), Color3.fromRGB(97, 185, 163), Enum.Material.Neon)
+	sign(model, origin + Vector3.new(-17, 0, -24), "立体駐車場の上階へ\n左のランプは安全、右の箱は近道")
+	return body, target, -10.8
+end
+
+local function factoryCatwalk(model, origin)
+	local steel = Color3.fromRGB(73, 96, 108)
+	local crate = Color3.fromRGB(147, 103, 65)
+	local hazard = Color3.fromRGB(195, 112, 62)
+
+	-- The warehouse body is supplied by NightDelivery.server.lua. Build two routes around it.
+	for i = 1, 8 do
+		local height = i * 1.5
+		part(
+			model,
+			"FactorySafeStep_" .. i,
+			Vector3.new(6, height, 3.2),
+			origin + Vector3.new(16, height / 2, -24 + (i - 1) * 2.2),
+			steel,
+			Enum.Material.Metal
+		)
+	end
+	part(model, "FactorySideCatwalk", Vector3.new(6, 0.6, 24), origin + Vector3.new(16, 12.3, 2), steel, Enum.Material.DiamondPlate)
+	part(model, "FactoryRearBridge", Vector3.new(16, 0.6, 6), origin + Vector3.new(10, 12.3, 14), steel, Enum.Material.DiamondPlate)
+
+	-- Conveyor-side shortcut: fewer platforms, larger jumps.
+	for i, step in ipairs({
+		{7, -19, 3.0},
+		{9, -15, 6.0},
+		{11, -11, 9.0},
+		{14, -7, 12.0},
+	}) do
+		part(
+			model,
+			"FactoryShortcut_" .. i,
+			Vector3.new(5, step[3], 5),
+			origin + Vector3.new(step[1], step[3] / 2, step[2]),
+			i % 2 == 0 and hazard or crate,
+			i % 2 == 0 and Enum.Material.Metal or Enum.Material.WoodPlanks
+		)
+	end
+
+	local target = part(model, "DeliveryPoint", Vector3.new(6, 0.5, 6), origin + Vector3.new(6, 12.85, 14), Color3.fromRGB(97, 185, 163), Enum.Material.Neon)
+	sign(model, origin + Vector3.new(17, 0, -27), "工場上部の搬入口へ\n外階段は安全、資材足場は近道")
+	return nil, target
+end
+
 HouseTypes.Definitions = {
-	Normal = {label = "通常住宅", extraSeconds = 0, build = function() return nil, nil end},
-	Construction = {label = "工事中住宅・裏口", extraSeconds = 38, build = function(model, origin, frontZ)
+	Normal = {label = "通常住宅", challengeTier = "normal", extraSeconds = 0, build = function() return nil, nil end},
+	Construction = {label = "工事中住宅・裏口", challengeTier = "light", extraSeconds = 38, build = function(model, origin, frontZ)
 		return nil, construction(model, origin, frontZ)
 	end},
-	HighRise = {label = "高所配達・屋上", extraSeconds = 46, standalone = true, build = function(model, origin)
+	HighRise = {label = "高所配達・屋上", challengeTier = "heavy", extraSeconds = 46, promptDistance = 8, standalone = true, build = function(model, origin)
 		local body, target = highRise(model, origin)
 		return body, target, -9.3
 	end},
-	BlockedAlley = {label = "路地裏・裏口", extraSeconds = 32, build = blockedAlley},
-	WarehouseRoute = {label = "倉庫・上階搬入口", extraSeconds = 45, build = warehouseRoute},
-	RooftopGap = {label = "屋根渡り・配達", extraSeconds = 42, standalone = true, build = rooftopGap},
+	BlockedAlley = {label = "路地裏・裏口", challengeTier = "light", extraSeconds = 32, build = blockedAlley},
+	WarehouseRoute = {label = "倉庫・上階搬入口", challengeTier = "heavy", extraSeconds = 45, promptDistance = 8, build = warehouseRoute},
+	RooftopGap = {label = "屋根渡り・配達", challengeTier = "heavy", extraSeconds = 42, promptDistance = 6, standalone = true, build = rooftopGap},
+	ApartmentStairs = {label = "アパート・外階段", challengeTier = "light", extraSeconds = 28, promptDistance = 8, standalone = true, build = apartmentStairs},
+	ParkingDeck = {label = "立体駐車場・上階", challengeTier = "light", extraSeconds = 30, promptDistance = 8, standalone = true, build = parkingDeck},
+	FactoryCatwalk = {label = "工場・上部搬入口", challengeTier = "heavy", extraSeconds = 44, promptDistance = 8, build = factoryCatwalk},
 }
 
 function HouseTypes.build(model, houseType, origin, frontZ)
