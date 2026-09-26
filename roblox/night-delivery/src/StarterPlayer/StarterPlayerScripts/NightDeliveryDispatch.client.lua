@@ -92,10 +92,10 @@ local DISTANCE_LABELS = {
 }
 
 local DIFFICULTY_LABELS = {
-	Easy = "かんたん",
-	Normal = "ふつう",
-	Difficult = "むずかしい",
-	Story = "おはなし",
+	Easy = "★☆☆ かんたん",
+	Normal = "★★☆ ふつう",
+	Difficult = "★★★ むずかしい",
+	Story = "★ おはなし",
 }
 
 local function localizedDistance(value)
@@ -143,7 +143,7 @@ local function show(payload)
 		corner.CornerRadius = UDim.new(0, 9)
 		corner.Parent = card
 		label(card, tostring(offer.location or "住宅街"), UDim2.fromOffset(11, 5), UDim2.new(1, -115, 0, 22), 15, true)
-		local rewardText = string.format("%d Coins", tonumber(offer.baseReward) or 0)
+		local rewardText = string.format("%d コイン", tonumber(offer.baseReward) or 0)
 		if (tonumber(offer.cargoReward) or 0) > 0 then
 			rewardText ..= string.format(" + 条件%d", tonumber(offer.cargoReward) or 0)
 		end
