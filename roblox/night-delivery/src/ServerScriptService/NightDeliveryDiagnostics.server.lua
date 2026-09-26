@@ -3,6 +3,7 @@
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
+local HOUSE_TYPES = require(script.Parent:WaitForChild("NightDeliveryHouseTypes"))
 
 if not RunService:IsStudio() then
 	return
@@ -76,6 +77,8 @@ local allowedDistricts = {
 	warehouse = true,
 }
 local seenHouseNames = {}
+local seenHouseTypes = {}
+local challengeCounts = {normal = 0, light = 0, heavy = 0}
 
 for _, house in ipairs(houseChildren) do
 	check(house:IsA("Model"), house.Name .. " が Model ではない")
@@ -87,16 +90,37 @@ for _, house in ipairs(houseChildren) do
 
 	local displayName = house:GetAttribute("DisplayName")
 	local districtId = house:GetAttribute("DistrictId")
+	local houseType = house:GetAttribute("HouseType") or "Normal"
+	local definition = HOUSE_TYPES.Definitions[houseType]
 	check(type(displayName) == "string" and displayName ~= "", house.Name .. " の DisplayName がない")
 	check(allowedDistricts[districtId] == true, house.Name .. " の DistrictId が不正: " .. tostring(districtId))
+	check(definition ~= nil, house.Name .. " の HouseType が不正: " .. tostring(houseType))
+	if definition then
+		local tier = definition.challengeTier or "normal"
+		challengeCounts[tier] = (challengeCounts[tier] or 0) + 1
+		seenHouseTypes[houseType] = true
+	end
 
 	local point = house:FindFirstChild("DeliveryPoint")
 	check(point ~= nil and point:IsA("BasePart"), house.Name .. " に DeliveryPoint がない")
 	if point and point:IsA("BasePart") then
 		local prompt = point:FindFirstChild("DeliverPrompt")
 		check(prompt ~= nil and prompt:IsA("ProximityPrompt"), house.Name .. " に DeliverPrompt がない")
-		note(math.abs(point.Position.Y) <= 3, house.Name .. " の DeliveryPoint 高さが怪しい: " .. tostring(point.Position.Y))
+		if houseType == "Normal" then
+			note(math.abs(point.Position.Y) <= 3, house.Name .. " の通常配達 DeliveryPoint 高さが怪しい: " .. tostring(point.Position.Y))
+		end
 	end
+end
+
+check(challengeCounts.normal == 9, "通常配達先が9軒ではなく " .. tostring(challengeCounts.normal))
+check(challengeCounts.light == 4, "軽Obbyが4軒ではなく " .. tostring(challengeCounts.light))
+check(challengeCounts.heavy == 3, "本格Obbyが3軒ではなく " .. tostring(challengeCounts.heavy))
+
+local themeChallengeType = world:GetAttribute("ThemeChallengeType")
+check(type(themeChallengeType) == "string" and themeChallengeType ~= "", "ThemeChallengeType 属性がない")
+if type(themeChallengeType) == "string" and themeChallengeType ~= "" then
+	check(seenHouseTypes[themeChallengeType] == true,
+		"舞台専用Obbyが生成されていない: " .. themeChallengeType)
 end
 
 local depot = world:FindFirstChild("Depot")
