@@ -799,7 +799,16 @@ local function createResident(model, position, frontZ, resident)
 	if ok and avatar then
 		avatar.Name = "ResidentAvatar"
 		avatar.Parent = model
-		avatar:PivotTo(CFrame.new(basePosition + Vector3.new(0, 3, 0)))
+
+		-- R15 avatar height is not fixed. Ground the generated rig from its actual
+		-- bounding box instead of assuming a +3 stud pivot height; otherwise some
+		-- body types can sink into the road and leave only the head visible.
+		avatar:PivotTo(CFrame.new(basePosition))
+		local boundsCFrame, boundsSize = avatar:GetBoundingBox()
+		local bottomY = boundsCFrame.Position.Y - (boundsSize.Y * 0.5)
+		local groundCorrection = basePosition.Y - bottomY + 0.05
+		avatar:PivotTo(avatar:GetPivot() + Vector3.new(0, groundCorrection, 0))
+
 		local humanoid = avatar:FindFirstChildOfClass("Humanoid")
 		if humanoid then humanoid.DisplayDistanceType = Enum.HumanoidDisplayDistanceType.None end
 		for _, item in ipairs(avatar:GetDescendants()) do
