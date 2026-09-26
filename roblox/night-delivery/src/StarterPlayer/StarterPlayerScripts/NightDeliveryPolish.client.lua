@@ -157,6 +157,151 @@ local function announceShift(message)
 	end)
 end
 
+-- Rival board: everyone keeps their own Night Shift start time, but live results are shared.
+-- Seeing the gap is enough to turn ordinary deliveries into a friendly race.
+local rivalFrame = Instance.new("Frame")
+rivalFrame.Name = "RivalBoard"
+rivalFrame.Size = UDim2.fromOffset(220, 132)
+rivalFrame.Position = UDim2.fromOffset(14, 144)
+rivalFrame.BackgroundColor3 = Color3.fromRGB(19, 24, 35)
+rivalFrame.BackgroundTransparency = 0.1
+rivalFrame.Visible = false
+rivalFrame.ZIndex = 24
+rivalFrame.Parent = gui
+addCorner(rivalFrame, 11)
+addStroke(rivalFrame, Color3.fromRGB(214, 120, 92), 0.32, 1.2)
+
+local rivalTitle = makeLabel(rivalFrame, UDim2.new(1, -16, 0, 20), UDim2.fromOffset(8, 5), "RIVAL BOARD", 11, Enum.Font.GothamBold)
+rivalTitle.TextColor3 = Color3.fromRGB(255, 187, 139)
+
+local rivalRows = {}
+for index = 1, 4 do
+	local row = makeLabel(rivalFrame, UDim2.new(1, -16, 0, 18), UDim2.fromOffset(8, 23 + ((index - 1) * 19)), "", 11, Enum.Font.Gotham)
+	row.TextTruncate = Enum.TextTruncate.AtEnd
+	row.ZIndex = 25
+	rivalRows[index] = row
+end
+
+local rivalHint = makeLabel(rivalFrame, UDim2.new(1, -16, 0, 20), UDim2.new(0, 8, 1, -23), "", 10, Enum.Font.GothamBold)
+rivalHint.TextColor3 = Color3.fromRGB(255, 215, 126)
+rivalHint.TextTruncate = Enum.TextTruncate.AtEnd
+rivalHint.ZIndex = 25
+
+local lastRivalRank = nil
+local RIVAL_NEAR_DISTANCE = 75
+
+local function buildRivalStandings()
+	local standings = {}
+	for _, otherPlayer in ipairs(Players:GetPlayers()) do
+		if otherPlayer:GetAttribute("NightShiftActive") == true then
+			table.insert(standings, {
+				player = otherPlayer,
+				coins = tonumber(otherPlayer:GetAttribute("NightShiftCoinsEarned")) or 0,
+				deliveries = tonumber(otherPlayer:GetAttribute("NightShiftDeliveries")) or 0,
+			})
+		end
+	end
+	table.sort(standings, function(a, b)
+		if a.coins ~= b.coins then return a.coins > b.coins end
+		if a.deliveries ~= b.deliveries then return a.deliveries > b.deliveries end
+		return a.player.UserId < b.player.UserId
+	end)
+	return standings
+end
+
+local function updateRivalBoard()
+	local standings = buildRivalStandings()
+	if player:GetAttribute("NightShiftActive") ~= true or #standings < 2 then
+		rivalFrame.Visible = false
+		lastRivalRank = nil
+		return
+	end
+
+	local localRank = nil
+	for index, entry in ipairs(standings) do
+		if entry.player == player then
+			localRank = index
+			break
+		end
+	end
+	if not localRank then
+		rivalFrame.Visible = false
+		lastRivalRank = nil
+		return
+	end
+
+	rivalFrame.Visible = true
+	local shown = {}
+	for index = 1, math.min(3, #standings) do
+		table.insert(shown, {rank = index, entry = standings[index]})
+	end
+	if localRank > 3 then
+		table.insert(shown, {rank = localRank, entry = standings[localRank]})
+	end
+
+	for index, row in ipairs(rivalRows) do
+		local item = shown[index]
+		if item then
+			local marker = item.entry.player == player and "YOU" or item.entry.player.DisplayName
+			row.Text = string.format("%d  %-10s  %dC  %d件", item.rank, marker, item.entry.coins, item.entry.deliveries)
+			row.TextColor3 = item.entry.player == player
+				and Color3.fromRGB(255, 221, 132) or Color3.fromRGB(229, 235, 244)
+			row.Visible = true
+		else
+			row.Visible = false
+		end
+	end
+
+	if lastRivalRank and lastRivalRank ~= localRank then
+		if localRank < lastRivalRank then
+			local passed = standings[math.min(localRank + 1, #standings)]
+			announceShift(string.format("▲ %d位！ %sを抜いた", localRank, passed and passed.player.DisplayName or "ライバル"))
+		else
+			local passer = standings[math.max(localRank - 1, 1)]
+			announceShift(string.format("▼ %sに抜かれた！ %d位", passer and passer.player.DisplayName or "ライバル", localRank))
+		end
+	end
+	lastRivalRank = localRank
+
+	local root = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
+	local nearestPlayer = nil
+	local nearestDistance = math.huge
+	if root then
+		for _, entry in ipairs(standings) do
+			if entry.player ~= player then
+				local otherRoot = entry.player.Character and entry.player.Character:FindFirstChild("HumanoidRootPart")
+				if otherRoot then
+					local distance = (otherRoot.Position - root.Position).Magnitude
+					if distance < nearestDistance then
+						nearestDistance = distance
+						nearestPlayer = entry.player
+					end
+				end
+		end
+	end
+
+	if nearestPlayer and nearestDistance <= RIVAL_NEAR_DISTANCE then
+		rivalHint.Text = string.format("RIVAL NEARBY  %s  %dstuds", nearestPlayer.DisplayName, math.floor(nearestDistance))
+	elseif localRank > 1 then
+		local ahead = standings[localRank - 1]
+		local gap = math.max(0, ahead.coins - standings[localRank].coins)
+		rivalHint.Text = string.format("TARGET  %s  あと%dC", ahead.player.DisplayName, gap)
+	elseif #standings > 1 then
+		local second = standings[2]
+		local lead = math.max(0, standings[1].coins - second.coins)
+		rivalHint.Text = string.format("LEADING  %sに%dC差", second.player.DisplayName, lead)
+	else
+		rivalHint.Text = ""
+	end
+end
+
+task.spawn(function()
+	while gui.Parent do
+		updateRivalBoard()
+		task.wait(0.35)
+	end
+end)
+
 local shiftResult = Instance.new("Frame")
 shiftResult.Name = "NightShiftResult"
 shiftResult.Size = UDim2.fromOffset(340, 340)
@@ -1462,6 +1607,9 @@ local function showResult(payload)
 	elseif payload.modifierId and payload.modifierId ~= "none" then
 		table.insert(lines, string.format("%s は条件未達", payload.modifierTitle or "特殊依頼"))
 	end
+	if (payload.finalRunBonus or 0) > 0 then
+		table.insert(lines, string.format("FINAL RUN x%.1f +%d", payload.finalRunMultiplier or 1.5, payload.finalRunBonus))
+	end
 	if (payload.missionBonus or 0) > 0 then
 		table.insert(lines, string.format("セッション目標 +%d", payload.missionBonus))
 	end
@@ -1571,7 +1719,7 @@ deliveryEvent.OnClientEvent:Connect(function(action, payload)
 		-- Core gameplay UI is the sole route-choice owner.
 		routeChoiceFrame.Visible = false
 		requestOrderModifier(payload.jobSerial)
-		if payload.lastDelivery then announceShift("LAST DELIVERY  今夜最後の配達") end
+		if payload.lastDelivery then announceShift("FINAL RUN  最終配達は報酬 x1.5") end
 
 		if introFrame.Visible then
 			introFrame.Visible = false
@@ -1886,6 +2034,11 @@ local function updateResponsiveScale()
 		shiftResult.Size = UDim2.new(0.9, 0, 0, 340)
 		shiftText.TextSize = 13
 		shiftHud.Size = UDim2.fromOffset(150, 38)
+		rivalFrame.Size = UDim2.fromOffset(math.min(172, math.floor(viewport.X * 0.47)), 132)
+		rivalFrame.Position = UDim2.fromOffset(10, 252)
+		rivalTitle.TextSize = 10
+		for _, row in ipairs(rivalRows) do row.TextSize = 9 end
+		rivalHint.TextSize = 9
 		destinationEventFrame.Size = UDim2.new(0.92, 0, 0, 180)
 		eventObjectiveFrame.Size = UDim2.new(0.92, 0, 0, 116)
 		travelEventFrame.Size = UDim2.new(0.92, 0, 0, 96)
@@ -1938,6 +2091,11 @@ local function updateResponsiveScale()
 		resultFrame.Size = UDim2.fromOffset(360, 190)
 		shiftResult.Size = UDim2.fromOffset(340, 340)
 		shiftText.TextSize = 16
+		rivalFrame.Size = UDim2.fromOffset(220, 132)
+		rivalFrame.Position = UDim2.fromOffset(14, 144)
+		rivalTitle.TextSize = 11
+		for _, row in ipairs(rivalRows) do row.TextSize = 11 end
+		rivalHint.TextSize = 10
 		destinationEventFrame.Size = UDim2.fromOffset(430, 176)
 		eventObjectiveFrame.Size = UDim2.fromOffset(410, 116)
 		travelEventFrame.Size = UDim2.fromOffset(370, 92)

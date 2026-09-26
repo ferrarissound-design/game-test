@@ -50,6 +50,7 @@ local playerState = {}
 local getStats
 local SHIFT_TARGET_DELIVERIES = 6
 local PERFECT_COMBO_BONUS = 40
+local FINAL_RUN_MULTIPLIER = 1.5
 
 local function rankShift(shift)
 	local total = math.max(1, shift.deliveries)
@@ -374,8 +375,8 @@ local function startPreparedOrder(player)
 		return
 	end
 
-	local _, deliveries = getStats(player)
-	if not deliveries then
+	local coins, deliveries = getStats(player)
+	if not coins or not deliveries then
 		return
 	end
 
@@ -384,6 +385,7 @@ local function startPreparedOrder(player)
 	end
 	local order = {
 		baselineDeliveries = deliveries.Value,
+		baselineCoins = coins.Value,
 		startedAt = startedAt,
 		timeLimit = timeLimit,
 		jobSerial = prepared.jobSerial,
@@ -450,10 +452,18 @@ local function finishTrackedOrder(player)
 	end
 	local gradeBonus = GRADE_BONUS[grade] or 0
 	local modifierBonus = modifierSucceeded(order.modifier, grade, elapsed, order) and order.modifier.reward or 0
+	local finalRunBonus = 0
+	if player:GetAttribute("NightShiftPhase") == "FinalRun" then
+		-- The core delivery reward has already been granted when this tracker runs.
+		-- Add the remaining 50% here so the last delivery of the night is worth x1.5.
+		local deliveryCoins = math.max(0, coins.Value - (order.baselineCoins or coins.Value))
+		local multiplierBase = deliveryCoins + gradeBonus + modifierBonus
+		finalRunBonus = math.floor(multiplierBase * (FINAL_RUN_MULTIPLIER - 1))
+	end
 
 	state.sessionDeliveries += 1
 	local missionBonus, completedMissions = awardMissionRewards(player, state)
-	local totalBonus = gradeBonus + modifierBonus
+	local totalBonus = gradeBonus + modifierBonus + finalRunBonus
 
 	if totalBonus > 0 then
 		coins.Value += totalBonus
@@ -469,6 +479,8 @@ local function finishTrackedOrder(player)
 		modifierTitle = order.modifier.title,
 		modifierBonus = modifierBonus,
 		modifierSucceeded = modifierBonus > 0,
+		finalRunBonus = finalRunBonus,
+		finalRunMultiplier = FINAL_RUN_MULTIPLIER,
 		missionBonus = missionBonus,
 		completedMissions = completedMissions,
 		totalBonus = totalBonus + missionBonus,
