@@ -277,16 +277,16 @@ HouseTypes.Definitions = {
 	Construction = {label = "工事中住宅・裏口", challengeTier = "light", extraSeconds = 38, build = function(model, origin, frontZ)
 		return nil, construction(model, origin, frontZ)
 	end},
-	HighRise = {label = "高所配達・屋上", challengeTier = "heavy", extraSeconds = 46, promptDistance = 8, standalone = true, build = function(model, origin)
+	HighRise = {label = "高所配達・屋上", challengeTier = "heavy", extraSeconds = 46, promptDistance = 8, verticalCheck = true, standalone = true, build = function(model, origin)
 		local body, target = highRise(model, origin)
 		return body, target, -9.3
 	end},
 	BlockedAlley = {label = "路地裏・裏口", challengeTier = "light", extraSeconds = 32, build = blockedAlley},
-	WarehouseRoute = {label = "倉庫・上階搬入口", challengeTier = "heavy", extraSeconds = 45, promptDistance = 8, build = warehouseRoute},
-	RooftopGap = {label = "屋根渡り・配達", challengeTier = "heavy", extraSeconds = 42, promptDistance = 6, standalone = true, build = rooftopGap},
-	ApartmentStairs = {label = "アパート・外階段", challengeTier = "light", extraSeconds = 28, promptDistance = 8, standalone = true, build = apartmentStairs},
-	ParkingDeck = {label = "立体駐車場・上階", challengeTier = "light", extraSeconds = 30, promptDistance = 8, standalone = true, build = parkingDeck},
-	FactoryCatwalk = {label = "工場・上部搬入口", challengeTier = "heavy", extraSeconds = 44, promptDistance = 8, build = factoryCatwalk},
+	WarehouseRoute = {label = "倉庫・上階搬入口", challengeTier = "heavy", extraSeconds = 45, promptDistance = 8, verticalCheck = true, build = warehouseRoute},
+	RooftopGap = {label = "屋根渡り・配達", challengeTier = "heavy", extraSeconds = 42, promptDistance = 6, verticalCheck = true, standalone = true, build = rooftopGap},
+	ApartmentStairs = {label = "アパート・外階段", challengeTier = "light", extraSeconds = 28, promptDistance = 8, verticalCheck = true, standalone = true, build = apartmentStairs},
+	ParkingDeck = {label = "立体駐車場・上階", challengeTier = "light", extraSeconds = 30, promptDistance = 8, verticalCheck = true, standalone = true, build = parkingDeck},
+	FactoryCatwalk = {label = "工場・上部搬入口", challengeTier = "heavy", extraSeconds = 44, promptDistance = 8, verticalCheck = true, build = factoryCatwalk},
 }
 
 function HouseTypes.build(model, houseType, origin, frontZ)
