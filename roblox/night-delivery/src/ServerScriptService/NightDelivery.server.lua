@@ -1241,20 +1241,47 @@ local function createWorld()
 	shopPrompt.RequiresLineOfSight = false
 	shopPrompt.Parent = shopPad
 
+	local themedGreenType = ({
+		japanese = "JapaneseRoofRun",
+		western = "WesternBalcony",
+		danchi = "DanchiCorridor",
+	})[selectedWorldTheme.id] or "ApartmentStairs"
+	local themedRedType = ({
+		showa = "ShowaFireEscape",
+		mountain = "MountainBridge",
+	})[selectedWorldTheme.id] or "RooftopGap"
+	local themedMintType = selectedWorldTheme.id == "luxury" and "LuxuryGardenWall" or "BlockedAlley"
+	local themedWarehouseType = selectedWorldTheme.id == "harbor"
+		and "HarborContainerRun"
+		or (worldRandom:NextNumber() < 0.5 and "WarehouseRoute" or "FactoryCatwalk")
+
+	local activeThemeChallengeType = ({
+		japanese = themedGreenType,
+		western = themedGreenType,
+		showa = themedRedType,
+		luxury = themedMintType,
+		harbor = themedWarehouseType,
+		mountain = themedRedType,
+		danchi = themedGreenType,
+	})[selectedWorldTheme.id]
+	world:SetAttribute("ThemeChallengeType", activeThemeChallengeType or "")
+	world:SetAttribute("ThemeChallengeLabel",
+		activeThemeChallengeType and HOUSE_TYPES.Definitions[activeThemeChallengeType].label or "")
+
 	local houseDefinitions = {
 		{name = "BlueHouse", displayName = "青い家", districtId = "central", position = Vector3.new(-72, 0, 46), color = Color3.fromRGB(74, 111, 154), houseType = "Construction"},
-		{name = "RedHouse", displayName = "赤い家", districtId = "central", position = Vector3.new(72, 0, 60), color = Color3.fromRGB(146, 76, 72), houseType = "RooftopGap"},
-		{name = "GreenHouse", displayName = "緑の家", districtId = "central", position = Vector3.new(-78, 0, 102), color = Color3.fromRGB(77, 124, 94), houseType = "ApartmentStairs"},
+		{name = "RedHouse", displayName = "赤い家", districtId = "central", position = Vector3.new(72, 0, 60), color = Color3.fromRGB(146, 76, 72), houseType = themedRedType},
+		{name = "GreenHouse", displayName = "緑の家", districtId = "central", position = Vector3.new(-78, 0, 102), color = Color3.fromRGB(77, 124, 94), houseType = themedGreenType},
 		{name = "YellowHouse", displayName = "黄色い家", districtId = "central", position = Vector3.new(76, 0, -8), color = Color3.fromRGB(151, 127, 69)},
 		{name = "PurpleHouse", displayName = "紫の家", districtId = "central", position = Vector3.new(78, 0, -72), color = Color3.fromRGB(111, 81, 137), houseType = "HighRise"},
 		{name = "WhiteHouse", displayName = "白い家", districtId = "central", position = Vector3.new(-112, 0, 96), color = Color3.fromRGB(180, 184, 190)},
 		{name = "OrangeHouse", displayName = "橙の家", districtId = "central", position = Vector3.new(118, 0, 96), color = Color3.fromRGB(173, 107, 65)},
-		{name = "MintHouse", displayName = "ミントの家", districtId = "central", position = Vector3.new(112, 0, 24), color = Color3.fromRGB(93, 151, 145), houseType = "BlockedAlley"},
+		{name = "MintHouse", displayName = "ミントの家", districtId = "central", position = Vector3.new(112, 0, 24), color = Color3.fromRGB(93, 151, 145), houseType = themedMintType},
 		{name = "RiverBlueHouse", displayName = "川辺の青い家", districtId = "riverside", position = Vector3.new(-150, 0, 157), color = Color3.fromRGB(71, 105, 148)},
 		{name = "RiverPinkHouse", displayName = "川辺の桃色の家", districtId = "riverside", position = Vector3.new(-82, 0, 157), color = Color3.fromRGB(158, 101, 119)},
 		{name = "RiverTealHouse", displayName = "川辺の青緑の家", districtId = "riverside", position = Vector3.new(82, 0, 157), color = Color3.fromRGB(72, 132, 133), houseType = "ParkingDeck"},
 		{name = "RiverCreamHouse", displayName = "川辺のクリームの家", districtId = "riverside", position = Vector3.new(150, 0, 157), color = Color3.fromRGB(181, 161, 119)},
-		{name = "Warehouse01", displayName = "第1倉庫", districtId = "warehouse", position = Vector3.new(-150, 0, -145), color = Color3.fromRGB(92, 101, 112), houseType = worldRandom:NextNumber() < 0.5 and "WarehouseRoute" or "FactoryCatwalk"},
+		{name = "Warehouse01", displayName = "第1倉庫", districtId = "warehouse", position = Vector3.new(-150, 0, -145), color = Color3.fromRGB(92, 101, 112), houseType = themedWarehouseType},
 		{name = "Warehouse02", displayName = "第2倉庫", districtId = "warehouse", position = Vector3.new(-78, 0, -145), color = Color3.fromRGB(110, 91, 81)},
 		{name = "Warehouse03", displayName = "第3倉庫", districtId = "warehouse", position = Vector3.new(78, 0, -145), color = Color3.fromRGB(82, 105, 99)},
 		{name = "Warehouse04", displayName = "第4倉庫", districtId = "warehouse", position = Vector3.new(150, 0, -145), color = Color3.fromRGB(105, 91, 118)},
@@ -1856,6 +1883,10 @@ local OFFER_HOUSE_LABELS = {
 	Construction = "Construction Site", HighRise = "High Rise", BlockedAlley = "Back Alley",
 	WarehouseRoute = "Warehouse", RooftopGap = "Rooftop", ApartmentStairs = "Apartment",
 	ParkingDeck = "Parking Deck", FactoryCatwalk = "Factory Catwalk",
+	JapaneseRoofRun = "Japanese Roof", WesternBalcony = "Western Balcony",
+	ShowaFireEscape = "Showa Fire Escape", LuxuryGardenWall = "Luxury Garden",
+	HarborContainerRun = "Harbor Containers", MountainBridge = "Mountain Bridge",
+	DanchiCorridor = "Danchi Corridor",
 }
 
 local function offerPublicData(offer)
