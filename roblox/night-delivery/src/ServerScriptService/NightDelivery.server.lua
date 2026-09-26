@@ -938,7 +938,7 @@ local function createHouse(id, displayName, districtId, position, bodyColor, hou
 	prompt.KeyboardKeyCode = Enum.KeyCode.E
 	prompt.Style = Enum.ProximityPromptStyle.Custom
 	prompt.HoldDuration = 0.2
-	prompt.MaxActivationDistance = houseType == "RooftopGap" and 6 or 10
+	prompt.MaxActivationDistance = HOUSE_TYPES.Definitions[houseType].promptDistance or 10
 	prompt.RequiresLineOfSight = false
 	prompt.Parent = deliveryPoint
 
@@ -1244,7 +1244,7 @@ local function createWorld()
 	local houseDefinitions = {
 		{name = "BlueHouse", displayName = "青い家", districtId = "central", position = Vector3.new(-72, 0, 46), color = Color3.fromRGB(74, 111, 154), houseType = "Construction"},
 		{name = "RedHouse", displayName = "赤い家", districtId = "central", position = Vector3.new(72, 0, 60), color = Color3.fromRGB(146, 76, 72), houseType = "RooftopGap"},
-		{name = "GreenHouse", displayName = "緑の家", districtId = "central", position = Vector3.new(-78, 0, 102), color = Color3.fromRGB(77, 124, 94)},
+		{name = "GreenHouse", displayName = "緑の家", districtId = "central", position = Vector3.new(-78, 0, 102), color = Color3.fromRGB(77, 124, 94), houseType = "ApartmentStairs"},
 		{name = "YellowHouse", displayName = "黄色い家", districtId = "central", position = Vector3.new(76, 0, -8), color = Color3.fromRGB(151, 127, 69)},
 		{name = "PurpleHouse", displayName = "紫の家", districtId = "central", position = Vector3.new(78, 0, -72), color = Color3.fromRGB(111, 81, 137), houseType = "HighRise"},
 		{name = "WhiteHouse", displayName = "白い家", districtId = "central", position = Vector3.new(-112, 0, 96), color = Color3.fromRGB(180, 184, 190)},
@@ -1252,9 +1252,9 @@ local function createWorld()
 		{name = "MintHouse", displayName = "ミントの家", districtId = "central", position = Vector3.new(112, 0, 24), color = Color3.fromRGB(93, 151, 145), houseType = "BlockedAlley"},
 		{name = "RiverBlueHouse", displayName = "川辺の青い家", districtId = "riverside", position = Vector3.new(-150, 0, 157), color = Color3.fromRGB(71, 105, 148)},
 		{name = "RiverPinkHouse", displayName = "川辺の桃色の家", districtId = "riverside", position = Vector3.new(-82, 0, 157), color = Color3.fromRGB(158, 101, 119)},
-		{name = "RiverTealHouse", displayName = "川辺の青緑の家", districtId = "riverside", position = Vector3.new(82, 0, 157), color = Color3.fromRGB(72, 132, 133)},
+		{name = "RiverTealHouse", displayName = "川辺の青緑の家", districtId = "riverside", position = Vector3.new(82, 0, 157), color = Color3.fromRGB(72, 132, 133), houseType = "ParkingDeck"},
 		{name = "RiverCreamHouse", displayName = "川辺のクリームの家", districtId = "riverside", position = Vector3.new(150, 0, 157), color = Color3.fromRGB(181, 161, 119)},
-		{name = "Warehouse01", displayName = "第1倉庫", districtId = "warehouse", position = Vector3.new(-150, 0, -145), color = Color3.fromRGB(92, 101, 112), houseType = "WarehouseRoute"},
+		{name = "Warehouse01", displayName = "第1倉庫", districtId = "warehouse", position = Vector3.new(-150, 0, -145), color = Color3.fromRGB(92, 101, 112), houseType = worldRandom:NextNumber() < 0.5 and "WarehouseRoute" or "FactoryCatwalk"},
 		{name = "Warehouse02", displayName = "第2倉庫", districtId = "warehouse", position = Vector3.new(-78, 0, -145), color = Color3.fromRGB(110, 91, 81)},
 		{name = "Warehouse03", displayName = "第3倉庫", districtId = "warehouse", position = Vector3.new(78, 0, -145), color = Color3.fromRGB(82, 105, 99)},
 		{name = "Warehouse04", displayName = "第4倉庫", districtId = "warehouse", position = Vector3.new(150, 0, -145), color = Color3.fromRGB(105, 91, 118)},
@@ -1839,16 +1839,23 @@ local function chooseOfferCargo()
 	return CARGO_MODIFIERS[1]
 end
 
+local function getHouseChallengeTier(house)
+	local houseType = house and house:GetAttribute("HouseType") or "Normal"
+	local definition = HOUSE_TYPES.Definitions[houseType]
+	return definition and definition.challengeTier or "normal"
+end
+
 local function offerDifficulty(house, distance, cargo)
-	local obby = (house:GetAttribute("HouseType") or "Normal") ~= "Normal"
-	if obby or (distance >= 185 and cargo.id ~= "none") then return "Difficult" end
-	if distance >= 185 or cargo.id ~= "none" then return "Normal" end
+	local challengeTier = getHouseChallengeTier(house)
+	if challengeTier == "heavy" or (distance >= 185 and cargo.id ~= "none") then return "Difficult" end
+	if challengeTier == "light" or distance >= 185 or cargo.id ~= "none" then return "Normal" end
 	return "Easy"
 end
 
 local OFFER_HOUSE_LABELS = {
 	Construction = "Construction Site", HighRise = "High Rise", BlockedAlley = "Back Alley",
-	WarehouseRoute = "Warehouse", RooftopGap = "Rooftop",
+	WarehouseRoute = "Warehouse", RooftopGap = "Rooftop", ApartmentStairs = "Apartment",
+	ParkingDeck = "Parking Deck", FactoryCatwalk = "Factory Catwalk",
 }
 
 local function offerPublicData(offer)
@@ -1949,7 +1956,9 @@ local function generateJobOffers(player, phase)
 			if forcedHouse and index == 2 and house == forcedHouse then score += 100 end
 			if score > bestScore then
 				bestScore = score
-				local bonus = (distance >= 185 and 15 or 0) + (houseType ~= "Normal" and 20 or 0)
+				local challengeTier = getHouseChallengeTier(house)
+				local challengeBonus = challengeTier == "heavy" and 35 or challengeTier == "light" and 15 or 0
+				local bonus = (distance >= 185 and 15 or 0) + challengeBonus
 				selected = {
 					id = HttpService:GenerateGUID(false),
 					houseName = house.Name, houseType = houseType, jobType = jobType,
