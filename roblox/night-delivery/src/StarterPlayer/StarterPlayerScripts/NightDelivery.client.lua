@@ -557,31 +557,80 @@ end)
 
 local promptButton = Instance.new("TextButton")
 promptButton.Name = "InteractionPrompt"
-promptButton.Size = UDim2.new(0.72, 0, 0, 34)
+promptButton.Size = UDim2.new(0.78, 0, 0, 58)
 promptButton.AnchorPoint = Vector2.new(0.5, 1)
-promptButton.Position = UDim2.new(0.5, 0, 1, -30)
+promptButton.Position = UDim2.new(0.41, 0, 1, -42)
 promptButton.BackgroundColor3 = Color3.fromRGB(24, 30, 40)
-promptButton.BackgroundTransparency = 0.18
+promptButton.BackgroundTransparency = 0.08
 promptButton.BorderSizePixel = 0
 promptButton.TextColor3 = Color3.fromRGB(245, 248, 255)
 promptButton.Font = Enum.Font.GothamBold
-promptButton.TextSize = 13
+promptButton.TextSize = 18
 promptButton.AutoButtonColor = true
 promptButton.Visible = false
 promptButton.ZIndex = 5
 promptButton.Parent = gui
 
 local promptSizeConstraint = Instance.new("UISizeConstraint")
-promptSizeConstraint.MinSize = Vector2.new(180, 34)
-promptSizeConstraint.MaxSize = Vector2.new(300, 34)
+promptSizeConstraint.MinSize = Vector2.new(250, 54)
+promptSizeConstraint.MaxSize = Vector2.new(380, 60)
 promptSizeConstraint.Parent = promptButton
 
 local promptCorner = Instance.new("UICorner")
-promptCorner.CornerRadius = UDim.new(0, 8)
+promptCorner.CornerRadius = UDim.new(0, 13)
 promptCorner.Parent = promptButton
+
+local promptStroke = Instance.new("UIStroke")
+promptStroke.Color = Color3.fromRGB(108, 126, 151)
+promptStroke.Transparency = 0.42
+promptStroke.Thickness = 1.5
+promptStroke.Parent = promptButton
 
 local activePrompt = nil
 local promptHoldActive = false
+local activePromptInputType = nil
+
+local function styleInteractionPrompt(prompt, inputType)
+	local isTouch = inputType == Enum.ProximityPromptInputType.Touch
+	activePromptInputType = inputType
+
+	if isTouch then
+		-- Keep the large mobile action clear of Roblox's jump control on the lower right.
+		promptButton.Size = UDim2.new(0.78, 0, 0, 58)
+		promptButton.Position = UDim2.new(0.41, 0, 1, -42)
+		promptButton.TextSize = 18
+		promptSizeConstraint.MinSize = Vector2.new(250, 54)
+		promptSizeConstraint.MaxSize = Vector2.new(380, 60)
+	else
+		promptButton.Size = UDim2.new(0.62, 0, 0, 46)
+		promptButton.Position = UDim2.new(0.5, 0, 1, -30)
+		promptButton.TextSize = 16
+		promptSizeConstraint.MinSize = Vector2.new(220, 44)
+		promptSizeConstraint.MaxSize = Vector2.new(340, 48)
+	end
+
+	if prompt.Name == "AcceptJobPrompt" or prompt.Name == "DeliverPrompt" then
+		promptButton.BackgroundColor3 = Color3.fromRGB(240, 183, 89)
+		promptButton.TextColor3 = Color3.fromRGB(18, 24, 34)
+		promptStroke.Color = Color3.fromRGB(255, 219, 151)
+		promptStroke.Transparency = 0.18
+	elseif prompt.Name == "BikeModePrompt" then
+		promptButton.BackgroundColor3 = Color3.fromRGB(45, 116, 145)
+		promptButton.TextColor3 = Color3.fromRGB(245, 248, 255)
+		promptStroke.Color = Color3.fromRGB(116, 205, 232)
+		promptStroke.Transparency = 0.24
+	elseif prompt.Name == "UpgradeShopPrompt" then
+		promptButton.BackgroundColor3 = Color3.fromRGB(91, 65, 128)
+		promptButton.TextColor3 = Color3.fromRGB(250, 245, 255)
+		promptStroke.Color = Color3.fromRGB(186, 139, 232)
+		promptStroke.Transparency = 0.24
+	else
+		promptButton.BackgroundColor3 = Color3.fromRGB(24, 30, 40)
+		promptButton.TextColor3 = Color3.fromRGB(245, 248, 255)
+		promptStroke.Color = Color3.fromRGB(108, 126, 151)
+		promptStroke.Transparency = 0.42
+	end
+end
 
 local function endPromptHold()
 	if activePrompt and promptHoldActive then
@@ -593,11 +642,10 @@ end
 ProximityPromptService.PromptShown:Connect(function(prompt, inputType)
 	endPromptHold()
 	activePrompt = prompt
+	styleInteractionPrompt(prompt, inputType)
 
 	local inputText = prompt.KeyboardKeyCode.Name
-	if inputType == Enum.ProximityPromptInputType.Touch then
-		inputText = "タップ"
-	elseif inputType == Enum.ProximityPromptInputType.Gamepad then
+	if inputType == Enum.ProximityPromptInputType.Gamepad then
 		inputText = prompt.GamepadKeyCode.Name:gsub("Button", "")
 	end
 
@@ -607,7 +655,13 @@ ProximityPromptService.PromptShown:Connect(function(prompt, inputType)
 		and player:GetAttribute("NightDeliveryOddityId") == "silent_house" then
 		actionText = "静かに置く"
 	end
-	promptButton.Text = string.format("%s  %s", inputText, actionText)
+
+	if inputType == Enum.ProximityPromptInputType.Touch then
+		-- A large button is already self-explanatory on touch. Keep the label simple.
+		promptButton.Text = actionText
+	else
+		promptButton.Text = string.format("%s  %s", inputText, actionText)
+	end
 	promptButton.Visible = true
 end)
 
@@ -618,6 +672,7 @@ ProximityPromptService.PromptHidden:Connect(function(prompt)
 
 	endPromptHold()
 	activePrompt = nil
+	activePromptInputType = nil
 	promptButton.Visible = false
 end)
 
