@@ -1086,8 +1086,13 @@ deliveryEvent.OnClientEvent:Connect(function(action, payload)
 		currentJobTypeId = nil
 		expiresAt = nil
 
-		targetLabel.Text = "配達所で次の荷物を受け取ろう"
-		jobLabel.Text = "通常便 / 速達便 / 遠距離便 / 深夜特別便"
+		if payload.hasNextStops then
+			targetLabel.Text = "追加配達先を選ぼう"
+			jobLabel.Text = "バッグ内の次の配達先を選択"
+		else
+			targetLabel.Text = "配達所で次の荷物を受け取ろう"
+			jobLabel.Text = "通常便 / 速達便 / 遠距離便 / 深夜特別便"
+		end
 		jobLabel.TextColor3 = Color3.fromRGB(157, 190, 225)
 		timerLabel.Text = ""
 		clearWaypoint()
