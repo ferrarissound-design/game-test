@@ -462,6 +462,7 @@ local function mountainBridge(model, origin)
 	part(model, "MountainStartLedge", Vector3.new(11, 0.7, 10), origin + Vector3.new(-7, 9.4, -3), moss, Enum.Material.Grass)
 	part(model, "MountainBridge", Vector3.new(24, 0.7, 6), origin + Vector3.new(7, 9.4, 3), wood, Enum.Material.WoodPlanks)
 	part(model, "MountainFarLedge", Vector3.new(12, 0.7, 10), origin + Vector3.new(22, 9.4, 7), moss, Enum.Material.Grass)
+	part(model, "MountainPorch", Vector3.new(10, 0.7, 6), origin + Vector3.new(22, 9.4, 0), wood, Enum.Material.WoodPlanks)
 
 	for i, step in ipairs({
 		{-1, -8, 3.0},
@@ -479,7 +480,7 @@ local function mountainBridge(model, origin)
 		)
 	end
 
-	local target = part(model, "DeliveryPoint", Vector3.new(6, 0.5, 5), origin + Vector3.new(22, 9.95, 7), Color3.fromRGB(97, 185, 163), Enum.Material.Neon)
+	local target = part(model, "DeliveryPoint", Vector3.new(6, 0.5, 5), origin + Vector3.new(22, 9.95, 0), Color3.fromRGB(97, 185, 163), Enum.Material.Neon)
 	sign(model, origin + Vector3.new(-16, 0, -24), "山小屋へ木橋を渡る\n岩場は速いが足元注意")
 	return body, target, -6.5
 end
@@ -518,7 +519,7 @@ local function danchiCorridor(model, origin)
 	part(model, "OutdoorUnit3", Vector3.new(5, 9.0, 4), origin + Vector3.new(9, 4.5, -8), unit, Enum.Material.Metal)
 	part(model, "OutdoorUnit4", Vector3.new(5, 11.0, 4), origin + Vector3.new(6, 5.5, -6), unit, Enum.Material.Metal)
 
-	local target = part(model, "DeliveryPoint", Vector3.new(6, 0.5, 4), origin + Vector3.new(3, 12.05, -11), Color3.fromRGB(97, 185, 163), Enum.Material.Neon)
+	local target = part(model, "DeliveryPoint", Vector3.new(6, 0.5, 4), origin + Vector3.new(3, 11.55, -11), Color3.fromRGB(97, 185, 163), Enum.Material.Neon)
 	sign(model, origin + Vector3.new(-17, 0, -24), "団地上階の外廊下へ\n階段は安全、室外機は近道")
 	return body, target, -9.3
 end
