@@ -457,7 +457,8 @@ local function finishTrackedOrder(player)
 		-- The core delivery reward has already been granted when this tracker runs.
 		-- Add the remaining 50% here so the last delivery of the night is worth x1.5.
 		local deliveryCoins = math.max(0, coins.Value - (order.baselineCoins or coins.Value))
-		finalRunBonus = math.floor(deliveryCoins * (FINAL_RUN_MULTIPLIER - 1))
+		local multiplierBase = deliveryCoins + gradeBonus + modifierBonus
+		finalRunBonus = math.floor(multiplierBase * (FINAL_RUN_MULTIPLIER - 1))
 	end
 
 	state.sessionDeliveries += 1
