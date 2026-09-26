@@ -52,6 +52,7 @@ local COOP_RANGE = 36
 local COOP_BONUS_PER_HELPER = 0.15
 local MAX_COOP_HELPERS = 2
 local HELPER_REWARD = 25
+local ASSIST_CLAIM_SECONDS = 20
 local WEATHER_CHANGE_SECONDS = 150
 local AUTOSAVE_SECONDS = 120
 local REMOTE_COOLDOWN_SECONDS = 0.12
@@ -188,6 +189,7 @@ local playerShiftOddities = {}
 local currentNightRule = RULES.NightConditions[1]
 local playerStreak = {}
 local playerShiftProgress = {}
+local playerAssistClaims = {}
 local remoteLastAction = {}
 local playerDataLoadSucceeded = {}
 local playerSaveInProgress = {}
@@ -2372,12 +2374,73 @@ local function scheduleTravelEvent(player, jobSerial)
 	end)
 end
 
+local function registerAssistClaim(helper, houseName)
+	local targetHouse = housesFolder:FindFirstChild(houseName)
+	local targetPart = targetHouse and targetHouse:FindFirstChild("DeliveryPoint")
+	if not targetPart or not isNearPart(helper, targetPart, COOP_RANGE) then
+		return false
+	end
+
+	local claims = playerAssistClaims[helper]
+	if not claims then
+		claims = {}
+		playerAssistClaims[helper] = claims
+	end
+
+	local registeredNames = {}
+	for _, courier in ipairs(Players:GetPlayers()) do
+		local courierJob = playerJobs[courier]
+		if courier ~= helper
+			and courier:GetAttribute("NightShiftActive") == true
+			and courierJob
+			and courierJob.houseName == houseName
+			and courierJob.routeChoice
+			and courierJob.expiresAt
+			and isNearPart(courier, targetPart, COOP_RANGE) then
+			claims[courier.UserId] = {
+				jobSerial = courierJob.jobSerial,
+				houseName = houseName,
+				expiresAt = os.clock() + ASSIST_CLAIM_SECONDS,
+			}
+			table.insert(registeredNames, courier.DisplayName)
+		end
+	end
+
+	if #registeredNames == 0 then
+		if next(claims) == nil then playerAssistClaims[helper] = nil end
+		return false
+	end
+
+	sendStatus(helper, "Message", {
+		text = string.format("🤝 %s の配達を手伝う準備OK。近くで待とう。", table.concat(registeredNames, " / ")),
+	})
+	return true
+end
+
+local function consumeAssistClaim(helper, courier, jobSerial, houseName, targetPart)
+	local claims = playerAssistClaims[helper]
+	local claim = claims and claims[courier.UserId]
+	if not claim then
+		return false
+	end
+
+	claims[courier.UserId] = nil
+	if next(claims) == nil then playerAssistClaims[helper] = nil end
+
+	return claim.jobSerial == jobSerial
+		and claim.houseName == houseName
+		and claim.expiresAt >= os.clock()
+		and targetPart ~= nil
+		and isNearPart(helper, targetPart, COOP_RANGE)
+end
+
 local function completeDelivery(player, houseName)
 	if not requirePlayerReady(player) then
 		return
 	end
 	local job = playerJobs[player]
 	if not job then
+		if registerAssistClaim(player, houseName) then return end
 		sendStatus(player, "Message", {
 			text = "先に配達所で荷物を受け取ろう。",
 		})
@@ -2385,6 +2448,7 @@ local function completeDelivery(player, houseName)
 	end
 
 	if job.houseName ~= houseName then
+		if registerAssistClaim(player, houseName) then return end
 		sendStatus(player, "Message", {
 			text = "ここじゃない。黄色く光っている配達先を確認しよう。",
 		})
@@ -2519,7 +2583,8 @@ local function completeDelivery(player, houseName)
 
 	if targetPart then
 		for _, otherPlayer in ipairs(Players:GetPlayers()) do
-			if otherPlayer ~= player and isNearPart(otherPlayer, targetPart, COOP_RANGE) then
+			if otherPlayer ~= player
+				and consumeAssistClaim(otherPlayer, player, job.jobSerial, houseName, targetPart) then
 				helperCount += 1
 				local otherStats = getStats(otherPlayer)
 				if otherStats and otherStats.coins then
@@ -2558,6 +2623,10 @@ local function completeDelivery(player, houseName)
 		reward += neighborhoodTip
 	end
 
+	-- FINAL RUN multiplies the reward earned by this delivery only. Keep this value
+	-- separate from the whole-shift completion bonus and later rumor/meta rewards.
+	local finalRunEligibleReward = reward
+
 	-- The legacy ShiftWins reward now follows the same six completed deliveries as Night Shift.
 	-- A late delivery can lower the grade, but it must not leave a hidden 5/6 counter that pays
 	-- out during the next night.
@@ -2582,6 +2651,8 @@ local function completeDelivery(player, houseName)
 		player:SetAttribute("NightShiftLastDeliverySerial", job.jobSerial)
 		player:SetAttribute("NightShiftLastDestinationSuccess", job.destinationEvent ~= nil
 			and job.destinationEventObjectiveComplete == true and not job.destinationEventHazardTriggered)
+		player:SetAttribute("NightDeliveryLastRewardSerial", job.jobSerial)
+		player:SetAttribute("NightDeliveryLastRewardBase", finalRunEligibleReward)
 		player:SetAttribute("NightDeliveryCompletedJobSerial", job.jobSerial)
 
 		local clueLevel = player:GetAttribute("NightDeliveryRumorClueLevel") or 0
@@ -3682,6 +3753,8 @@ local function setupPlayer(player)
 	player:SetAttribute("NightDeliveryOrderStartedAt", nil)
 	player:SetAttribute("NightDeliveryJobSerial", 0)
 	player:SetAttribute("NightDeliveryCompletedJobSerial", 0)
+	player:SetAttribute("NightDeliveryLastRewardSerial", 0)
+	player:SetAttribute("NightDeliveryLastRewardBase", 0)
 	player:SetAttribute("NightShiftActive", false)
 	player:SetAttribute("JobOffersActive", false)
 	player:SetAttribute("JobOffersSerial", 0)
@@ -3764,6 +3837,11 @@ Players.PlayerRemoving:Connect(function(player)
 	playerShiftOddities[player] = nil
 	playerStreak[player] = nil
 	playerShiftProgress[player] = nil
+	playerAssistClaims[player] = nil
+	for helper, claims in pairs(playerAssistClaims) do
+		claims[player.UserId] = nil
+		if next(claims) == nil then playerAssistClaims[helper] = nil end
+	end
 	remoteLastAction[player] = nil
 	playerDataLoadSucceeded[player] = nil
 end)

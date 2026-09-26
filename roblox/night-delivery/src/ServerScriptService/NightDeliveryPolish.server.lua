@@ -375,8 +375,8 @@ local function startPreparedOrder(player)
 		return
 	end
 
-	local coins, deliveries = getStats(player)
-	if not coins or not deliveries then
+	local _, deliveries = getStats(player)
+	if not deliveries then
 		return
 	end
 
@@ -385,7 +385,6 @@ local function startPreparedOrder(player)
 	end
 	local order = {
 		baselineDeliveries = deliveries.Value,
-		baselineCoins = coins.Value,
 		startedAt = startedAt,
 		timeLimit = timeLimit,
 		jobSerial = prepared.jobSerial,
@@ -454,10 +453,14 @@ local function finishTrackedOrder(player)
 	local modifierBonus = modifierSucceeded(order.modifier, grade, elapsed, order) and order.modifier.reward or 0
 	local finalRunBonus = 0
 	if player:GetAttribute("NightShiftPhase") == "FinalRun" then
-		-- The core delivery reward has already been granted when this tracker runs.
-		-- Add the remaining 50% here so the last delivery of the night is worth x1.5.
-		local deliveryCoins = math.max(0, coins.Value - (order.baselineCoins or coins.Value))
-		local multiplierBase = deliveryCoins + gradeBonus + modifierBonus
+		-- The core script publishes the exact reward earned by this job before
+		-- whole-shift and rumor/meta rewards. This prevents unrelated wallet
+		-- changes from being multiplied by FINAL RUN.
+		local rewardSerial = tonumber(player:GetAttribute("NightDeliveryLastRewardSerial"))
+		local coreReward = rewardSerial == order.jobSerial
+			and math.max(0, tonumber(player:GetAttribute("NightDeliveryLastRewardBase")) or 0)
+			or 0
+		local multiplierBase = coreReward + gradeBonus + modifierBonus
 		finalRunBonus = math.floor(multiplierBase * (FINAL_RUN_MULTIPLIER - 1))
 	end
 
