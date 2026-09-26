@@ -1880,13 +1880,13 @@ local function offerDifficulty(house, distance, cargo)
 end
 
 local OFFER_HOUSE_LABELS = {
-	Construction = "Construction Site", HighRise = "High Rise", BlockedAlley = "Back Alley",
-	WarehouseRoute = "Warehouse", RooftopGap = "Rooftop", ApartmentStairs = "Apartment",
-	ParkingDeck = "Parking Deck", FactoryCatwalk = "Factory Catwalk",
-	JapaneseRoofRun = "Japanese Roof", WesternBalcony = "Western Balcony",
-	ShowaFireEscape = "Showa Fire Escape", LuxuryGardenWall = "Luxury Garden",
-	HarborContainerRun = "Harbor Containers", MountainBridge = "Mountain Bridge",
-	DanchiCorridor = "Danchi Corridor",
+	Construction = "工事中住宅", HighRise = "高層ビル", BlockedAlley = "路地裏",
+	WarehouseRoute = "倉庫上階", RooftopGap = "屋根渡り", ApartmentStairs = "アパート",
+	ParkingDeck = "立体駐車場", FactoryCatwalk = "工場上部",
+	JapaneseRoofRun = "日本家屋の屋根", WesternBalcony = "洋館バルコニー",
+	ShowaFireEscape = "昭和ビル非常階段", LuxuryGardenWall = "高級邸宅の庭園",
+	HarborContainerRun = "港のコンテナ", MountainBridge = "山間の木橋",
+	DanchiCorridor = "団地の外廊下",
 }
 
 local function offerPublicData(offer)
