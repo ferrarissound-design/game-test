@@ -188,16 +188,27 @@ rivalHint.TextTruncate = Enum.TextTruncate.AtEnd
 rivalHint.ZIndex = 25
 
 local lastRivalRank = nil
+local lastRivalScores = {}
 local RIVAL_NEAR_DISTANCE = 75
 
 local function buildRivalStandings()
 	local standings = {}
 	for _, otherPlayer in ipairs(Players:GetPlayers()) do
-		if otherPlayer:GetAttribute("NightShiftActive") == true then
+		local active = otherPlayer:GetAttribute("NightShiftActive") == true
+		local deliveries = tonumber(otherPlayer:GetAttribute("NightShiftDeliveries")) or 0
+		local target = tonumber(otherPlayer:GetAttribute("NightShiftTarget")) or 6
+		local shiftNumber = tonumber(otherPlayer:GetAttribute("NightShiftNumber")) or 0
+		local completed = shiftNumber > 0 and deliveries >= target
+
+		-- Keep a finished courier's score on the board until they begin their next
+		-- shift. Finishing first must not make the leader disappear.
+		if active or completed then
 			table.insert(standings, {
 				player = otherPlayer,
 				coins = tonumber(otherPlayer:GetAttribute("NightShiftCoinsEarned")) or 0,
-				deliveries = tonumber(otherPlayer:GetAttribute("NightShiftDeliveries")) or 0,
+				deliveries = deliveries,
+				active = active,
+				completed = completed,
 			})
 		end
 	end
@@ -211,22 +222,26 @@ end
 
 local function updateRivalBoard()
 	local standings = buildRivalStandings()
-	if player:GetAttribute("NightShiftActive") ~= true or #standings < 2 then
+	if #standings < 2 then
 		rivalFrame.Visible = false
 		lastRivalRank = nil
+		lastRivalScores = {}
 		return
 	end
 
 	local localRank = nil
+	local localEntry = nil
 	for index, entry in ipairs(standings) do
 		if entry.player == player then
 			localRank = index
+			localEntry = entry
 			break
 		end
 	end
-	if not localRank then
+	if not localRank or not localEntry then
 		rivalFrame.Visible = false
 		lastRivalRank = nil
+		lastRivalScores = {}
 		return
 	end
 
@@ -243,7 +258,8 @@ local function updateRivalBoard()
 		local item = shown[index]
 		if item then
 			local marker = item.entry.player == player and "YOU" or item.entry.player.DisplayName
-			row.Text = string.format("%d  %-10s  %dC  %d件", item.rank, marker, item.entry.coins, item.entry.deliveries)
+			local finishMark = item.entry.completed and " ✓" or ""
+			row.Text = string.format("%d  %-10s  %dC  %d件%s", item.rank, marker, item.entry.coins, item.entry.deliveries, finishMark)
 			row.TextColor3 = item.entry.player == player
 				and Color3.fromRGB(255, 221, 132) or Color3.fromRGB(229, 235, 244)
 			row.Visible = true
@@ -252,23 +268,37 @@ local function updateRivalBoard()
 		end
 	end
 
+	-- A rank can also change because someone finished, left, or restarted a shift.
+	-- Only call it an overtake when the relevant courier actually increased Coins.
 	if lastRivalRank and lastRivalRank ~= localRank then
-		if localRank < lastRivalRank then
+		local previousLocalCoins = lastRivalScores[player.UserId]
+		if localRank < lastRivalRank
+			and previousLocalCoins ~= nil
+			and localEntry.coins > previousLocalCoins then
 			local passed = standings[math.min(localRank + 1, #standings)]
 			announceShift(string.format("▲ %d位！ %sを抜いた", localRank, passed and passed.player.DisplayName or "ライバル"))
-		else
+		elseif localRank > lastRivalRank then
 			local passer = standings[math.max(localRank - 1, 1)]
-			announceShift(string.format("▼ %sに抜かれた！ %d位", passer and passer.player.DisplayName or "ライバル", localRank))
+			local previousPasserCoins = passer and lastRivalScores[passer.player.UserId] or nil
+			if passer and previousPasserCoins ~= nil and passer.coins > previousPasserCoins then
+				announceShift(string.format("▼ %sに抜かれた！ %d位", passer.player.DisplayName, localRank))
+			end
 		end
 	end
 	lastRivalRank = localRank
+
+	local newScores = {}
+	for _, entry in ipairs(standings) do
+		newScores[entry.player.UserId] = entry.coins
+	end
+	lastRivalScores = newScores
 
 	local root = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
 	local nearestPlayer = nil
 	local nearestDistance = math.huge
 	if root then
 		for _, entry in ipairs(standings) do
-			if entry.player ~= player then
+			if entry.player ~= player and entry.active then
 				local otherRoot = entry.player.Character and entry.player.Character:FindFirstChild("HumanoidRootPart")
 				if otherRoot then
 					local distance = (otherRoot.Position - root.Position).Magnitude
@@ -277,6 +307,7 @@ local function updateRivalBoard()
 						nearestPlayer = entry.player
 					end
 				end
+			end
 		end
 	end
 
@@ -284,11 +315,11 @@ local function updateRivalBoard()
 		rivalHint.Text = string.format("RIVAL NEARBY  %s  %dstuds", nearestPlayer.DisplayName, math.floor(nearestDistance))
 	elseif localRank > 1 then
 		local ahead = standings[localRank - 1]
-		local gap = math.max(0, ahead.coins - standings[localRank].coins)
+		local gap = math.max(0, ahead.coins - localEntry.coins)
 		rivalHint.Text = string.format("TARGET  %s  あと%dC", ahead.player.DisplayName, gap)
 	elseif #standings > 1 then
 		local second = standings[2]
-		local lead = math.max(0, standings[1].coins - second.coins)
+		local lead = math.max(0, localEntry.coins - second.coins)
 		rivalHint.Text = string.format("LEADING  %sに%dC差", second.player.DisplayName, lead)
 	else
 		rivalHint.Text = ""
