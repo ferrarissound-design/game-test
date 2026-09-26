@@ -41,7 +41,7 @@ header.TextColor3 = Color3.fromRGB(255, 212, 132)
 header.Font = Enum.Font.GothamBold
 header.TextSize = 18
 header.TextWrapped = true
-header.Text = "DISPATCH BOARD  •  Choose a job"
+header.Text = "DISPATCH BOARD\n配達を選ぼう"
 header.Parent = board
 
 local closeButton = Instance.new("TextButton")
@@ -86,6 +86,26 @@ local function closeOffers()
 end
 closeButton.Activated:Connect(closeOffers)
 
+local DISTANCE_LABELS = {
+	Near = "近い",
+	Far = "遠い",
+}
+
+local DIFFICULTY_LABELS = {
+	Easy = "かんたん",
+	Normal = "ふつう",
+	Difficult = "むずかしい",
+	Story = "おはなし",
+}
+
+local function localizedDistance(value)
+	return DISTANCE_LABELS[tostring(value)] or tostring(value or "近い")
+end
+
+local function localizedDifficulty(value)
+	return DIFFICULTY_LABELS[tostring(value)] or tostring(value or "かんたん")
+end
+
 local function label(parent, value, position, size, fontSize, bold)
 	local text = Instance.new("TextLabel")
 	text.BackgroundTransparency = 1
@@ -107,7 +127,7 @@ local function show(payload)
 	if currentSerial == payload.serial and accepting then return end
 	currentSerial = payload.serial
 	accepting = false
-	header.Text = payload.lastDelivery and "LAST DELIVERY\nChoose your final job." or "DISPATCH BOARD  •  Choose a job"
+	header.Text = payload.lastDelivery and "LAST DELIVERY\n最後の配達を選ぼう" or "DISPATCH BOARD\n配達を選ぼう"
 	for _, child in ipairs(cards:GetChildren()) do
 		if child ~= layout then child:Destroy() end
 	end
@@ -122,14 +142,14 @@ local function show(payload)
 		local corner = Instance.new("UICorner")
 		corner.CornerRadius = UDim.new(0, 9)
 		corner.Parent = card
-		label(card, tostring(offer.location or "Residential"), UDim2.fromOffset(11, 5), UDim2.new(1, -115, 0, 22), 15, true)
+		label(card, tostring(offer.location or "住宅街"), UDim2.fromOffset(11, 5), UDim2.new(1, -115, 0, 22), 15, true)
 		local rewardText = string.format("%d Coins", tonumber(offer.baseReward) or 0)
 		if (tonumber(offer.cargoReward) or 0) > 0 then
 			rewardText ..= string.format(" + 条件%d", tonumber(offer.cargoReward) or 0)
 		end
-		label(card, string.format("%s  •  %s", rewardText, tostring(offer.distance or "Near")),
+		label(card, string.format("%s  •  %s", rewardText, localizedDistance(offer.distance)),
 			UDim2.fromOffset(11, 31), UDim2.new(1, -115, 0, 20), 13, true)
-		local detailText = string.format("%s  •  %s", tostring(offer.cargo or "Normal"), tostring(offer.difficulty or "Easy"))
+		local detailText = string.format("%s  •  %s", tostring(offer.cargo or "通常"), localizedDifficulty(offer.difficulty))
 		if (tonumber(offer.walkingBonus) or 0) > 0 then
 			detailText ..= string.format("  •  徒歩+%d", tonumber(offer.walkingBonus) or 0)
 		end
@@ -142,7 +162,7 @@ local function show(payload)
 		accept.TextColor3 = Color3.fromRGB(18, 24, 34)
 		accept.Font = Enum.Font.GothamBold
 		accept.TextSize = 13
-		accept.Text = "ACCEPT"
+		accept.Text = "これにする"
 		accept.Parent = card
 		local buttonCorner = Instance.new("UICorner")
 		buttonCorner.CornerRadius = UDim.new(0, 7)
@@ -156,7 +176,7 @@ local function show(payload)
 			task.delay(2, function()
 				if currentSerial == payload.serial and player:GetAttribute("JobOffersActive") == true then
 					accepting = false
-					accept.Text = "ACCEPT"
+					accept.Text = "これにする"
 				end
 			end)
 		end)
@@ -211,7 +231,7 @@ event.OnClientEvent:Connect(function(action, payload)
 		for _, card in ipairs(cards:GetChildren()) do
 			if card:IsA("Frame") then
 				local button = card:FindFirstChildOfClass("TextButton")
-				if button then button.Text = "ACCEPT" end
+				if button then button.Text = "これにする" end
 			end
 		end
 	elseif action == "JobAssigned" or action == "NightShiftComplete" then hide() end
