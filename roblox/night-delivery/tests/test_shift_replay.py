@@ -197,6 +197,9 @@ return {
     def test_replay_legacy_data_rank_cap_and_idempotent_collections(self):
         self.assertEqual(self.replay.rank(0)[0], 1)
         self.assertEqual(self.replay.rank(2)[1].name, "夜勤見習い")
+        self.assertEqual(self.replay.rank(2)[1].reward, "自転車アクセント：ブルー")
+        self.assertEqual(self.replay.rank(5)[1].reward, "自転車アクセント：アンバー")
+        self.assertEqual(self.replay.rank(12)[1].reward, "自転車アクセント：ゴールド")
         self.assertEqual(self.replay.rank(999999)[1].name, "NIGHT COURIER")
         themes = self.replay.markTheme(None, "japanese", False)
         self.assertTrue(themes.japanese.visited)
@@ -220,10 +223,13 @@ local playerJobs, playerJobOffers = {}, {}
 local cf = setmetatable({}, {__mul=function() return {} end})
 local jobCounterRef = {CFrame=cf}
 local JOB_COUNTER_INTERACTION_RANGE = 14
+local SHIFT_TARGET = 6
+local SHIFT_RULES = {DefaultEquipment='thermal'}
 local CFrame = {new=function() return cf end}
 local function requirePlayerReady(p) return p.ready end
 local function fixture()
-    local a={NightShiftActive=false, NightShiftResultPending=true}
+    local a={NightShiftActive=false, NightShiftResultPending=true, NightShiftDeliveries=6,
+        NightShiftPhase='FinalRun', NightShiftEquipment='checklist'}
     local c={FindFirstChild=function(_, name) return name=='HumanoidRootPart' and {} or nil end,
         FindFirstChildOfClass=function() return {Health=100} end,
         PivotTo=function(self) self.returned=true end}
@@ -242,6 +248,10 @@ return {fixture=fixture, ack=ack, jobs=playerJobs, offers=playerJobOffers}
         api.ack(p)
         self.assertFalse(bool(p.Character.returned))
         p.attrs.NightShiftActive = False
+        p.attrs.NightShiftDeliveries = 5
+        api.ack(p)
+        self.assertFalse(bool(p.Character.returned))
+        p.attrs.NightShiftDeliveries = 6
         api.jobs[p] = self.lua.table_from({})
         api.ack(p)
         self.assertFalse(bool(p.Character.returned))
@@ -250,10 +260,46 @@ return {fixture=fixture, ack=ack, jobs=playerJobs, offers=playerJobOffers}
         api.ack(p)
         self.assertFalse(bool(p.Character.returned))
         p.attrs.NightDeliveryNextStopPending = False
+        p.attrs.JobOffersActive = True
+        api.ack(p)
+        self.assertFalse(bool(p.Character.returned))
+        p.attrs.JobOffersActive = False
         api.ack(p)
         self.assertTrue(p.Character.returned)
-        api.ack(p)
+        self.assertEqual(p.attrs.NightShiftPhase, 'EarlyNight')
+        self.assertEqual(p.attrs.NightShiftDeliveries, 0)
+        self.assertEqual(p.attrs.NightShiftEquipment, 'thermal')
         self.assertFalse(bool(p.attrs.NightShiftResultPending))
+        p.Character.returned = False
+        api.ack(p)
+        self.assertFalse(bool(p.Character.returned))
+
+    def test_rank_change_recolors_existing_bike_without_replacing_style(self):
+        text = source("src/ServerScriptService/NightDelivery.server.lua")
+        snippet = text[text.index("local BIKE_ACCENT_PARTS = {"):text.index("local function addBikeVisual(player)")]
+        api = self.lua.execute('''
+local REPLAY = TEST_REPLAY
+local Color3 = {fromRGB=function(r,g,b) return r..','..g..','..b end}
+''' + snippet + '''
+return {refresh=refreshBikeAccent, color=courierAccentColor}
+''')
+        accent = self.lua.table_from({"Name": "Handlebar", "Color": "old"})
+        frame = self.lua.table_from({"Name": "FrameTopTube", "Color": "purchased-style"})
+        for part in [accent, frame]:
+            part.IsA = lambda *args: args[-1] == "BasePart"
+        visual = self.lua.table_from({"GetDescendants": lambda _: self.lua.table_from([accent, frame])})
+        character = self.lua.table_from({"marker": "original character", "FindFirstChild": lambda _, name: visual if name == "DeliveryBikeVisual" else None})
+        attrs = {"ShiftWins": 1, "BikeActive": True, "BikeStyleLevel": 3}
+        player = self.lua.table_from({"Character": character, "GetAttribute": lambda _, key: attrs.get(key)})
+        api.refresh(player)
+        attrs["ShiftWins"] = 2
+        api.refresh(player)
+        self.assertEqual(accent.Color, "139,203,238")
+        self.assertEqual(frame.Color, "purchased-style")
+        self.assertEqual(player.Character.marker, "original character")
+        self.assertTrue(attrs["BikeActive"])
+        player.Character = None
+        api.refresh(player)
 
     def test_acceptance_validation_and_equipment_lock(self):
         text = source("src/ServerScriptService/NightDelivery.server.lua")
