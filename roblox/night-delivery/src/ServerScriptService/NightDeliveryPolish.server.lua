@@ -45,6 +45,7 @@ local SESSION_MISSIONS = {
 }
 
 local ORDER_MODIFIERS = require(script.Parent:WaitForChild("NightDeliveryCargoModifiers"))
+local SHIFT_RULES = require(ReplicatedStorage:WaitForChild("NightDeliveryShiftRules"))
 
 local playerState = {}
 local getStats
@@ -75,7 +76,7 @@ local function trackNightShift(player, grade, elapsed, earnedBonus)
 			number = player:GetAttribute("NightShiftNumber") or 1,
 			deliveries = 0, perfect = 0, good = 0, poor = 0,
 			events = 0, destinationSuccess = 0, combo = 0, maxCombo = 0,
-			bestTime = nil,
+			bestTime = nil, totalDeliverySeconds = 0,
 		}
 		state.shift = shift
 	end
@@ -93,6 +94,7 @@ local function trackNightShift(player, grade, elapsed, earnedBonus)
 		shift.combo = 0
 	end
 	shift.bestTime = math.min(shift.bestTime or math.huge, elapsed)
+	shift.totalDeliverySeconds += elapsed
 	shift.events = player:GetAttribute("NightShiftTravelEvents") or 0
 	if player:GetAttribute("NightShiftLastDestinationSuccess") == true then
 		shift.destinationSuccess += 1
@@ -113,6 +115,9 @@ local function trackNightShift(player, grade, elapsed, earnedBonus)
 		phase = phase, combo = shift.combo, comboBonus = comboBonus,
 	})
 	if shift.deliveries >= SHIFT_TARGET_DELIVERIES then
+		local record, comparison = SHIFT_RULES.completeRecord(
+			SHIFT_RULES.readRecord(player), shift.perfect, shift.totalDeliverySeconds)
+		SHIFT_RULES.writeRecord(player, record)
 		player:SetAttribute("NightShiftActive", false)
 		player:SetAttribute("NightShiftResultPending", true)
 		deliveryEvent:FireClient(player, "NightShiftComplete", {
@@ -122,6 +127,8 @@ local function trackNightShift(player, grade, elapsed, earnedBonus)
 			oddities = player:GetAttribute("NightShiftOddities") or 0,
 			kindness = player:GetAttribute("NightShiftKindnessGained") or 0,
 			bestTime = shift.bestTime, maxCombo = shift.maxCombo, coins = earned,
+			totalDeliverySeconds = shift.totalDeliverySeconds, comparison = comparison,
+			equipmentId = player:GetAttribute("NightShiftEquipment"),
 			rank = rankShift(shift), startedAt = player:GetAttribute("NightShiftStartedAt"),
 		})
 		state.shift = nil
@@ -195,12 +202,12 @@ local function modifierSucceeded(modifier, grade, elapsed, order)
 	end
 	if modifier.id == "fragile" and order.jumpDamaged then
 		return false
-	elseif modifier.id == "frozen" and elapsed > 35 then
+	elseif modifier.id == "frozen" and elapsed > SHIFT_RULES.temperatureLimit(order.equipmentId, "frozen") then
 		return false
-	elseif modifier.id == "hot" and elapsed > 30 then
+	elseif modifier.id == "hot" and elapsed > SHIFT_RULES.temperatureLimit(order.equipmentId, "hot") then
 		return false
 	end
-	return (GRADE_ORDER[grade] or 1) >= (GRADE_ORDER[modifier.minGrade] or 1)
+	return (GRADE_ORDER[grade] or 1) >= (GRADE_ORDER[SHIFT_RULES.requiredGrade(order.equipmentId, modifier)] or 1)
 end
 
 local function buildMissionState(state)
@@ -273,13 +280,21 @@ local function attachFragileMonitor(player, order)
 	if not humanoid then
 		return
 	end
+	order.airborne = false
+	local initialState = humanoid:GetState()
+	if initialState == Enum.HumanoidStateType.Jumping or initialState == Enum.HumanoidStateType.Freefall then
+		SHIFT_RULES.observeAirborne(order, true)
+	end
 	order.jumpConnection = humanoid.StateChanged:Connect(function(_, newState)
 		local state = playerState[player]
 		if not state or state.activeOrder ~= order then
 			return
 		end
 		if newState == Enum.HumanoidStateType.Jumping or newState == Enum.HumanoidStateType.Freefall then
-			order.jumpDamaged = true
+			SHIFT_RULES.observeAirborne(order, true)
+		elseif newState == Enum.HumanoidStateType.Landed or newState == Enum.HumanoidStateType.Running
+			or newState == Enum.HumanoidStateType.Swimming or newState == Enum.HumanoidStateType.Climbing then
+			SHIFT_RULES.observeAirborne(order, false)
 		end
 	end)
 end
@@ -332,16 +347,18 @@ local function prepareOrderFromAttributes(player)
 
 	local requestedModifierId = player:GetAttribute("NightDeliveryRequestedModifier")
 	local modifier = findModifier(requestedModifierId) or chooseModifier()
+	local equipmentId = player:GetAttribute("NightShiftEquipment") or SHIFT_RULES.DefaultEquipment
 	local publicModifier = {
 		jobSerial = jobSerial,
 		id = modifier.id,
-		title = modifier.title,
-		description = modifier.description,
+		title = SHIFT_RULES.modifierTitle(equipmentId, modifier),
+		description = SHIFT_RULES.modifierDescription(equipmentId, modifier),
 		reward = modifier.reward,
-		minGrade = modifier.minGrade,
+		minGrade = SHIFT_RULES.requiredGrade(equipmentId, modifier),
 	}
 
 	state.preparedOrder = {
+		equipmentId = equipmentId,
 		jobSerial = jobSerial,
 		jobTypeId = jobTypeId,
 		houseName = houseName,
@@ -384,6 +401,7 @@ local function startPreparedOrder(player)
 		disconnectJumpMonitor(state.activeOrder)
 	end
 	local order = {
+		equipmentId = prepared.equipmentId,
 		baselineDeliveries = deliveries.Value,
 		startedAt = startedAt,
 		timeLimit = timeLimit,
@@ -443,7 +461,7 @@ local function finishTrackedOrder(player)
 	local elapsed = math.max(0, os.clock() - order.startedAt)
 	local timeLimit = order.timeLimit or JOB_LIMITS[order.jobTypeId] or JOB_LIMITS.standard
 	local grade = calculateGrade(elapsed, timeLimit)
-	if order.modifier.id == "frozen" and elapsed > 35 then
+	if order.modifier.id == "frozen" and elapsed > SHIFT_RULES.temperatureLimit(order.equipmentId, "frozen") then
 		grade = ({S = "A", A = "B", B = "C", C = "C"})[grade] or "C"
 	end
 	if order.modifier.id == "fragile" and order.jumpDamaged then
@@ -479,7 +497,7 @@ local function finishTrackedOrder(player)
 		timeLimit = timeLimit,
 		gradeBonus = gradeBonus,
 		modifierId = order.modifier.id,
-		modifierTitle = order.modifier.title,
+		modifierTitle = order.publicModifier.title,
 		modifierBonus = modifierBonus,
 		modifierSucceeded = modifierBonus > 0,
 		finalRunBonus = finalRunBonus,

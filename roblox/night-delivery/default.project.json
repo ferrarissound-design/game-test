@@ -4,6 +4,9 @@
     "$className": "DataModel",
     "ReplicatedStorage": {
       "$className": "ReplicatedStorage",
+      "NightDeliveryShiftRules": {
+        "$path": "src/ReplicatedStorage/NightDeliveryShiftRules.lua"
+      },
       "NightDeliveryDogAppearance": {
         "$path": "src/ReplicatedStorage/NightDeliveryDogAppearance.lua"
       }
