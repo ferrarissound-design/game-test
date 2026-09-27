@@ -13,9 +13,9 @@ Rules.Oddities = {
 }
 Rules.Ranks = {
 	{wins = 0, name = "新人配達員", reward = "配達員の記録"},
-	{wins = 2, name = "夜勤見習い", reward = "自転車の青い反射板"},
-	{wins = 5, name = "夜道の配達員", reward = "自転車の琥珀色の反射板"},
-	{wins = 12, name = "ベテラン", reward = "自転車の金色の反射板"},
+	{wins = 2, name = "夜勤見習い", reward = "自転車アクセント：ブルー"},
+	{wins = 5, name = "夜道の配達員", reward = "自転車アクセント：アンバー"},
+	{wins = 12, name = "ベテラン", reward = "自転車アクセント：ゴールド"},
 	{wins = 25, name = "NIGHT COURIER", reward = "NIGHT COURIERの称号"},
 }
 
