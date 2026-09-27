@@ -1356,6 +1356,6 @@ task.spawn(function()
 			local road = world:FindFirstChild(roadName)
 			if road and road:IsA("BasePart") then road.Reflectance = wet and 0.12 or 0 end
 		end
-		task.wait(2.5)
+		task.wait(destination ~= "" and 0.5 or 3)
 	end
 end)
