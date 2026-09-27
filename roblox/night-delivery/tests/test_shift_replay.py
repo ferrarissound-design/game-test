@@ -45,6 +45,8 @@ class ShiftReplayTests(unittest.TestCase):
         self.lua = LuaRuntime(unpack_returned_tuples=True)
         self.rules = self.lua.execute(source("src/ReplicatedStorage/NightDeliveryShiftRules.lua"))
         self.lua.globals().TEST_RULES = self.rules
+        self.replay = self.lua.execute(lower_updates(source("src/ReplicatedStorage/NightDeliveryReplayRules.lua")))
+        self.lua.globals().TEST_REPLAY = self.replay
         self.lua.globals().TEST_MODIFIERS = self.lua.execute(source("src/ServerScriptService/NightDeliveryCargoModifiers.lua"))
 
     def test_all_luau_syntax_and_rojo_mapping(self):
@@ -53,6 +55,8 @@ class ShiftReplayTests(unittest.TestCase):
         project = json.loads(source("default.project.json"))
         mapped = project["tree"]["ReplicatedStorage"]["NightDeliveryShiftRules"]["$path"]
         self.assertTrue((ROOT / mapped).is_file())
+        replay_path = project["tree"]["ReplicatedStorage"]["NightDeliveryReplayRules"]["$path"]
+        self.assertTrue((ROOT / replay_path).is_file())
 
     def test_airborne_episode_and_respawn_do_not_refill_protection(self):
         order = self.lua.table_from({"equipmentId": "cushion"})
@@ -90,8 +94,15 @@ class ShiftReplayTests(unittest.TestCase):
         text = text[text.index("local JOB_LIMITS"):text.index("local function initializePlayer")]
         text = text.replace('require(script.Parent:WaitForChild("NightDeliveryCargoModifiers"))', 'TEST_MODIFIERS')
         text = text.replace('require(ReplicatedStorage:WaitForChild("NightDeliveryShiftRules"))', 'TEST_RULES')
+        text = text.replace('require(ReplicatedStorage:WaitForChild("NightDeliveryReplayRules"))', 'TEST_REPLAY')
         prelude = '''
 local RunService = {IsStudio = function() return false end}
+local WORLD_NAME = 'NightDeliveryWorld'
+local workspace = {FindFirstChild=function() return {GetAttribute=function(_, key)
+    return key=='ThemeId' and 'japanese' or '日本住宅街'
+end} end, NightDeliveryWorld={GetAttribute=function(_, key)
+    return key=='ThemeId' and 'japanese' or '日本住宅街'
+end}}
 local sent = {}
 local deliveryEvent = {FireClient = function(_, player, action, payload)
     table.insert(sent, {action=action, payload=payload})
@@ -177,10 +188,72 @@ return {
         self.assertFalse(attrs.NightShiftActive)
         self.assertTrue(attrs.NightShiftResultPending)
         self.assertEqual(attrs.NightShiftRecordCount, 1)
+        self.assertTrue(attrs.ThemeCompleted_japanese)
         self.assertEqual(attrs.NightShiftLastSeconds, 120)
         self.assertEqual(attrs.NightShiftBestPerfect, 6)
         api.track(p, "S", 20, 0)
         self.assertEqual(attrs.NightShiftRecordCount, 1)
+
+    def test_replay_legacy_data_rank_cap_and_idempotent_collections(self):
+        self.assertEqual(self.replay.rank(0)[0], 1)
+        self.assertEqual(self.replay.rank(2)[1].name, "夜勤見習い")
+        self.assertEqual(self.replay.rank(999999)[1].name, "NIGHT COURIER")
+        themes = self.replay.markTheme(None, "japanese", False)
+        self.assertTrue(themes.japanese.visited)
+        self.assertFalse(themes.japanese.completed)
+        themes = self.replay.markTheme(themes, "japanese", True)
+        themes = self.replay.markTheme(themes, "japanese", False)
+        self.assertTrue(themes.japanese.completed)
+        self.assertEqual(self.replay.completedCount(themes), 1)
+        self.assertEqual(self.replay.completedCount(self.replay.markTheme(themes, "forged", True)), 1)
+        found = self.replay.markOddity(None, "silent_house")
+        found = self.replay.markOddity(found, "silent_house")
+        found = self.replay.markOddity(found, "forged")
+        self.assertTrue(found.silent_house)
+        self.assertIsNone(found.forged)
+
+    def test_return_to_depot_rejects_partial_or_active_state(self):
+        text = source("src/ServerScriptService/NightDelivery.server.lua")
+        body = text.split('\telseif action == "AcknowledgeNightShift" then', 1)[1].split('\telseif action == "AcceptSideJob"', 1)[0]
+        api = self.lua.execute('''
+local playerJobs, playerJobOffers = {}, {}
+local cf = setmetatable({}, {__mul=function() return {} end})
+local jobCounterRef = {CFrame=cf}
+local JOB_COUNTER_INTERACTION_RANGE = 14
+local CFrame = {new=function() return cf end}
+local function requirePlayerReady(p) return p.ready end
+local function fixture()
+    local a={NightShiftActive=false, NightShiftResultPending=true}
+    local c={FindFirstChild=function(_, name) return name=='HumanoidRootPart' and {} or nil end,
+        FindFirstChildOfClass=function() return {Health=100} end,
+        PivotTo=function(self) self.returned=true end}
+    local p={attrs=a, Character=c, ready=true}
+    function p:GetAttribute(k) return self.attrs[k] end
+    function p:SetAttribute(k, v) self.attrs[k]=v end
+    return p
+end
+local function ack(player)
+''' + body + '''
+end
+return {fixture=fixture, ack=ack, jobs=playerJobs, offers=playerJobOffers}
+''')
+        p = api.fixture()
+        p.attrs.NightShiftActive = True
+        api.ack(p)
+        self.assertFalse(bool(p.Character.returned))
+        p.attrs.NightShiftActive = False
+        api.jobs[p] = self.lua.table_from({})
+        api.ack(p)
+        self.assertFalse(bool(p.Character.returned))
+        api.jobs[p] = None
+        p.attrs.NightDeliveryNextStopPending = True
+        api.ack(p)
+        self.assertFalse(bool(p.Character.returned))
+        p.attrs.NightDeliveryNextStopPending = False
+        api.ack(p)
+        self.assertTrue(p.Character.returned)
+        api.ack(p)
+        self.assertFalse(bool(p.attrs.NightShiftResultPending))
 
     def test_acceptance_validation_and_equipment_lock(self):
         text = source("src/ServerScriptService/NightDelivery.server.lua")

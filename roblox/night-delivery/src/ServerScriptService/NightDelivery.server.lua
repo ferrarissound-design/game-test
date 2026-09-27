@@ -13,6 +13,26 @@ local RULES = require(script.Parent:WaitForChild("NightDeliveryRules"))
 local HOUSE_TYPES = require(script.Parent:WaitForChild("NightDeliveryHouseTypes"))
 local CARGO_MODIFIERS = require(script.Parent:WaitForChild("NightDeliveryCargoModifiers"))
 local SHIFT_RULES = require(ReplicatedStorage:WaitForChild("NightDeliveryShiftRules"))
+local REPLAY = require(ReplicatedStorage:WaitForChild("NightDeliveryReplayRules"))
+
+local function readThemeProgress(player)
+	local progress = {}
+	for _, theme in ipairs(REPLAY.Themes) do
+		progress[theme.id] = {
+			visited = player:GetAttribute("ThemeVisited_" .. theme.id) == true,
+			completed = player:GetAttribute("ThemeCompleted_" .. theme.id) == true,
+		}
+	end
+	return REPLAY.cleanThemes(progress)
+end
+
+local function readOddityProgress(player)
+	local progress = {}
+	for _, oddity in ipairs(REPLAY.Oddities) do
+		progress[oddity.id] = player:GetAttribute("OddityFound_" .. oddity.id) == true
+	end
+	return REPLAY.cleanOddities(progress)
+end
 
 local REMOTE_NAME = "NightDeliveryEvent"
 local WORLD_NAME = "NightDeliveryWorld"
@@ -1514,6 +1534,10 @@ local function addBikeVisual(player)
 	local headJoint = Vector3.new(0, -0.77, -0.59)
 	local frameColor = style.color
 	local trimColor = Color3.fromRGB(190, 202, 210)
+	local courierRank = REPLAY.rank(player:GetAttribute("ShiftWins"))
+	if courierRank >= 4 then trimColor = Color3.fromRGB(245, 202, 106)
+	elseif courierRank >= 3 then trimColor = Color3.fromRGB(235, 173, 112)
+	elseif courierRank >= 2 then trimColor = Color3.fromRGB(139, 203, 238) end
 	local rubberColor = Color3.fromRGB(31, 34, 39)
 
 	-- Narrow cylinders run along the bicycle's left-right axis, leaving both wheels upright.
@@ -2780,6 +2804,10 @@ local function completeDelivery(player, houseName)
 	job.completedHouseNames[houseName] = true
 	local shift = playerShiftOddities[player]
 	if shift then shift.visited[houseName] = true end
+	-- Only a delivered oddity is discovered; simply accepting an offer is not enough.
+	if job.oddityId and player:GetAttribute("OddityFound_" .. job.oddityId) ~= true then
+		player:SetAttribute("OddityFound_" .. job.oddityId, true)
+	end
 	local hasNextStops = type(job.extraStops) == "table" and #job.extraStops > 0
 	job.sideOffer = nil
 	if hasNextStops then
@@ -3151,6 +3179,8 @@ local function loadData(player)
 		neighborhoodKindness = 0,
 		pendingNeighborhoodStory = nil,
 		shiftRecord = SHIFT_RULES.cleanRecord(nil),
+		worldThemeProgress = {},
+		oddityDiscovery = {},
 	}
 	if not DELIVERY_STORE then
 		return defaultData, false
@@ -3180,6 +3210,8 @@ local function loadData(player)
 		defaultData.rumorClueLevel = math.clamp(tonumber(data.rumorClueLevel) or 0, 0, #RUMOR_CLUES)
 		defaultData.neighborhoodKindness = math.max(0, tonumber(data.neighborhoodKindness) or 0)
 		defaultData.shiftRecord = SHIFT_RULES.cleanRecord(data.shiftRecord)
+		defaultData.worldThemeProgress = REPLAY.cleanThemes(data.worldThemeProgress)
+		defaultData.oddityDiscovery = REPLAY.cleanOddities(data.oddityDiscovery)
 		if type(data.pendingNeighborhoodStory) == "table" then
 			local sourceId = tostring(data.pendingNeighborhoodStory.sourceId or "")
 			local targetHouseName = tostring(data.pendingNeighborhoodStory.targetHouseName or "")
@@ -3237,6 +3269,8 @@ local function saveData(player)
 		rumorClueLevel = player:GetAttribute("NightDeliveryRumorClueLevel") or 0,
 		neighborhoodKindness = player:GetAttribute("NeighborhoodKindness") or 0,
 		shiftRecord = SHIFT_RULES.readRecord(player),
+		worldThemeProgress = readThemeProgress(player),
+		oddityDiscovery = readOddityProgress(player),
 		pendingNeighborhoodStory = pendingNeighborhoodStory and {
 			sourceId = pendingNeighborhoodStory.sourceId,
 			targetHouseName = pendingNeighborhoodStory.targetHouseName,
@@ -3565,8 +3599,17 @@ deliveryEvent.OnServerEvent:Connect(function(player, action, payload)
 		end
 		return
 	elseif action == "AcknowledgeNightShift" then
-		if player:GetAttribute("NightShiftActive") == false and player:GetAttribute("NightShiftResultPending") == true then
+		if requirePlayerReady(player) and player:GetAttribute("NightShiftActive") == false
+			and player:GetAttribute("NightShiftResultPending") == true
+			and not playerJobs[player] and not playerJobOffers[player]
+			and player:GetAttribute("NightDeliveryNextStopPending") ~= true then
 			player:SetAttribute("NightShiftResultPending", false)
+			local character = player.Character
+			local root = character and character:FindFirstChild("HumanoidRootPart")
+			local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+			if root and humanoid and humanoid.Health > 0 and jobCounterRef then
+				character:PivotTo(jobCounterRef.CFrame * CFrame.new(0, 4, -9))
+			end
 		end
 		return
 	elseif action == "AcceptSideJob" or action == "IgnoreSideJob" then
@@ -3903,6 +3946,15 @@ local function setupPlayer(player)
 	player:SetAttribute("BagStyleLevel", data.bagStyleLevel)
 	player:SetAttribute("BikeStyleLevel", data.bikeStyleLevel)
 	player:SetAttribute("ShiftWins", data.shiftWins)
+	for _, theme in ipairs(REPLAY.Themes) do
+		local previous = data.worldThemeProgress[theme.id]
+		player:SetAttribute("ThemeVisited_" .. theme.id,
+			theme.id == selectedWorldTheme.id or (previous and previous.visited == true) or false)
+		player:SetAttribute("ThemeCompleted_" .. theme.id, previous and previous.completed == true or false)
+	end
+	for _, oddity in ipairs(REPLAY.Oddities) do
+		player:SetAttribute("OddityFound_" .. oddity.id, data.oddityDiscovery[oddity.id] == true)
+	end
 	player:SetAttribute("NightDeliveryRumorClueLevel", data.rumorClueLevel)
 	player:SetAttribute("NeighborhoodKindness", data.neighborhoodKindness or 0)
 	playerPendingNeighborhoodStory[player] = nil
@@ -3944,6 +3996,13 @@ local function setupPlayer(player)
 	end
 
 	player:SetAttribute("NightDeliveryReady", true)
+	-- Persist the completed night while its result is still on screen; the normal
+	-- autosave and leave-save remain the fallback for transient DataStore errors.
+	player:GetAttributeChangedSignal("NightShiftResultPending"):Connect(function()
+		if player:GetAttribute("NightShiftResultPending") == true then
+			task.spawn(saveData, player)
+		end
+	end)
 	sendPlayerState(player)
 	if DELIVERY_STORE and not dataCanBeSaved then
 		sendStatus(player, "Message", {

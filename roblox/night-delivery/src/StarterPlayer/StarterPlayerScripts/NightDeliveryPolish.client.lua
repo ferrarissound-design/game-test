@@ -12,6 +12,7 @@ local playerGui = player:WaitForChild("PlayerGui")
 local deliveryEvent = ReplicatedStorage:WaitForChild("NightDeliveryEvent")
 local DogAppearance = require(ReplicatedStorage:WaitForChild("NightDeliveryDogAppearance"))
 local SHIFT_RULES = require(ReplicatedStorage:WaitForChild("NightDeliveryShiftRules"))
+local REPLAY = require(ReplicatedStorage:WaitForChild("NightDeliveryReplayRules"))
 
 local currentTarget = nil
 local currentHouseName = nil
@@ -364,7 +365,7 @@ shiftText.ZIndex = 91
 local shiftClose = Instance.new("TextButton")
 shiftClose.Size = UDim2.new(1, -32, 0, 50)
 shiftClose.Position = UDim2.new(0, 16, 1, -62)
-shiftClose.Text = "次の夜勤へ（配達所で受注）"
+shiftClose.Text = "配達所へ帰社して次の夜勤へ"
 shiftClose.TextSize = 15
 shiftClose.Font = Enum.Font.GothamBold
 shiftClose.BackgroundColor3 = Color3.fromRGB(186, 137, 65)
@@ -372,18 +373,123 @@ shiftClose.TextColor3 = Color3.fromRGB(18, 24, 34)
 shiftClose.ZIndex = 91
 shiftClose.Parent = shiftResult
 addCorner(shiftClose, 10)
+-- A compact archive opens only between shifts; the delivery HUD stays quiet.
+local archiveButton = Instance.new("TextButton")
+archiveButton.Name = "CourierArchiveButton"
+archiveButton.Size = UDim2.fromOffset(132, 44)
+archiveButton.Position = UDim2.new(0.5, -66, 0, 92)
+archiveButton.BackgroundColor3 = Color3.fromRGB(31, 43, 55)
+archiveButton.TextColor3 = Color3.fromRGB(238, 224, 188)
+archiveButton.TextSize = 14
+archiveButton.Font = Enum.Font.GothamBold
+archiveButton.Text = "配達員の記録"
+archiveButton.ZIndex = 80
+archiveButton.Parent = gui
+addCorner(archiveButton, 9)
+local archive = Instance.new("Frame")
+archive.Name = "CourierArchive"
+archive.Size = UDim2.fromOffset(340, 400)
+archive.AnchorPoint = Vector2.new(0.5, 0.5)
+archive.Position = UDim2.fromScale(0.5, 0.5)
+archive.BackgroundColor3 = Color3.fromRGB(19, 25, 36)
+archive.Visible = false
+archive.ZIndex = 100
+archive.Parent = gui
+addCorner(archive, 14)
+local archiveScroll = Instance.new("ScrollingFrame")
+archiveScroll.Size = UDim2.new(1, -24, 1, -76)
+archiveScroll.Position = UDim2.fromOffset(12, 10)
+archiveScroll.BackgroundTransparency = 1
+archiveScroll.BorderSizePixel = 0
+archiveScroll.ScrollBarThickness = 5
+archiveScroll.AutomaticCanvasSize = Enum.AutomaticSize.Y
+archiveScroll.CanvasSize = UDim2.fromOffset(0, 0)
+archiveScroll.ZIndex = 101
+archiveScroll.Parent = archive
+local archiveText = makeLabel(archiveScroll, UDim2.new(1, -10, 0, 0), UDim2.fromOffset(0, 0), "", 15, Enum.Font.Gotham)
+archiveText.TextWrapped = true
+archiveText.TextYAlignment = Enum.TextYAlignment.Top
+archiveText.AutomaticSize = Enum.AutomaticSize.Y
+archiveText.ZIndex = 101
+local archiveClose = Instance.new("TextButton")
+archiveClose.Size = UDim2.new(1, -32, 0, 48)
+archiveClose.Position = UDim2.new(0, 16, 1, -58)
+archiveClose.Text = "閉じる"
+archiveClose.TextSize = 16
+archiveClose.Font = Enum.Font.GothamBold
+archiveClose.BackgroundColor3 = Color3.fromRGB(176, 138, 83)
+archiveClose.TextColor3 = Color3.fromRGB(18, 24, 34)
+archiveClose.ZIndex = 101
+archiveClose.Parent = archive
+addCorner(archiveClose, 9)
+local function refreshArchive()
+	local wins = player:GetAttribute("ShiftWins") or 0
+	local _, rank, nextRank = REPLAY.rank(wins)
+	local lines = {"配達員の記録", "", rank.name .. "  ・  完走 " .. wins .. "夜"}
+	table.insert(lines, nextRank and string.format("次の称号まであと%d夜", nextRank.wins - wins) or "最高称号に到達")
+	table.insert(lines, "")
+	table.insert(lines, "夜の街図鑑")
+	local complete = 0
+	for _, theme in ipairs(REPLAY.Themes) do
+		if player:GetAttribute("ThemeCompleted_" .. theme.id) == true then complete += 1 end
+	end
+	table.insert(lines, string.format("完走 %d / %d", complete, #REPLAY.Themes))
+	for _, theme in ipairs(REPLAY.Themes) do
+		local visited = player:GetAttribute("ThemeVisited_" .. theme.id) == true
+		local done = player:GetAttribute("ThemeCompleted_" .. theme.id) == true
+		table.insert(lines, (visited and theme.name or "？？？") .. (done and "  ✓ 完走" or visited and "  ・ 訪問" or ""))
+	end
+	if complete == #REPLAY.Themes then table.insert(lines, "称号：七つの夜を知る者") end
+	table.insert(lines, "")
+	table.insert(lines, "MIDNIGHT FILES")
+	for _, oddity in ipairs(REPLAY.Oddities) do
+		table.insert(lines, player:GetAttribute("OddityFound_" .. oddity.id) == true
+			and (oddity.name .. "  ✓") or "？？？")
+	end
+	archiveText.Text = table.concat(lines, "\n")
+end
+archiveButton.Activated:Connect(function()
+	if player:GetAttribute("NightShiftActive") == true or shiftResult.Visible then return end
+	refreshArchive()
+	archiveScroll.CanvasPosition = Vector2.new(0, 0)
+	archive.Visible = true
+end)
+archiveClose.Activated:Connect(function() archive.Visible = false end)
+local function updateArchiveButton()
+	archiveButton.Visible = player:GetAttribute("NightShiftActive") ~= true and not shiftResult.Visible
+	if player:GetAttribute("NightShiftActive") == true then archive.Visible = false end
+end
+player:GetAttributeChangedSignal("NightShiftActive"):Connect(updateArchiveButton)
+updateArchiveButton()
+local returnFade = Instance.new("Frame")
+returnFade.Name = "ReturnToDepotFade"
+returnFade.Size = UDim2.fromScale(1, 1)
+returnFade.BackgroundColor3 = Color3.fromRGB(8, 12, 21)
+returnFade.BackgroundTransparency = 1
+returnFade.Visible = false
+returnFade.ZIndex = 110
+returnFade.Parent = gui
+local function endReturnFade()
+	TweenService:Create(returnFade, TweenInfo.new(0.25), {BackgroundTransparency = 1}):Play()
+	task.delay(0.26, function() returnFade.Visible = false end)
+end
 local shiftAcknowledgePending = false
 shiftClose.Activated:Connect(function()
 	if shiftAcknowledgePending then return end
 	shiftAcknowledgePending = true
 	shiftClose.Active = false
-	shiftClose.Text = "確認中..."
-	deliveryEvent:FireServer("AcknowledgeNightShift")
+	shiftClose.Text = "配達所へ帰社中..."
+	returnFade.Visible = true
+	TweenService:Create(returnFade, TweenInfo.new(0.18), {BackgroundTransparency = 0.08}):Play()
+	task.delay(0.19, function()
+		if shiftAcknowledgePending then deliveryEvent:FireServer("AcknowledgeNightShift") end
+	end)
 	task.delay(2, function()
 		if shiftAcknowledgePending and player:GetAttribute("NightShiftResultPending") == true then
 			shiftAcknowledgePending = false
+			endReturnFade()
 			shiftClose.Active = true
-			shiftClose.Text = "次の夜勤へ（配達所で受注）"
+			shiftClose.Text = "配達所へ帰社して次の夜勤へ"
 		end
 	end)
 end)
@@ -391,8 +497,10 @@ player:GetAttributeChangedSignal("NightShiftResultPending"):Connect(function()
 	if shiftAcknowledgePending and player:GetAttribute("NightShiftResultPending") == false then
 		shiftAcknowledgePending = false
 		shiftResult.Visible = false
+		endReturnFade()
+		updateArchiveButton()
 		shiftClose.Active = true
-		shiftClose.Text = "次の夜勤へ（配達所で受注）"
+		shiftClose.Text = "配達所へ帰社して次の夜勤へ"
 	end
 end)
 
@@ -1776,7 +1884,12 @@ deliveryEvent.OnClientEvent:Connect(function(action, payload)
 		if (payload.combo or 0) >= 2 then
 			announceShift(string.format("PERFECT x%d%s", payload.combo, (payload.comboBonus or 0) > 0 and "  BONUS!" or ""))
 		end
+		if payload.completed == 3 and (player:GetAttribute("NightShiftRecordCount") or 0) > 0 then
+			announceShift(string.format("今夜のPerfect %d件 / 自己ベスト %d件",
+				payload.perfect or 0, player:GetAttribute("NightShiftBestPerfect") or 0))
+		end
 	elseif action == "NightShiftComplete" then
+		archive.Visible = false
 		local comparison = type(payload.comparison) == "table" and payload.comparison or {}
 		local equipment = SHIFT_RULES.equipment(payload.equipmentId)
 		local elapsed = math.max(0, tonumber(payload.totalDeliverySeconds) or 0)
@@ -1789,6 +1902,15 @@ deliveryEvent.OnClientEvent:Connect(function(action, payload)
 			string.format("不思議な配達 %d / 親切 +%d", payload.oddities or 0, payload.kindness or 0),
 			string.format("配達計測時間の合計 %.1f秒", elapsed),
 		}
+		table.insert(lines, string.format("%s  ・  完走 %d夜", payload.courierRank or "配達員", payload.wins or 0))
+		if payload.rankUp then
+			table.insert(lines, "昇格！ 解放：" .. tostring(payload.rankReward or "称号"))
+			announceShift("昇格  " .. tostring(payload.courierRank))
+		end
+		if payload.nextRankWins then
+			table.insert(lines, string.format("次の称号まであと%d夜", payload.nextRankWins - (payload.wins or 0)))
+		end
+		table.insert(lines, tostring(payload.themeName or "街") .. (payload.newThemeCompletion and "  ✓ 初完走" or "  ✓ 完走"))
 		if comparison.hasPrevious then
 			table.insert(lines, string.format("前回比：Perfect %+d件 / 時間 %+.1f秒",
 				comparison.perfectDelta or 0, -(comparison.secondsSaved or 0)))
@@ -1808,6 +1930,7 @@ deliveryEvent.OnClientEvent:Connect(function(action, payload)
 				shiftText.Text = body
 				shiftResultScroll.CanvasPosition = Vector2.new(0, 0)
 				shiftResult.Visible = true
+				updateArchiveButton()
 			end
 		end)
 	elseif action == "JobRouteChosen" then
@@ -2093,6 +2216,7 @@ local function updateResponsiveScale()
 		modifierDescription.TextSize = 10
 		resultFrame.Size = UDim2.new(0.86, 0, 0, 180)
 		shiftResult.Size = UDim2.new(0.9, 0, 0, math.min(340, math.max(220, viewport.Y - 24)))
+		archive.Size = UDim2.new(0.9, 0, 0, math.min(400, math.max(220, viewport.Y - 24)))
 		shiftText.TextSize = 13
 		shiftHud.Size = UDim2.fromOffset(150, 38)
 		rivalFrame.Size = UDim2.fromOffset(math.min(172, math.floor(viewport.X * 0.47)), 132)
@@ -2151,6 +2275,7 @@ local function updateResponsiveScale()
 		modifierDescription.TextSize = 12
 		resultFrame.Size = UDim2.fromOffset(360, 190)
 		shiftResult.Size = UDim2.fromOffset(340, math.min(340, math.max(220, viewport.Y - 24)))
+		archive.Size = UDim2.fromOffset(340, math.min(400, math.max(220, viewport.Y - 24)))
 		shiftText.TextSize = 16
 		rivalFrame.Size = UDim2.fromOffset(220, 132)
 		rivalFrame.Position = UDim2.fromOffset(14, 144)

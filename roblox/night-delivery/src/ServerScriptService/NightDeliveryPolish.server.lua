@@ -46,6 +46,7 @@ local SESSION_MISSIONS = {
 
 local ORDER_MODIFIERS = require(script.Parent:WaitForChild("NightDeliveryCargoModifiers"))
 local SHIFT_RULES = require(ReplicatedStorage:WaitForChild("NightDeliveryShiftRules"))
+local REPLAY = require(ReplicatedStorage:WaitForChild("NightDeliveryReplayRules"))
 
 local playerState = {}
 local getStats
@@ -112,9 +113,20 @@ local function trackNightShift(player, grade, elapsed, earnedBonus)
 	player:SetAttribute("NightShiftPhase", phase)
 	deliveryEvent:FireClient(player, "NightShiftProgress", {
 		completed = shift.deliveries, target = SHIFT_TARGET_DELIVERIES,
-		phase = phase, combo = shift.combo, comboBonus = comboBonus,
+		phase = phase, combo = shift.combo, comboBonus = comboBonus, perfect = shift.perfect,
 	})
 	if shift.deliveries >= SHIFT_TARGET_DELIVERIES then
+		-- This branch is reached once per shift serial, after the sixth authoritative delivery.
+		local themeId = tostring((workspace:FindFirstChild(WORLD_NAME)
+			and workspace[WORLD_NAME]:GetAttribute("ThemeId")) or "")
+		local themeWasComplete = player:GetAttribute("ThemeCompleted_" .. themeId) == true
+		for _, theme in ipairs(REPLAY.Themes) do
+			if theme.id == themeId then player:SetAttribute("ThemeCompleted_" .. themeId, true); break end
+		end
+		local wins = player:GetAttribute("ShiftWins") or 0
+		local rankIndex, rankEntry, nextRank = REPLAY.rank(wins)
+		local oldRank = REPLAY.rank(math.max(0, wins - 1))
+		local rankUp = rankIndex > oldRank
 		local record, comparison = SHIFT_RULES.completeRecord(
 			SHIFT_RULES.readRecord(player), shift.perfect, shift.totalDeliverySeconds)
 		SHIFT_RULES.writeRecord(player, record)
@@ -128,6 +140,12 @@ local function trackNightShift(player, grade, elapsed, earnedBonus)
 			kindness = player:GetAttribute("NightShiftKindnessGained") or 0,
 			bestTime = shift.bestTime, maxCombo = shift.maxCombo, coins = earned,
 			totalDeliverySeconds = shift.totalDeliverySeconds, comparison = comparison,
+			courierRank = rankEntry.name, rankUp = rankUp,
+			rankReward = rankUp and rankEntry.reward or nil,
+			nextRankWins = nextRank and nextRank.wins or nil,
+			wins = wins, themeName = (workspace:FindFirstChild(WORLD_NAME)
+				and workspace[WORLD_NAME]:GetAttribute("ThemeName")) or "街",
+			newThemeCompletion = not themeWasComplete,
 			equipmentId = player:GetAttribute("NightShiftEquipment"),
 			rank = rankShift(shift), startedAt = player:GetAttribute("NightShiftStartedAt"),
 		})

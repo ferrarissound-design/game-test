@@ -7,6 +7,9 @@
       "NightDeliveryShiftRules": {
         "$path": "src/ReplicatedStorage/NightDeliveryShiftRules.lua"
       },
+      "NightDeliveryReplayRules": {
+        "$path": "src/ReplicatedStorage/NightDeliveryReplayRules.lua"
+      },
       "NightDeliveryDogAppearance": {
         "$path": "src/ReplicatedStorage/NightDeliveryDogAppearance.lua"
       }
