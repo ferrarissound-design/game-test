@@ -5,6 +5,7 @@ local RunService = game:GetService("RunService")
 
 local player = Players.LocalPlayer
 local event = ReplicatedStorage:WaitForChild("NightDeliveryEvent")
+local SHIFT_RULES = require(ReplicatedStorage:WaitForChild("NightDeliveryShiftRules"))
 local JOB_COUNTER_INTERACTION_RANGE = 14
 local gui = Instance.new("ScreenGui")
 gui.Name = "NightDeliveryDispatch"
@@ -23,14 +24,14 @@ shade.Parent = gui
 local board = Instance.new("Frame")
 board.AnchorPoint = Vector2.new(0.5, 0.5)
 board.Position = UDim2.fromScale(0.5, 0.5)
-board.Size = UDim2.fromOffset(410, 390)
+board.Size = UDim2.fromOffset(410, 520)
 board.BackgroundColor3 = Color3.fromRGB(20, 27, 40)
 board.Parent = shade
 local boardCorner = Instance.new("UICorner")
 boardCorner.CornerRadius = UDim.new(0, 15)
 boardCorner.Parent = board
 local limit = Instance.new("UISizeConstraint")
-limit.MaxSize = Vector2.new(410, 390)
+limit.MaxSize = Vector2.new(410, 520)
 limit.Parent = board
 
 local header = Instance.new("TextLabel")
@@ -58,10 +59,21 @@ local closeCorner = Instance.new("UICorner")
 closeCorner.CornerRadius = UDim.new(0, 8)
 closeCorner.Parent = closeButton
 
-local cards = Instance.new("Frame")
-cards.Size = UDim2.new(1, -22, 1, -72)
-cards.Position = UDim2.fromOffset(11, 64)
+local equipmentPanel = Instance.new("Frame")
+equipmentPanel.Size = UDim2.new(1, -22, 0, 100)
+equipmentPanel.Position = UDim2.fromOffset(11, 64)
+equipmentPanel.BackgroundTransparency = 1
+equipmentPanel.Parent = board
+
+local cards = Instance.new("ScrollingFrame")
+cards.Size = UDim2.new(1, -22, 1, -180)
+cards.Position = UDim2.fromOffset(11, 170)
 cards.BackgroundTransparency = 1
+cards.BorderSizePixel = 0
+cards.ScrollBarThickness = 5
+cards.AutomaticCanvasSize = Enum.AutomaticSize.Y
+cards.CanvasSize = UDim2.fromOffset(0, 0)
+cards.ScrollingDirection = Enum.ScrollingDirection.Y
 cards.Parent = board
 local layout = Instance.new("UIListLayout")
 layout.FillDirection = Enum.FillDirection.Vertical
@@ -71,6 +83,10 @@ layout.Parent = cards
 
 local currentSerial = nil
 local accepting = false
+local selectedEquipment = SHIFT_RULES.DefaultEquipment
+local equipmentLocked = false
+local equipmentButtons = {}
+local fitLabels = {}
 local resize
 local function hide()
 	shade.Visible = false
@@ -121,21 +137,64 @@ local function label(parent, value, position, size, fontSize, bold)
 	return text
 end
 
+local equipmentHint = label(equipmentPanel, "", UDim2.fromOffset(0, 48), UDim2.new(1, 0, 0, 48), 12, false)
+equipmentHint.TextWrapped = true
+equipmentHint.TextTruncate = Enum.TextTruncate.None
+local function refreshEquipment()
+	local entry = SHIFT_RULES.equipment(selectedEquipment) or SHIFT_RULES.equipment(SHIFT_RULES.DefaultEquipment)
+	equipmentHint.Text = (equipmentLocked and "夜勤中は固定：" or "最初の受注で確定：") .. entry.description
+	for id, button in pairs(equipmentButtons) do
+		button.BackgroundColor3 = id == selectedEquipment and Color3.fromRGB(93, 128, 99) or Color3.fromRGB(48, 59, 77)
+		button.Text = (id == selectedEquipment and "✓ " or "") .. SHIFT_RULES.equipment(id).name
+		button.Active = not equipmentLocked and not accepting
+		button.AutoButtonColor = button.Active
+	end
+	for text, cargoId in pairs(fitLabels) do
+		text.Text = entry.cargo[cargoId] and ("装備が有効：" .. entry.name) or ""
+	end
+end
+for index, entry in ipairs(SHIFT_RULES.Equipment) do
+	local button = Instance.new("TextButton")
+	button.Size = UDim2.new(1 / 3, -4, 0, 44)
+	button.Position = UDim2.new((index - 1) / 3, 2, 0, 0)
+	button.TextSize = 12
+	button.TextWrapped = true
+	button.Font = Enum.Font.GothamBold
+	button.TextColor3 = Color3.fromRGB(245, 243, 229)
+	button.Parent = equipmentPanel
+	equipmentButtons[entry.id] = button
+	local corner = Instance.new("UICorner")
+	corner.CornerRadius = UDim.new(0, 8)
+	corner.Parent = button
+	button.Activated:Connect(function()
+		if equipmentLocked or accepting then return end
+		selectedEquipment = entry.id
+		refreshEquipment()
+	end)
+end
+
 local function show(payload)
 	if player:GetAttribute("NightDeliveryHouseName") or player:GetAttribute("JobOffersActive") == false then return end
 	if type(payload.offers) ~= "table" or #payload.offers == 0 then return end
 	if currentSerial == payload.serial and accepting then return end
+	local samePreview = currentSerial == payload.serial
+	equipmentLocked = payload.equipmentLocked == true
+	if equipmentLocked or not samePreview then
+		selectedEquipment = SHIFT_RULES.equipment(payload.equipmentId) and payload.equipmentId or SHIFT_RULES.DefaultEquipment
+	end
 	currentSerial = payload.serial
 	accepting = false
 	header.Text = payload.lastDelivery and "LAST DELIVERY\n最後の配達を選ぼう" or "DISPATCH BOARD\n配達を選ぼう"
 	for _, child in ipairs(cards:GetChildren()) do
 		if child ~= layout then child:Destroy() end
 	end
+	table.clear(fitLabels)
+	if not samePreview then cards.CanvasPosition = Vector2.new(0, 0) end
 	local count = math.min(3, #payload.offers)
 	for index = 1, count do
 		local offer = payload.offers[index]
 		local card = Instance.new("Frame")
-		card.Size = UDim2.new(1, 0, 0, 96)
+		card.Size = UDim2.new(1, -8, 0, 116)
 		card.BackgroundColor3 = Color3.fromRGB(34, 44, 61)
 		card.LayoutOrder = index
 		card.Parent = cards
@@ -155,6 +214,9 @@ local function show(payload)
 		end
 		label(card, detailText,
 			UDim2.fromOffset(11, 56), UDim2.new(1, -115, 0, 20), 12, false)
+		local fit = label(card, "", UDim2.fromOffset(11, 84), UDim2.new(1, -20, 0, 22), 12, true)
+		fit.TextColor3 = Color3.fromRGB(165, 218, 164)
+		fitLabels[fit] = tostring(offer.cargoId or "none")
 		local accept = Instance.new("TextButton")
 		accept.Size = UDim2.new(0, 90, 0, 44)
 		accept.Position = UDim2.new(1, -101, 0.5, -22)
@@ -170,17 +232,20 @@ local function show(payload)
 		accept.Activated:Connect(function()
 			if accepting or currentSerial ~= payload.serial then return end
 			accepting = true
+			refreshEquipment()
 			accept.Text = "..."
-			event:FireServer("AcceptJobOffer", {offerId = offer.id})
+			event:FireServer("AcceptJobOffer", {offerId = offer.id, equipmentId = selectedEquipment})
 			-- A failed delivery of the remote may be retried at the Depot; no free reroll.
 			task.delay(2, function()
 				if currentSerial == payload.serial and player:GetAttribute("JobOffersActive") == true then
 					accepting = false
+					refreshEquipment()
 					accept.Text = "これにする"
 				end
 			end)
 		end)
 	end
+	refreshEquipment()
 	shade.Visible = true
 	resize()
 end
@@ -189,13 +254,9 @@ resize = function()
 	local camera = workspace.CurrentCamera
 	if not camera then return end
 	local viewport = camera.ViewportSize
-	local height = math.min(390, math.max(250, viewport.Y - 48))
+	local height = math.min(520, math.max(250, viewport.Y - 48))
 	board.Size = UDim2.fromOffset(math.min(410, math.max(240, viewport.X - 24)), height)
-	-- Fit all three buttons on small portrait screens without a scroll view.
-	local cardHeight = math.floor((height - 72 - 14) / 3)
-	for _, child in ipairs(cards:GetChildren()) do
-		if child:IsA("Frame") then child.Size = UDim2.new(1, 0, 0, cardHeight) end
-	end
+	-- Fixed touch targets; short screens scroll the offers instead of shrinking them.
 end
 
 -- Walking away only cancels the preview; the server still validates proximity on accept.
@@ -226,6 +287,7 @@ event.OnClientEvent:Connect(function(action, payload)
 	if action == "JobOffers" then show(type(payload) == "table" and payload or {})
 	elseif action == "JobOfferRejected" and shade.Visible then
 		accepting = false
+		refreshEquipment()
 		header.Text = (player:GetAttribute("NightShiftPhase") == "FinalRun" and "LAST DELIVERY\n" or "DISPATCH BOARD\n")
 			.. tostring(type(payload) == "table" and payload.reason or "Depotで仕事を選ぼう。")
 		for _, card in ipairs(cards:GetChildren()) do

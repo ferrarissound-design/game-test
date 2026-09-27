@@ -11,6 +11,7 @@ local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
 local deliveryEvent = ReplicatedStorage:WaitForChild("NightDeliveryEvent")
 local DogAppearance = require(ReplicatedStorage:WaitForChild("NightDeliveryDogAppearance"))
+local SHIFT_RULES = require(ReplicatedStorage:WaitForChild("NightDeliveryShiftRules"))
 
 local currentTarget = nil
 local currentHouseName = nil
@@ -344,7 +345,19 @@ shiftResult.ZIndex = 90
 shiftResult.Parent = gui
 addCorner(shiftResult, 16)
 addStroke(shiftResult, Color3.fromRGB(255, 209, 113), 0.1, 2)
-local shiftText = makeLabel(shiftResult, UDim2.new(1, -24, 1, -86), UDim2.fromOffset(12, 10), "", 16, Enum.Font.GothamBold)
+local shiftResultScroll = Instance.new("ScrollingFrame")
+shiftResultScroll.Size = UDim2.new(1, -24, 1, -86)
+shiftResultScroll.Position = UDim2.fromOffset(12, 10)
+shiftResultScroll.BackgroundTransparency = 1
+shiftResultScroll.BorderSizePixel = 0
+shiftResultScroll.ScrollBarThickness = 4
+shiftResultScroll.AutomaticCanvasSize = Enum.AutomaticSize.Y
+shiftResultScroll.CanvasSize = UDim2.fromOffset(0, 0)
+shiftResultScroll.ScrollingDirection = Enum.ScrollingDirection.Y
+shiftResultScroll.ZIndex = 91
+shiftResultScroll.Parent = shiftResult
+local shiftText = makeLabel(shiftResultScroll, UDim2.new(1, -8, 0, 0), UDim2.fromOffset(0, 0), "", 15, Enum.Font.GothamBold)
+shiftText.AutomaticSize = Enum.AutomaticSize.Y
 shiftText.TextWrapped = true
 shiftText.TextYAlignment = Enum.TextYAlignment.Top
 shiftText.ZIndex = 91
@@ -1764,19 +1777,36 @@ deliveryEvent.OnClientEvent:Connect(function(action, payload)
 			announceShift(string.format("PERFECT x%d%s", payload.combo, (payload.comboBonus or 0) > 0 and "  BONUS!" or ""))
 		end
 	elseif action == "NightShiftComplete" then
-		local elapsed = math.max(0, math.floor(tonumber(payload.bestTime) or 0))
-		local body = string.format(
-			"NIGHT SHIFT COMPLETE  #%d\n\nDeliveries     %d\nPerfect         %d    Good %d    Poor %d\nEvents Solved   %d    Destination %d\nOddities       %d\nKindness +%d    Best Time %d:%02d\nMax Combo      %d\nCoins Earned    %d\n\nSHIFT RANK  %s",
-			tonumber(payload.number) or 1, tonumber(payload.deliveries) or 0,
-			tonumber(payload.perfect) or 0, tonumber(payload.good) or 0, tonumber(payload.poor) or 0,
-			tonumber(payload.events) or 0, tonumber(payload.destinationSuccess) or 0,
-			tonumber(payload.oddities) or 0,
-			tonumber(payload.kindness) or 0, math.floor(elapsed / 60), elapsed % 60,
-			tonumber(payload.maxCombo) or 0, tonumber(payload.coins) or 0, tostring(payload.rank or "C")
-		)
+		local comparison = type(payload.comparison) == "table" and payload.comparison or {}
+		local equipment = SHIFT_RULES.equipment(payload.equipmentId)
+		local elapsed = math.max(0, tonumber(payload.totalDeliverySeconds) or 0)
+		local lines = {
+			string.format("夜勤完了 #%d　評価 %s", tonumber(payload.number) or 1, tostring(payload.rank or "C")),
+			string.format("配達 %d件　装備：%s", tonumber(payload.deliveries) or 0, equipment and equipment.name or "通常"),
+			string.format("Perfect %d / Good %d / Poor %d", payload.perfect or 0, payload.good or 0, payload.poor or 0),
+			string.format("獲得 %dコイン　最大連続 %d", payload.coins or 0, payload.maxCombo or 0),
+			string.format("道中解決 %d / 現場成功 %d", payload.events or 0, payload.destinationSuccess or 0),
+			string.format("不思議な配達 %d / 親切 +%d", payload.oddities or 0, payload.kindness or 0),
+			string.format("配達計測時間の合計 %.1f秒", elapsed),
+		}
+		if comparison.hasPrevious then
+			table.insert(lines, string.format("前回比：Perfect %+d件 / 時間 %+.1f秒",
+				comparison.perfectDelta or 0, -(comparison.secondsSaved or 0)))
+		else
+			table.insert(lines, "初めての完走！ 今夜が最初の記録です。")
+		end
+		table.insert(lines, string.format("自己ベスト：Perfect %d件 / %.1f秒%s",
+			comparison.bestPerfect or payload.perfect or 0, comparison.bestSeconds or elapsed,
+			(comparison.newPerfectBest or comparison.newTimeBest) and "（更新！）" or ""))
+		table.insert(lines, "※ 時間は配達条件で変わる参考記録です。")
+		local best = comparison.bestPerfect or payload.perfect or 0
+		table.insert(lines, best < 6 and string.format("次の目標：Perfect %d件！", best + 1)
+			or "次の目標：別の装備でもPerfect 6件！")
+		local body = table.concat(lines, "\n")
 		task.delay(2.5, function()
-			if player:GetAttribute("NightShiftActive") ~= true then
+			if player:GetAttribute("NightShiftActive") ~= true and player:GetAttribute("NightShiftResultPending") == true then
 				shiftText.Text = body
+				shiftResultScroll.CanvasPosition = Vector2.new(0, 0)
 				shiftResult.Visible = true
 			end
 		end)
@@ -2062,7 +2092,7 @@ local function updateResponsiveScale()
 		modifierTitle.TextSize = 12
 		modifierDescription.TextSize = 10
 		resultFrame.Size = UDim2.new(0.86, 0, 0, 180)
-		shiftResult.Size = UDim2.new(0.9, 0, 0, 340)
+		shiftResult.Size = UDim2.new(0.9, 0, 0, math.min(340, math.max(220, viewport.Y - 24)))
 		shiftText.TextSize = 13
 		shiftHud.Size = UDim2.fromOffset(150, 38)
 		rivalFrame.Size = UDim2.fromOffset(math.min(172, math.floor(viewport.X * 0.47)), 132)
@@ -2120,7 +2150,7 @@ local function updateResponsiveScale()
 		modifierTitle.TextSize = 14
 		modifierDescription.TextSize = 12
 		resultFrame.Size = UDim2.fromOffset(360, 190)
-		shiftResult.Size = UDim2.fromOffset(340, 340)
+		shiftResult.Size = UDim2.fromOffset(340, math.min(340, math.max(220, viewport.Y - 24)))
 		shiftText.TextSize = 16
 		rivalFrame.Size = UDim2.fromOffset(220, 132)
 		rivalFrame.Position = UDim2.fromOffset(14, 144)

@@ -12,6 +12,7 @@ local HttpService = game:GetService("HttpService")
 local RULES = require(script.Parent:WaitForChild("NightDeliveryRules"))
 local HOUSE_TYPES = require(script.Parent:WaitForChild("NightDeliveryHouseTypes"))
 local CARGO_MODIFIERS = require(script.Parent:WaitForChild("NightDeliveryCargoModifiers"))
+local SHIFT_RULES = require(ReplicatedStorage:WaitForChild("NightDeliveryShiftRules"))
 
 local REMOTE_NAME = "NightDeliveryEvent"
 local WORLD_NAME = "NightDeliveryWorld"
@@ -1796,7 +1797,10 @@ local function shiftPhase(player)
 			return forced
 		end
 	end
-	local completed = player:GetAttribute("NightShiftDeliveries") or 0
+	-- A finished night's count must not make the next preview look like FinalRun.
+	-- Keep Studio's explicit phase/count overrides below available for regression tests.
+	local completed = player:GetAttribute("NightShiftActive") == true
+		and (player:GetAttribute("NightShiftDeliveries") or 0) or 0
 	if RunService:IsStudio() then
 		local forcedCount = tonumber(world:GetAttribute("QAForceShiftDeliveryCount"))
 		if forcedCount and forcedCount >= 0 then completed = forcedCount end
@@ -1929,7 +1933,7 @@ local function offerPublicData(offer)
 	local transportDistance = offer.distanceMeters or getDeliveryDistance(house)
 	return {
 		id = offer.id, location = offer.location, baseReward = offer.jobType.baseReward + offer.bonus,
-		distance = offer.distance, cargo = offer.cargo.title,
+		distance = offer.distance, cargo = offer.cargo.title, cargoId = offer.cargo.id,
 		difficulty = offer.difficulty,
 		cargoReward = offer.cargo.reward or 0,
 		walkingBonus = getWalkingBonusForDistance(transportDistance, offer.cargo.id),
@@ -1941,7 +1945,11 @@ local function sendJobOffers(player)
 	if not state then return end
 	local public = {}
 	for _, offer in ipairs(state.offers) do table.insert(public, offerPublicData(offer)) end
-	sendStatus(player, "JobOffers", {serial = state.serial, lastDelivery = state.phase == "FinalRun", offers = public})
+	sendStatus(player, "JobOffers", {
+		serial = state.serial, lastDelivery = state.phase == "FinalRun", offers = public,
+		equipmentId = player:GetAttribute("NightShiftEquipment") or SHIFT_RULES.DefaultEquipment,
+		equipmentLocked = player:GetAttribute("NightShiftActive") == true,
+	})
 end
 
 local function clearJobOffers(player)
@@ -3142,6 +3150,7 @@ local function loadData(player)
 		rumorClueLevel = 0,
 		neighborhoodKindness = 0,
 		pendingNeighborhoodStory = nil,
+		shiftRecord = SHIFT_RULES.cleanRecord(nil),
 	}
 	if not DELIVERY_STORE then
 		return defaultData, false
@@ -3170,6 +3179,7 @@ local function loadData(player)
 		defaultData.shiftWins = math.max(0, tonumber(data.shiftWins) or 0)
 		defaultData.rumorClueLevel = math.clamp(tonumber(data.rumorClueLevel) or 0, 0, #RUMOR_CLUES)
 		defaultData.neighborhoodKindness = math.max(0, tonumber(data.neighborhoodKindness) or 0)
+		defaultData.shiftRecord = SHIFT_RULES.cleanRecord(data.shiftRecord)
 		if type(data.pendingNeighborhoodStory) == "table" then
 			local sourceId = tostring(data.pendingNeighborhoodStory.sourceId or "")
 			local targetHouseName = tostring(data.pendingNeighborhoodStory.targetHouseName or "")
@@ -3226,6 +3236,7 @@ local function saveData(player)
 		shiftWins = player:GetAttribute("ShiftWins") or 0,
 		rumorClueLevel = player:GetAttribute("NightDeliveryRumorClueLevel") or 0,
 		neighborhoodKindness = player:GetAttribute("NeighborhoodKindness") or 0,
+		shiftRecord = SHIFT_RULES.readRecord(player),
 		pendingNeighborhoodStory = pendingNeighborhoodStory and {
 			sourceId = pendingNeighborhoodStory.sourceId,
 			targetHouseName = pendingNeighborhoodStory.targetHouseName,
@@ -3529,6 +3540,7 @@ deliveryEvent.OnServerEvent:Connect(function(player, action, payload)
 	elseif action == "AcceptJobOffer" then
 		local state = playerJobOffers[player]
 		if not requirePlayerReady(player) or playerJobs[player] or not state
+			or player:GetAttribute("NightShiftResultPending") == true
 			or type(payload) ~= "table" or type(payload.offerId) ~= "string" then return end
 		if not isNearPart(player, jobCounterRef, JOB_COUNTER_INTERACTION_RANGE) then
 			sendStatus(player, "JobOfferRejected", {reason = "Depotの近くで仕事を選ぼう。"})
@@ -3538,6 +3550,14 @@ deliveryEvent.OnServerEvent:Connect(function(player, action, payload)
 			if offer.id == payload.offerId then
 				local house = housesFolder:FindFirstChild(offer.houseName)
 				if not house or not isHouseUnlocked(player, house) then return end
+				local active = player:GetAttribute("NightShiftActive") == true
+				local currentEquipment = player:GetAttribute("NightShiftEquipment") or SHIFT_RULES.DefaultEquipment
+				local equipmentId = payload.equipmentId or currentEquipment
+				if not SHIFT_RULES.equipment(equipmentId) or (active and equipmentId ~= currentEquipment) then
+					sendStatus(player, "JobOfferRejected", {reason = "装備は夜勤の最初に選び、6件終わるまで固定です。"})
+					return
+				end
+				if not active then player:SetAttribute("NightShiftEquipment", equipmentId) end
 				clearJobOffers(player) -- consume before JobAssigned; duplicate clicks cannot start a second job
 				confirmJob(player, offer, offer.neighborhoodCallback)
 				return
@@ -3865,6 +3885,8 @@ local function setupPlayer(player)
 	player:SetAttribute("NightShiftDeliveries", 0)
 	player:SetAttribute("NightShiftTarget", SHIFT_TARGET_DELIVERIES)
 	player:SetAttribute("NightShiftNumber", 0)
+	player:SetAttribute("NightShiftEquipment", SHIFT_RULES.DefaultEquipment)
+	SHIFT_RULES.writeRecord(player, data.shiftRecord)
 	player:SetAttribute("NightShiftPhase", "EarlyNight")
 	player:SetAttribute("NightShiftOddities", 0)
 	player:SetAttribute("NightDeliveryOddityId", nil)
