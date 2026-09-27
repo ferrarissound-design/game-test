@@ -1048,8 +1048,8 @@ local function createThemeDressing()
 				end
 			end
 		end
-		makePart("PlaygroundSand", Vector3.new(30, 0.25, 24), Vector3.new(-150, 0.15, 15), Color3.fromRGB(135, 119, 90), world, Enum.Material.Sand)
-		makePart("SlidePlatform", Vector3.new(5, 4, 5), Vector3.new(-150, 2, 15), Color3.fromRGB(91, 115, 129), world, Enum.Material.Metal)
+		makePart("PlaygroundSand", Vector3.new(30, 0.25, 24), Vector3.new(-150, 0.15, -64), Color3.fromRGB(135, 119, 90), world, Enum.Material.Sand)
+		makePart("SlidePlatform", Vector3.new(5, 4, 5), Vector3.new(-150, 2, -64), Color3.fromRGB(91, 115, 129), world, Enum.Material.Metal)
 	end
 end
 
@@ -1061,14 +1061,18 @@ local function createWorld()
 	print("Night Delivery world theme:", selectedWorldTheme.name)
 	setupLighting()
 
-	makePart(
-		"Ground",
-		Vector3.new(460, 1, 410),
-		Vector3.new(0, -0.5, 20),
-		selectedWorldTheme.groundColor:Lerp(Color3.fromRGB(90, 139, 78), 0.78),
-		world,
-		Enum.Material.Grass
-	)
+	-- Leave an actual channel below the water instead of painting water onto solid grass.
+	for _, segment in ipairs({
+		{size = 356, center = -7}, -- z -185 to 171
+		{size = 32, center = 209}, -- z 193 to 225
+	}) do
+		makePart("Ground", Vector3.new(460, 1, segment.size),
+			Vector3.new(0, -0.5, segment.center),
+			selectedWorldTheme.groundColor:Lerp(Color3.fromRGB(90, 139, 78), 0.78),
+			world, Enum.Material.Grass)
+	end
+	makePart("CanalBed", Vector3.new(400, 1, 22), Vector3.new(0, -3, 182),
+		Color3.fromRGB(33, 49, 52), world, Enum.Material.Slate)
 
 	makePart(
 		"MainRoad",
@@ -1087,17 +1091,24 @@ local function createWorld()
 		world,
 		Enum.Material.Pavement
 	)
-	-- Broad continuous concrete edges make asphalt, sidewalk and grass readable on phones.
-	-- Four anchored strips cost far less than scattering decorative grass Parts.
+	-- Break sidewalk and curb at both cross streets so they do not cut through traffic.
 	for _, side in ipairs({-1, 1}) do
 		local x = side * (17 * selectedWorldTheme.roadScale + 3.2)
-		local walk = makePart("MainSidewalk", Vector3.new(6, 0.18, 260),
-			Vector3.new(x, 0.22, 10), Color3.fromRGB(157, 160, 149), world, Enum.Material.Concrete)
-		walk.CanCollide = false
-		local curb = makePart("MainCurb", Vector3.new(0.4, 0.24, 260),
-			Vector3.new(side * (17 * selectedWorldTheme.roadScale + 0.3), 0.28, 10),
-			Color3.fromRGB(192, 189, 169), world, Enum.Material.Concrete)
-		curb.CanCollide = false
+		local northHalf = 12 * selectedWorldTheme.roadScale
+		local crossHalf = 14 * selectedWorldTheme.roadScale
+		for _, bounds in ipairs({{-120, 20 - crossHalf}, {20 + crossHalf, 95 - northHalf}, {95 + northHalf, 140}}) do
+			local length = bounds[2] - bounds[1]
+			if length > 0 then
+				local z = (bounds[1] + bounds[2]) / 2
+				local walk = makePart("MainSidewalk", Vector3.new(6, 0.18, length),
+					Vector3.new(x, 0.22, z), Color3.fromRGB(157, 160, 149), world, Enum.Material.Concrete)
+				walk.CanCollide = false
+				local curb = makePart("MainCurb", Vector3.new(0.4, 0.24, length),
+					Vector3.new(side * (17 * selectedWorldTheme.roadScale + 0.3), 0.28, z),
+					Color3.fromRGB(192, 189, 169), world, Enum.Material.Concrete)
+				curb.CanCollide = false
+			end
+		end
 	end
 
 	makePart(
@@ -1121,7 +1132,7 @@ local function createWorld()
 	local canal = makePart(
 		"Canal",
 		Vector3.new(400, 0.5, 22),
-		Vector3.new(0, 0.05, 182),
+		Vector3.new(0, -0.65, 182),
 		selectedWorldTheme.canalColor,
 		world,
 		Enum.Material.Glass
@@ -2726,6 +2737,9 @@ local function completeDelivery(player, houseName)
 	local hasNextStops = type(job.extraStops) == "table" and #job.extraStops > 0
 	job.sideOffer = nil
 	if hasNextStops then
+		local root = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
+		job.nextStopOrigin = root and root.Position or deliveryPoint.Position
+		player:SetAttribute("NightDeliveryNextStopPending", true)
 		job.houseName = nil
 	end
 	if not hasNextStops then
@@ -2900,6 +2914,7 @@ local function startNextStop(player, job, stopIndex)
 		end
 		if #options == 0 then
 			playerJobs[player] = nil
+			player:SetAttribute("NightDeliveryNextStopPending", false)
 			sendStatus(player, "Message", {text = "追加配達先を読み込めなかったため、この配達バッチを終了したよ。"})
 		end
 		sendStatus(player, "NextStopOptions", {
@@ -2910,6 +2925,8 @@ local function startNextStop(player, job, stopIndex)
 		return
 	end
 	table.remove(job.extraStops, stopIndex)
+	job.nextStopOrigin = nil
+	player:SetAttribute("NightDeliveryNextStopPending", false)
 
 	job.jobSerial = (player:GetAttribute("NightDeliveryJobSerial") or 0) + 1
 	job.houseName = target.Name
@@ -3538,13 +3555,19 @@ deliveryEvent.OnServerEvent:Connect(function(player, action, payload)
 				end
 			end)
 		end
-	elseif action == "ChooseNextStop" then
+		elseif action == "ChooseNextStop" then
 		local job = playerJobs[player]
 		if not job or job.houseName or type(payload) ~= "table"
 			or tonumber(payload.jobSerial) ~= job.jobSerial then
 			return
 		end
 		local houseName = tostring(payload.houseName or "")
+		local root = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
+		if not root or not job.nextStopOrigin
+			or (root.Position - job.nextStopOrigin).Magnitude > 16 then
+			sendStatus(player, "Message", {text = "前の配達先に戻って、次の行き先を選ぼう。"})
+			return
+		end
 		for index, stop in ipairs(job.extraStops) do
 			if stop.houseName == houseName then
 				startNextStop(player, job, index)
@@ -3810,6 +3833,7 @@ local function setupPlayer(player)
 	player:SetAttribute("NightDeliveryOddityActive", false)
 	player:SetAttribute("NightDeliveryJobType", nil)
 	player:SetAttribute("NightDeliveryHouseName", nil)
+	player:SetAttribute("NightDeliveryNextStopPending", false)
 	player:SetAttribute("NightDeliveryBikeBlocked", false)
 	player:SetAttribute(
 		"NightDeliveryNightNavSoft",
@@ -3836,6 +3860,14 @@ local function setupPlayer(player)
 		local humanoid = character:WaitForChild("Humanoid", 10)
 		if humanoid then
 			task.wait(0.2)
+			local activeJob = playerJobs[player]
+			if activeJob and not activeJob.startedAt then
+				if activeJob.nextStopOrigin then
+					character:PivotTo(CFrame.new(activeJob.nextStopOrigin + Vector3.new(0, 4, 0)))
+				elseif not activeJob.isSideRequest then
+					character:PivotTo(CFrame.new(-82, 4, -79))
+				end
+			end
 			applyMovementSpeed(player)
 			addBikeVisual(player)
 		end
