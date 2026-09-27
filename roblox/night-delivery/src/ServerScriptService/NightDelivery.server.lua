@@ -412,11 +412,7 @@ local function makeLitWindow(model, name, size, position, color)
 	)
 	window.CanCollide = false
 
-	local light = Instance.new("PointLight")
-	light.Brightness = 0.45
-	light.Range = 11
-	light.Color = Color3.fromRGB(255, 222, 160)
-	light.Parent = window
+	-- Emissive panes give a readable silhouette without one dynamic light per window.
 	return window
 end
 
@@ -893,6 +889,10 @@ local function createHouse(id, displayName, districtId, position, bodyColor, hou
 
 	local variant = worldRandom:NextInteger(1, 3)
 	model:SetAttribute("HouseVariant", variant)
+	-- One stable household rhythm per server night. Visuals are chosen locally by shift phase.
+	local lifeStates = {"awake", "awake", "asleep", "away", "television", "late"}
+	model:SetAttribute("NightLifeState", districtId == "warehouse" and "away"
+		or lifeStates[worldRandom:NextInteger(1, #lifeStates)])
 
 	local body
 	local frontZ
@@ -941,6 +941,30 @@ local function createHouse(id, displayName, districtId, position, bodyColor, hou
 	prompt.MaxActivationDistance = HOUSE_TYPES.Definitions[houseType].promptDistance or 10
 	prompt.RequiresLineOfSight = false
 	prompt.Parent = deliveryPoint
+
+	-- A few recognizable details near ordinary doorsteps; no collision or simulation cost.
+	if houseType == "Normal" and districtId ~= "warehouse" then
+		local doorstep = makePart("FrontPath", Vector3.new(4.5, 0.12, 4.5),
+			position + Vector3.new(0, 0.08, frontZ - 5.2),
+			Color3.fromRGB(134, 136, 128), model, Enum.Material.Concrete)
+			doorstep.CanCollide = false
+		local side = variant == 1 and -1 or 1
+		local mailbox = makePart("Mailbox", Vector3.new(1.1, 1.1, 0.7),
+			position + Vector3.new(side * 8, 1.4, frontZ - 2.2),
+			Color3.fromRGB(88, 101, 105), model, Enum.Material.Metal)
+		mailbox.CanCollide = false
+		if variant == 2 then
+			local bin = makePart("HouseholdBin", Vector3.new(1.5, 1.6, 1.4),
+				position + Vector3.new(-side * 9, 0.8, frontZ - 3.2),
+				Color3.fromRGB(67, 85, 79), model, Enum.Material.SmoothPlastic)
+			bin.CanCollide = false
+		elseif variant == 3 then
+			local planter = makePart("DoorstepPlanter", Vector3.new(1.6, 1.0, 1.6),
+				position + Vector3.new(-side * 9, 0.5, frontZ - 3.2),
+				Color3.fromRGB(124, 84, 67), model, Enum.Material.Brick)
+			planter.CanCollide = false
+		end
+	end
 
 	local resident = RESIDENTS_BY_HOUSE[id]
 	if resident and houseType == "Normal" then
@@ -2586,6 +2610,20 @@ local function completeDelivery(player, houseName)
 	local visitCount = visits[job.houseName] or 0
 	visits[job.houseName] = visitCount + 1
 	local residentReaction = job.oddityId and "配達完了" or (visitCount == 0 and job.residentFirstLine or job.residentReturnLine)
+	-- Quiet household responses supplement the existing resident and story dialogue.
+	-- Special destination events and Midnight Oddities retain their own authored reactions.
+	if not job.oddityId and not job.destinationEvent and math.random() < 0.32 then
+		local lifeState = targetHouse and targetHouse:GetAttribute("NightLifeState")
+		if lifeState == "asleep" or lifeState == "away" then
+			residentReaction = "玄関前にそっと置き配しました。"
+		elseif lifeState == "television" then
+			residentReaction = "テレビの音が止まり、インターホン越しに「ありがとう」。"
+		elseif lifeState == "late" then
+			residentReaction = "ドアが少し開いて、小声で「助かったよ」。"
+		else
+			residentReaction = "玄関灯がつき、住人が荷物を受け取りました。"
+		end
+	end
 	local neighborhoodCallback = job.neighborhoodCallback
 	local neighborhoodCallbackBonus = 0
 	local neighborhoodKindnessGained = 0
