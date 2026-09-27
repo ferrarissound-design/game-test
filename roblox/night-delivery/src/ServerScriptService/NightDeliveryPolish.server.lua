@@ -687,17 +687,18 @@ local function createCityDressing()
 	addPointLight(routeSign, Color3.fromRGB(117, 162, 225), 0.8, 12)
 
 	-- Small park / rest corner
-	makePart(folder, "PocketPark", Vector3.new(42, 0.2, 34), CFrame.new(-154, 0.11, 25), Color3.fromRGB(50, 72, 58), Enum.Material.Grass)
+	-- Keep the park south of CrossRoad instead of laying grass and trees across asphalt.
+	makePart(folder, "PocketPark", Vector3.new(42, 0.2, 34), CFrame.new(-154, 0.11, -21), Color3.fromRGB(50, 72, 58), Enum.Material.Grass)
 	for _, pos in ipairs({
-		Vector3.new(-168, 0, 13),
-		Vector3.new(-142, 0, 14),
-		Vector3.new(-167, 0, 37),
-		Vector3.new(-141, 0, 38),
+		Vector3.new(-168, 0, -33),
+		Vector3.new(-142, 0, -32),
+		Vector3.new(-167, 0, -9),
+		Vector3.new(-141, 0, -8),
 	}) do
 		createTree(folder, pos)
 	end
-	createBench(folder, Vector3.new(-154, 0, 22), 90)
-	createBench(folder, Vector3.new(-154, 0, 31), -90)
+	createBench(folder, Vector3.new(-154, 0, -24), 90)
+	createBench(folder, Vector3.new(-154, 0, -14), -90)
 
 	-- Depot details
 	createVendingMachine(folder, Vector3.new(-103, 0, -79), Color3.fromRGB(67, 126, 183))

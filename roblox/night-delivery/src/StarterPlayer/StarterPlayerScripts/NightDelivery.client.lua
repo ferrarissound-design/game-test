@@ -291,7 +291,7 @@ end
 local function hideCoreRouteChoice()
 	routeFrame.Visible = false
 	routeJobSerial = nil
-	setRouteMovementLocked(false)
+	setRouteMovementLocked(player:GetAttribute("NightDeliveryNextStopPending") == true)
 end
 
 local function submitCoreRoute(routeId)
@@ -334,7 +334,8 @@ local function recoverCoreRouteChoice()
 	local jobSerial = tonumber(player:GetAttribute("NightDeliveryJobSerial"))
 	local houseName = tostring(player:GetAttribute("NightDeliveryHouseName") or "")
 	local startedAt = player:GetAttribute("NightDeliveryOrderStartedAt")
-	if jobSerial and jobSerial > 0 and houseName ~= "" and startedAt == nil then
+	if jobSerial and jobSerial > 0 and houseName ~= "" and startedAt == nil
+		and player:GetAttribute("NightDeliveryNextStopPending") ~= true then
 		local world = workspace:FindFirstChild("NightDeliveryWorld")
 		local shortcutReward = 80
 		if world and tostring(world:GetAttribute("NightConditionId") or "") == "roadwork" then
@@ -344,9 +345,10 @@ local function recoverCoreRouteChoice()
 			routeHint.Text = "荷物を受け取った。先に配達ルートを選ぼう。"
 			showCoreRouteChoice(jobSerial, shortcutReward)
 		end
-	elseif startedAt ~= nil then
+	elseif routeFrame.Visible then
 		hideCoreRouteChoice()
 	end
+	setRouteMovementLocked(routeFrame.Visible or player:GetAttribute("NightDeliveryNextStopPending") == true)
 end
 
 player:GetAttributeChangedSignal("NightDeliveryJobSerial"):Connect(function()
@@ -357,6 +359,13 @@ player:GetAttributeChangedSignal("NightDeliveryHouseName"):Connect(function()
 end)
 player:GetAttributeChangedSignal("NightDeliveryOrderStartedAt"):Connect(function()
 	task.defer(recoverCoreRouteChoice)
+end)
+player:GetAttributeChangedSignal("NightDeliveryNextStopPending"):Connect(function()
+	task.defer(recoverCoreRouteChoice)
+end)
+player.CharacterAdded:Connect(function()
+	task.defer(recoverCoreRouteChoice)
+	task.delay(0.4, recoverCoreRouteChoice)
 end)
 task.defer(recoverCoreRouteChoice)
 
