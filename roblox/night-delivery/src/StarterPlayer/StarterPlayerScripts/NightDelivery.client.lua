@@ -14,6 +14,8 @@ local RIVERSIDE_UNLOCK_DELIVERIES = 5
 local SPECIAL_JOB_UNLOCK_DELIVERIES = 8
 local WAREHOUSE_UNLOCK_DELIVERIES = 15
 
+local recentDeliveryHouseName = nil
+local recentDeliveryUntil = 0
 local currentHouseName = nil
 local currentDisplayName = nil
 local currentDistrictName = nil
@@ -1071,6 +1073,8 @@ deliveryEvent.OnClientEvent:Connect(function(action, payload)
 			end
 		end
 	elseif action == "Delivered" then
+		recentDeliveryHouseName = payload.houseName
+		recentDeliveryUntil = os.clock() + 7
 		hideCoreRouteChoice()
 		routeHint.Text = "荷物を受け取った。先に配達ルートを選ぼう。"
 		local bonusText = ""
@@ -1295,3 +1299,63 @@ if workspace.CurrentCamera then
 	workspace.CurrentCamera:GetPropertyChangedSignal("ViewportSize"):Connect(layoutCoreHud)
 end
 layoutCoreHud()
+
+-- A small local street director: each courier sees their own shift phase.
+-- Reuse generated windows and porch lights; no new dynamic lights or NPCs.
+task.spawn(function()
+	local world = workspace:WaitForChild("NightDeliveryWorld", 30)
+	local houses = world and world:WaitForChild("Houses", 30)
+	if not houses then return end
+	local originalWindowColors = {}
+	while world.Parent do
+		local phase = tostring(player:GetAttribute("NightShiftPhase") or "EarlyNight")
+		local late = phase == "LateNight" or phase == "FinalRun"
+		local root = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
+		local destination = currentHouseName or tostring(player:GetAttribute("NightDeliveryHouseName") or "")
+		for _, house in ipairs(houses:GetChildren()) do
+			if house:IsA("Model") then
+				local rhythm = tostring(house:GetAttribute("NightLifeState") or "awake")
+				local dark = rhythm == "asleep" or rhythm == "away" or (late and rhythm == "awake")
+				local deliveryPoint = house:FindFirstChild("DeliveryPoint")
+				local arriving = destination == house.Name and root and deliveryPoint
+					and (root.Position - deliveryPoint.Position).Magnitude < 24
+				local justDelivered = recentDeliveryHouseName == house.Name and os.clock() < recentDeliveryUntil
+				local porch = house:FindFirstChild("PorchLight")
+				if porch then
+					local lit = (not dark and rhythm ~= "away") or arriving or justDelivered
+					porch.Material = lit and Enum.Material.Neon or Enum.Material.SmoothPlastic
+					porch.Color = lit and Color3.fromRGB(255, 226, 169) or Color3.fromRGB(90, 85, 77)
+					local lamp = porch:FindFirstChildOfClass("PointLight")
+					if lamp then lamp.Enabled = lit and (arriving or justDelivered or rhythm == "late") end
+				end
+				for _, part in ipairs(house:GetChildren()) do
+					if part:IsA("BasePart") and (part.Name:find("Window") or part.Name == "PanoramaWindow") then
+						originalWindowColors[part] = originalWindowColors[part] or part.Color
+						local visible = not dark
+							and (not late or rhythm == "late" or rhythm == "television" or part.Name == "Window1")
+						part.Material = visible and Enum.Material.Neon or Enum.Material.Glass
+						part.Color = visible and (rhythm == "television" and Color3.fromRGB(126, 171, 213)
+							or originalWindowColors[part]) or Color3.fromRGB(35, 43, 55)
+					end
+				end
+				local resident = house:FindFirstChild("ResidentAvatar")
+				local showResident = not dark
+				if resident then
+					for _, item in ipairs(resident:GetDescendants()) do
+						if item:IsA("BasePart") then item.LocalTransparencyModifier = showResident and 0 or 1
+						elseif item.Name == "ResidentNameTag" and item:IsA("BillboardGui") then
+							item.Enabled = showResident
+						end
+					end
+				end
+			end
+		end
+		-- Weather changes the road sheen without adding particles or another road layer.
+		local wet = currentWeatherName == "雨"
+		for _, roadName in ipairs({"MainRoad", "CrossRoad", "NorthRoad", "RiversideRoad", "WarehouseRoad"}) do
+			local road = world:FindFirstChild(roadName)
+			if road and road:IsA("BasePart") then road.Reflectance = wet and 0.12 or 0 end
+		end
+		task.wait(destination ~= "" and 0.5 or 3)
+	end
+end)

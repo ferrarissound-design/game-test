@@ -674,6 +674,17 @@ local function createCityDressing()
 	for x = 128, 174, 12 do
 		makePart(folder, "ParkingLine", Vector3.new(0.18, 0.05, 16), CFrame.new(x, 0.28, -31), Color3.fromRGB(210, 210, 198), Enum.Material.SmoothPlastic)
 	end
+	-- One parked vehicle makes the shop feel open during a working shift.
+	-- These anchored silhouettes have no physics interaction or running scripts.
+	local car = makePart(folder, "ParkedCar", Vector3.new(4.8, 2.1, 7.2),
+		CFrame.new(144, 1.15, -31), Color3.fromRGB(69, 83, 96), Enum.Material.Metal)
+	car.CanCollide = false
+	local cabin = makePart(folder, "ParkedCarCabin", Vector3.new(4.1, 1.5, 3.6),
+		CFrame.new(144, 2.7, -31.5), Color3.fromRGB(38, 55, 67), Enum.Material.Glass)
+	cabin.CanCollide = false
+	local tail = makePart(folder, "ParkedCarTailLamp", Vector3.new(3.7, 0.2, 0.12),
+		CFrame.new(144, 1.2, -27.34), Color3.fromRGB(142, 56, 52), Enum.Material.Neon)
+	tail.CanCollide = false
 
 	-- Bus stop
 	makePart(folder, "BusStopPad", Vector3.new(12, 0.3, 7), CFrame.new(25, 0.18, -34), Color3.fromRGB(97, 98, 101), Enum.Material.Concrete)
