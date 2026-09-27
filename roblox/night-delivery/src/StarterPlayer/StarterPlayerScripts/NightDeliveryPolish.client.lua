@@ -373,11 +373,12 @@ shiftClose.TextColor3 = Color3.fromRGB(18, 24, 34)
 shiftClose.ZIndex = 91
 shiftClose.Parent = shiftResult
 addCorner(shiftClose, 10)
--- A compact archive opens only between shifts; the delivery HUD stays quiet.
+-- The archive is available by the depot between shifts, away from the top HUD.
 local archiveButton = Instance.new("TextButton")
 archiveButton.Name = "CourierArchiveButton"
 archiveButton.Size = UDim2.fromOffset(132, 44)
-archiveButton.Position = UDim2.new(0.5, -66, 0, 92)
+archiveButton.AnchorPoint = Vector2.new(0.5, 1)
+archiveButton.Position = UDim2.new(0.5, 0, 0.78, 0)
 archiveButton.BackgroundColor3 = Color3.fromRGB(31, 43, 55)
 archiveButton.TextColor3 = Color3.fromRGB(238, 224, 188)
 archiveButton.TextSize = 14
@@ -388,7 +389,7 @@ archiveButton.Parent = gui
 addCorner(archiveButton, 9)
 local archive = Instance.new("Frame")
 archive.Name = "CourierArchive"
-archive.Size = UDim2.fromOffset(340, 400)
+archive.Size = UDim2.new(0.9, 0, 0.78, 0)
 archive.AnchorPoint = Vector2.new(0.5, 0.5)
 archive.Position = UDim2.fromScale(0.5, 0.5)
 archive.BackgroundColor3 = Color3.fromRGB(19, 25, 36)
@@ -396,6 +397,9 @@ archive.Visible = false
 archive.ZIndex = 100
 archive.Parent = gui
 addCorner(archive, 14)
+local archiveLimit = Instance.new("UISizeConstraint")
+archiveLimit.MaxSize = Vector2.new(340, 440)
+archiveLimit.Parent = archive
 local archiveScroll = Instance.new("ScrollingFrame")
 archiveScroll.Size = UDim2.new(1, -24, 1, -76)
 archiveScroll.Position = UDim2.fromOffset(12, 10)
@@ -408,6 +412,8 @@ archiveScroll.ZIndex = 101
 archiveScroll.Parent = archive
 local archiveText = makeLabel(archiveScroll, UDim2.new(1, -10, 0, 0), UDim2.fromOffset(0, 0), "", 15, Enum.Font.Gotham)
 archiveText.TextWrapped = true
+archiveText.RichText = true
+archiveText.LineHeight = 1.25
 archiveText.TextYAlignment = Enum.TextYAlignment.Top
 archiveText.AutomaticSize = Enum.AutomaticSize.Y
 archiveText.ZIndex = 101
@@ -425,41 +431,72 @@ addCorner(archiveClose, 9)
 local function refreshArchive()
 	local wins = player:GetAttribute("ShiftWins") or 0
 	local _, rank, nextRank = REPLAY.rank(wins)
-	local lines = {"配達員の記録", "", rank.name .. "  ・  完走 " .. wins .. "夜"}
+	local lines = {"<font color='#EED8A6'><b>配達員ランク</b></font>", rank.name .. "  ・  完走 " .. wins .. "夜"}
 	table.insert(lines, nextRank and string.format("次の称号まであと%d夜", nextRank.wins - wins) or "最高称号に到達")
 	table.insert(lines, "")
-	table.insert(lines, "夜の街図鑑")
-	local complete = 0
+	local complete, visitedCount = 0, 0
 	for _, theme in ipairs(REPLAY.Themes) do
 		if player:GetAttribute("ThemeCompleted_" .. theme.id) == true then complete += 1 end
+		if player:GetAttribute("ThemeVisited_" .. theme.id) == true then visitedCount += 1 end
 	end
-	table.insert(lines, string.format("完走 %d / %d", complete, #REPLAY.Themes))
+	table.insert(lines, string.format("<font color='#EED8A6'><b>夜の街図鑑  %d / %d 訪問（完走 %d）</b></font>", visitedCount, #REPLAY.Themes, complete))
+	local world = workspace:FindFirstChild("NightDeliveryWorld")
+	local currentThemeId = world and world:GetAttribute("ThemeId")
+	for _, theme in ipairs(REPLAY.Themes) do
+		if theme.id == currentThemeId and player:GetAttribute("ThemeVisited_" .. theme.id) == true then
+			table.insert(lines, "今夜の街：" .. theme.name)
+			break
+		end
+	end
 	for _, theme in ipairs(REPLAY.Themes) do
 		local visited = player:GetAttribute("ThemeVisited_" .. theme.id) == true
 		local done = player:GetAttribute("ThemeCompleted_" .. theme.id) == true
-		table.insert(lines, (visited and theme.name or "？？？") .. (done and "  ✓ 完走" or visited and "  ・ 訪問" or ""))
+		table.insert(lines, (done and "✓ 完走  " or visited and "・ 訪問  " or "？ 未発見  ")
+			.. (visited and theme.name or "？？？"))
 	end
 	if complete == #REPLAY.Themes then table.insert(lines, "称号：七つの夜を知る者") end
 	table.insert(lines, "")
-	table.insert(lines, "MIDNIGHT FILES")
+	local foundCount = 0
+	for _, oddity in ipairs(REPLAY.Oddities) do
+		if player:GetAttribute("OddityFound_" .. oddity.id) == true then foundCount += 1 end
+	end
+	table.insert(lines, string.format("<font color='#EED8A6'><b>MIDNIGHT FILES  %d / %d</b></font>", foundCount, #REPLAY.Oddities))
 	for _, oddity in ipairs(REPLAY.Oddities) do
 		table.insert(lines, player:GetAttribute("OddityFound_" .. oddity.id) == true
-			and (oddity.name .. "  ✓") or "？？？")
+			and ("✓  " .. oddity.name) or "？  ？？？")
 	end
 	archiveText.Text = table.concat(lines, "\n")
 end
 archiveButton.Activated:Connect(function()
-	if player:GetAttribute("NightShiftActive") == true or shiftResult.Visible then return end
+	if not archiveButton.Visible then return end
 	refreshArchive()
 	archiveScroll.CanvasPosition = Vector2.new(0, 0)
 	archive.Visible = true
 end)
 archiveClose.Activated:Connect(function() archive.Visible = false end)
 local function updateArchiveButton()
-	archiveButton.Visible = player:GetAttribute("NightShiftActive") ~= true and not shiftResult.Visible
-	if player:GetAttribute("NightShiftActive") == true then archive.Visible = false end
+	local character = player.Character
+	local root = character and character:FindFirstChild("HumanoidRootPart")
+	local world = workspace:FindFirstChild("NightDeliveryWorld")
+	local depot = world and world:FindFirstChild("Depot")
+	local pad = depot and depot:FindFirstChild("JobCounter", true)
+	local nearDepot = root and pad and (root.Position - pad.Position).Magnitude <= 18
+	archiveButton.Visible = nearDepot == true and player:GetAttribute("NightShiftActive") ~= true
+		and player:GetAttribute("NightShiftResultPending") ~= true and not shiftResult.Visible
+		and player:GetAttribute("JobOffersActive") ~= true
+	if not archiveButton.Visible then archive.Visible = false end
 end
 player:GetAttributeChangedSignal("NightShiftActive"):Connect(updateArchiveButton)
+player:GetAttributeChangedSignal("NightShiftResultPending"):Connect(updateArchiveButton)
+player:GetAttributeChangedSignal("JobOffersActive"):Connect(updateArchiveButton)
+player.CharacterAdded:Connect(function() archive.Visible = false; updateArchiveButton() end)
+local archiveDistanceTimer = 0
+RunService.Heartbeat:Connect(function(dt)
+	archiveDistanceTimer += dt
+	if archiveDistanceTimer < 0.3 then return end
+	archiveDistanceTimer = 0
+	updateArchiveButton()
+end)
 updateArchiveButton()
 local returnFade = Instance.new("Frame")
 returnFade.Name = "ReturnToDepotFade"
@@ -475,7 +512,8 @@ local function endReturnFade()
 end
 local shiftAcknowledgePending = false
 shiftClose.Activated:Connect(function()
-	if shiftAcknowledgePending then return end
+	if shiftAcknowledgePending or not shiftResult.Visible
+		or player:GetAttribute("NightShiftResultPending") ~= true then return end
 	shiftAcknowledgePending = true
 	shiftClose.Active = false
 	shiftClose.Text = "配達所へ帰社中..."
@@ -494,10 +532,10 @@ shiftClose.Activated:Connect(function()
 	end)
 end)
 player:GetAttributeChangedSignal("NightShiftResultPending"):Connect(function()
-	if shiftAcknowledgePending and player:GetAttribute("NightShiftResultPending") == false then
+	if player:GetAttribute("NightShiftResultPending") == false then
 		shiftAcknowledgePending = false
 		shiftResult.Visible = false
-		endReturnFade()
+		if returnFade.Visible then endReturnFade() end
 		updateArchiveButton()
 		shiftClose.Active = true
 		shiftClose.Text = "配達所へ帰社して次の夜勤へ"
@@ -1905,7 +1943,7 @@ deliveryEvent.OnClientEvent:Connect(function(action, payload)
 		table.insert(lines, string.format("%s  ・  完走 %d夜", payload.courierRank or "配達員", payload.wins or 0))
 		if payload.rankUp then
 			table.insert(lines, "昇格！ 解放：" .. tostring(payload.rankReward or "称号"))
-			announceShift("昇格  " .. tostring(payload.courierRank))
+			announceShift("昇格  " .. tostring(payload.courierRank) .. " / " .. tostring(payload.rankReward or "称号"))
 		end
 		if payload.nextRankWins then
 			table.insert(lines, string.format("次の称号まであと%d夜", payload.nextRankWins - (payload.wins or 0)))
