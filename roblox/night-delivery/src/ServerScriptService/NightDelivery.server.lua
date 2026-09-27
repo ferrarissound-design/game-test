@@ -1472,6 +1472,33 @@ local function clearBikeVisual(player)
 	end
 end
 
+local BIKE_ACCENT_PARTS = {
+	WheelHubLeft = true, WheelHubRight = true, WheelSpoke = true,
+	RearStayTop = true, RearStayBottom = true, SeatPost = true,
+	HandlebarStem = true, Handlebar = true, PedalAxle = true,
+	CargoRackLeft = true, CargoRackRight = true, CrateLatch = true,
+}
+
+local function courierAccentColor(player)
+	local rank = REPLAY.rank(player:GetAttribute("ShiftWins"))
+	if rank >= 4 then return Color3.fromRGB(245, 202, 106) end
+	if rank >= 3 then return Color3.fromRGB(235, 173, 112) end
+	if rank >= 2 then return Color3.fromRGB(139, 203, 238) end
+	return Color3.fromRGB(190, 202, 210)
+end
+
+local function refreshBikeAccent(player)
+	local character = player.Character
+	local visual = character and character:FindFirstChild("DeliveryBikeVisual")
+	if not visual then return end
+	local color = courierAccentColor(player)
+	for _, part in ipairs(visual:GetDescendants()) do
+		if part:IsA("BasePart") and BIKE_ACCENT_PARTS[part.Name] then
+			part.Color = color
+		end
+	end
+end
+
 local function addBikeVisual(player)
 	clearBikeVisual(player)
 	if player:GetAttribute("BikeActive") ~= true then
@@ -1533,11 +1560,7 @@ local function addBikeVisual(player)
 	local seatJoint = Vector3.new(0, -0.80, 0.56)
 	local headJoint = Vector3.new(0, -0.77, -0.59)
 	local frameColor = style.color
-	local trimColor = Color3.fromRGB(190, 202, 210)
-	local courierRank = REPLAY.rank(player:GetAttribute("ShiftWins"))
-	if courierRank >= 4 then trimColor = Color3.fromRGB(245, 202, 106)
-	elseif courierRank >= 3 then trimColor = Color3.fromRGB(235, 173, 112)
-	elseif courierRank >= 2 then trimColor = Color3.fromRGB(139, 203, 238) end
+	local trimColor = courierAccentColor(player)
 	local rubberColor = Color3.fromRGB(31, 34, 39)
 
 	-- Narrow cylinders run along the bicycle's left-right axis, leaving both wheels upright.
@@ -3601,14 +3624,19 @@ deliveryEvent.OnServerEvent:Connect(function(player, action, payload)
 	elseif action == "AcknowledgeNightShift" then
 		if requirePlayerReady(player) and player:GetAttribute("NightShiftActive") == false
 			and player:GetAttribute("NightShiftResultPending") == true
+			and (player:GetAttribute("NightShiftDeliveries") or 0) >= SHIFT_TARGET
 			and not playerJobs[player] and not playerJobOffers[player]
-			and player:GetAttribute("NightDeliveryNextStopPending") ~= true then
-			player:SetAttribute("NightShiftResultPending", false)
+			and player:GetAttribute("NightDeliveryNextStopPending") ~= true
+			and player:GetAttribute("JobOffersActive") ~= true then
 			local character = player.Character
 			local root = character and character:FindFirstChild("HumanoidRootPart")
 			local humanoid = character and character:FindFirstChildOfClass("Humanoid")
 			if root and humanoid and humanoid.Health > 0 and jobCounterRef then
 				character:PivotTo(jobCounterRef.CFrame * CFrame.new(0, 4, -9))
+				player:SetAttribute("NightShiftDeliveries", 0)
+				player:SetAttribute("NightShiftPhase", "EarlyNight")
+				player:SetAttribute("NightShiftEquipment", SHIFT_RULES.DefaultEquipment)
+				player:SetAttribute("NightShiftResultPending", false)
 			end
 		end
 		return
@@ -3946,6 +3974,9 @@ local function setupPlayer(player)
 	player:SetAttribute("BagStyleLevel", data.bagStyleLevel)
 	player:SetAttribute("BikeStyleLevel", data.bikeStyleLevel)
 	player:SetAttribute("ShiftWins", data.shiftWins)
+	player:GetAttributeChangedSignal("ShiftWins"):Connect(function()
+		refreshBikeAccent(player)
+	end)
 	for _, theme in ipairs(REPLAY.Themes) do
 		local previous = data.worldThemeProgress[theme.id]
 		player:SetAttribute("ThemeVisited_" .. theme.id,
