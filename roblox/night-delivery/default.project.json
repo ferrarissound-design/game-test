@@ -44,6 +44,9 @@
         },
         "NightDeliveryDispatchClient": {
           "$path": "src/StarterPlayer/StarterPlayerScripts/NightDeliveryDispatch.client.lua"
+        },
+        "NightDeliveryAudioClient": {
+          "$path": "src/StarterPlayer/StarterPlayerScripts/NightDeliveryAudio.client.lua"
         }
       }
     }
