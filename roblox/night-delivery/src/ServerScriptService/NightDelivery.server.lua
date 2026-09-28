@@ -1446,7 +1446,33 @@ local function applyMovementSpeed(player)
 		targetSpeed -= 2
 	end
 
-	humanoid.WalkSpeed = targetSpeed
+	-- Input disabling is client-side only. Hold the character on the server
+	-- until the authoritative job state allows travel (also covers touch controls).
+	local job = playerJobs[player]
+	local locked = playerJobOffers[player] ~= nil
+		or (job ~= nil and (job.startedAt == nil or job.nextStopOrigin ~= nil))
+	local root = character:FindFirstChild("HumanoidRootPart")
+	if root then
+		if locked then
+			if not root.Anchored then
+				root:SetAttribute("NightDeliveryMovementLockOwned", true)
+				root.AssemblyLinearVelocity = Vector3.zero
+				root.AssemblyAngularVelocity = Vector3.zero
+				root.Anchored = true
+			end
+		elseif root:GetAttribute("NightDeliveryMovementLockOwned") == true then
+			-- Only release an anchor acquired here; preserve other systems' anchors.
+			root.AssemblyLinearVelocity = Vector3.zero
+			root.AssemblyAngularVelocity = Vector3.zero
+			root.Anchored = false
+			root:SetAttribute("NightDeliveryMovementLockOwned", nil)
+		end
+	end
+	if locked then
+		humanoid.Jump = false
+		humanoid:Move(Vector3.zero)
+	end
+	humanoid.WalkSpeed = locked and 0 or targetSpeed
 end
 
 local function clearParcelVisual(player)
@@ -1990,6 +2016,7 @@ end
 local function sendJobOffers(player)
 	local state = playerJobOffers[player]
 	if not state then return end
+	applyMovementSpeed(player)
 	local public = {}
 	for _, offer in ipairs(state.offers) do table.insert(public, offerPublicData(offer)) end
 	sendStatus(player, "JobOffers", {
@@ -2002,6 +2029,7 @@ end
 local function clearJobOffers(player)
 	playerJobOffers[player] = nil
 	player:SetAttribute("JobOffersActive", false)
+	applyMovementSpeed(player)
 end
 
 local function generateJobOffers(player, phase)
@@ -2200,6 +2228,7 @@ local function confirmJob(player, selected, neighborhoodCallback)
 	}
 
 	playerLastHouse[player] = target.Name
+	applyMovementSpeed(player)
 	addParcelVisual(player, jobType.id)
 
 	sendStatus(player, "JobAssigned", {
@@ -2852,6 +2881,7 @@ local function completeDelivery(player, houseName)
 	player:SetAttribute("NightDeliveryOddityId", nil)
 	player:SetAttribute("NightDeliveryOddityActive", false)
 	clearParcelVisual(player)
+	applyMovementSpeed(player)
 
 	sendStatus(player, "Delivered", {
 		houseName = houseName,
@@ -3012,6 +3042,7 @@ local function startNextStop(player, job, stopIndex)
 		if #options == 0 then
 			playerJobs[player] = nil
 			player:SetAttribute("NightDeliveryNextStopPending", false)
+			applyMovementSpeed(player)
 			sendStatus(player, "Message", {text = "追加配達先を読み込めなかったため、この配達バッチを終了したよ。"})
 		end
 		sendStatus(player, "NextStopOptions", {
@@ -3095,6 +3126,7 @@ local function startNextStop(player, job, stopIndex)
 	player:SetAttribute("NightDeliveryOddityId", nil)
 	player:SetAttribute("NightDeliveryOddityActive", false)
 	player:SetAttribute("NightDeliveryJobSerial", job.jobSerial)
+	applyMovementSpeed(player)
 	addParcelVisual(player, job.jobTypeId)
 	sendStatus(player, "JobAssigned", {
 		houseName = target.Name,
@@ -3849,6 +3881,7 @@ deliveryEvent.OnServerEvent:Connect(function(player, action, payload)
 		job.expiresAt = workspace:GetServerTimeNow() + job.timeLimit
 		player:SetAttribute("NightDeliveryTimeLimit", job.timeLimit)
 		player:SetAttribute("NightDeliveryOrderStartedAt", job.startedAt)
+		applyMovementSpeed(player)
 		sendStatus(player, "JobRouteChosen", {
 			jobSerial = job.jobSerial,
 			routeId = routeId,
