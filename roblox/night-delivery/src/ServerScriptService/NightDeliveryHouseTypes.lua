@@ -41,16 +41,17 @@ local function construction(model, origin, frontZ)
 	for _, x in ipairs({-8, -3, 3, 8}) do
 		part(model, "FenceStripe", Vector3.new(1.2, 0.15, 0.78), origin + Vector3.new(x, 4, fenceZ - 0.02), Color3.fromRGB(37, 38, 39), Enum.Material.Metal)
 	end
-	-- Clear, broad stepping stones along the right side, then around the rear wall.
-	for index, z in ipairs({fenceZ - 3, fenceZ + 4, -3, 4, 12}) do
-		part(model, "SafeWalk_" .. index, Vector3.new(6, 0.3, 5), origin + Vector3.new(17, 0.2, z), Color3.fromRGB(157, 157, 146))
+	-- The long route stays safer than the shortcut, but the stones now require deliberate foot placement.
+	for index, z in ipairs({fenceZ - 4, fenceZ + 3, -4, 4, 12}) do
+		local x = index % 2 == 0 and 18 or 16
+		part(model, "SafeWalk_" .. index, Vector3.new(4.2, 0.3, 3.6), origin + Vector3.new(x, 0.2, z), Color3.fromRGB(157, 157, 146))
 	end
-	part(model, "RearWalk", Vector3.new(22, 0.3, 5), origin + Vector3.new(7, 0.2, 14), Color3.fromRGB(157, 157, 146))
-	-- Optional faster crossing: crate, scaffold, then a broad landing over the fence.
-	part(model, "ShortcutCrate", Vector3.new(5, 2, 5), origin + Vector3.new(-4, 1, fenceZ - 8), wood, Enum.Material.WoodPlanks)
-	part(model, "ShortcutScaffold", Vector3.new(6, 4, 5), origin + Vector3.new(-4, 2, fenceZ - 3), wood, Enum.Material.WoodPlanks)
-	part(model, "ShortcutFenceLanding", Vector3.new(8, 0.5, 5), origin + Vector3.new(-4, 6.3, fenceZ), orange, Enum.Material.Metal)
-	part(model, "ShortcutInsideLanding", Vector3.new(7, 4, 5), origin + Vector3.new(-4, 2, fenceZ + 5), wood, Enum.Material.WoodPlanks)
+	part(model, "RearWalk", Vector3.new(15, 0.3, 3.8), origin + Vector3.new(6.5, 0.2, 14), Color3.fromRGB(157, 157, 146))
+	-- The shortcut is meaningfully faster, but its smaller landings punish sloppy jumps.
+	part(model, "ShortcutCrate", Vector3.new(4, 2, 4), origin + Vector3.new(-5, 1, fenceZ - 9), wood, Enum.Material.WoodPlanks)
+	part(model, "ShortcutScaffold", Vector3.new(3.8, 4, 3.8), origin + Vector3.new(-2, 2, fenceZ - 4), wood, Enum.Material.WoodPlanks)
+	part(model, "ShortcutFenceLanding", Vector3.new(4.2, 0.5, 3.4), origin + Vector3.new(-5, 6.3, fenceZ + 1), orange, Enum.Material.Metal)
+	part(model, "ShortcutInsideLanding", Vector3.new(4, 4, 3.8), origin + Vector3.new(-1, 2, fenceZ + 7), wood, Enum.Material.WoodPlanks)
 	local back = part(model, "DeliveryPoint", Vector3.new(6, 0.5, 5), origin + Vector3.new(0, 0.25, 14), Color3.fromRGB(91, 155, 124))
 	sign(model, origin + Vector3.new(12, 0, fenceZ - 5), "工事中：右側を回って裏口へ\n木箱から柵越えもできる")
 	return back
@@ -61,17 +62,18 @@ local function highRise(model, origin)
 	local metal = Color3.fromRGB(97, 116, 129)
 	local body = part(model, "Body", Vector3.new(22, 18, 18), origin + Vector3.new(0, 9, 0), concrete)
 	part(model, "RoofDeck", Vector3.new(24, 0.5, 20), origin + Vector3.new(0, 18.25, 0), metal, Enum.Material.Metal)
-	-- Twelve forgiving steps, 1.5 studs high, with a continuous landing at the roof.
+	-- The fire escape is still the safer route, but each tread has a small gap and less lateral room.
 	for i = 1, 12 do
-		local z = -17 + (i - 1) * 2.2
-		part(model, "FireStair_" .. i, Vector3.new(6, i * 1.5, 2.4), origin + Vector3.new(-14, i * 0.75, z), metal, Enum.Material.Metal)
+		local z = -24 + (i - 1) * 2.8
+		local x = -14 + ((i % 3) - 1) * 0.9
+		part(model, "FireStair_" .. i, Vector3.new(4.1, i * 1.5, 2.15), origin + Vector3.new(x, i * 0.75, z), metal, Enum.Material.Metal)
 	end
-	part(model, "RoofLanding", Vector3.new(8, 0.5, 6), origin + Vector3.new(-11, 18.25, 7), metal, Enum.Material.Metal)
-	-- Optional short climb to the middle landing. Broad jumps with no lethal fall.
-	for i, step in ipairs({{-4, -17, 2.5}, {-7, -17, 5}, {-10, -17, 7.5}, {-13, -14, 9}}) do
-		part(model, "RoofShortcut_" .. i, Vector3.new(5, step[3], 5), origin + Vector3.new(step[1], step[3] / 2, step[2]), Color3.fromRGB(166, 127, 78), Enum.Material.WoodPlanks)
+	part(model, "RoofLanding", Vector3.new(5.5, 0.5, 4.5), origin + Vector3.new(-11, 18.25, 7), metal, Enum.Material.Metal)
+	-- The shortcut uses smaller, staggered landings so speed costs precision.
+	for i, step in ipairs({{-5, -19, 2.5}, {-9, -16, 5}, {-5, -12, 7.5}, {-11, -8, 10.5}}) do
+		part(model, "RoofShortcut_" .. i, Vector3.new(3.4, step[3], 3.4), origin + Vector3.new(step[1], step[3] / 2, step[2]), Color3.fromRGB(166, 127, 78), Enum.Material.WoodPlanks)
 	end
-	part(model, "RoofShortcutBridge", Vector3.new(5, 0.5, 5), origin + Vector3.new(-14, 9.25, -9), metal, Enum.Material.Metal)
+	part(model, "RoofShortcutBridge", Vector3.new(3.2, 0.5, 3.2), origin + Vector3.new(-13, 11.0, -4), metal, Enum.Material.Metal)
 	local target = part(model, "DeliveryPoint", Vector3.new(6, 0.5, 6), origin + Vector3.new(-4, 18.75, 1), Color3.fromRGB(97, 185, 163), Enum.Material.Neon)
 	sign(model, origin + Vector3.new(-16, 0, -20), "屋上配達：左の非常階段へ\n足場の近道もある")
 	return body, target
@@ -86,12 +88,12 @@ local function blockedAlley(model, origin, frontZ)
 		part(model, "AlleyWall_" .. x, Vector3.new(0.7, 6, 17), origin + Vector3.new(x, 3, alleyZ - 2), metal, Enum.Material.Brick)
 	end
 	part(model, "RoadworkBarrier", Vector3.new(18, 5, 0.8), origin + Vector3.new(0, 2.5, alleyZ), Color3.fromRGB(215, 143, 70), Enum.Material.Metal)
-	part(model, "Dumpster", Vector3.new(6, 2.5, 5), origin + Vector3.new(-2, 1.25, alleyZ - 9), bin, Enum.Material.Metal)
-	part(model, "ParcelStack", Vector3.new(3, 2.5, 4), origin + Vector3.new(5, 1.25, alleyZ - 8), Color3.fromRGB(149, 119, 82), Enum.Material.WoodPlanks)
-	part(model, "SmallPlatform", Vector3.new(7, 3.5, 5), origin + Vector3.new(-2, 1.75, alleyZ - 4), metal, Enum.Material.Metal)
-	part(model, "PipeWalk", Vector3.new(8, 4.5, 5), origin + Vector3.new(-2, 2.25, alleyZ), Color3.fromRGB(99, 116, 125), Enum.Material.Metal)
-	part(model, "WallCrossing", Vector3.new(8, 5.5, 5), origin + Vector3.new(-2, 2.75, alleyZ + 4), metal, Enum.Material.Brick)
-	part(model, "AlleyLanding", Vector3.new(9, 2.5, 5), origin + Vector3.new(-2, 1.25, alleyZ + 9), metal, Enum.Material.Metal)
+	part(model, "Dumpster", Vector3.new(4.5, 2.5, 4), origin + Vector3.new(-4, 1.25, alleyZ - 10), bin, Enum.Material.Metal)
+	part(model, "ParcelStack", Vector3.new(2.8, 2.5, 3.2), origin + Vector3.new(4.5, 1.25, alleyZ - 8), Color3.fromRGB(149, 119, 82), Enum.Material.WoodPlanks)
+	part(model, "SmallPlatform", Vector3.new(4.2, 3.5, 3.6), origin + Vector3.new(-1, 1.75, alleyZ - 4), metal, Enum.Material.Metal)
+	part(model, "PipeWalk", Vector3.new(2.6, 4.5, 5.2), origin + Vector3.new(3, 2.25, alleyZ + 1), Color3.fromRGB(99, 116, 125), Enum.Material.Metal)
+	part(model, "WallCrossing", Vector3.new(4.0, 5.5, 3.6), origin + Vector3.new(-3, 2.75, alleyZ + 5), metal, Enum.Material.Brick)
+	part(model, "AlleyLanding", Vector3.new(5.0, 2.5, 4), origin + Vector3.new(2, 1.25, alleyZ + 10), metal, Enum.Material.Metal)
 	-- The rear path joins either approach; it stays beyond the existing solid house body.
 	part(model, "BackPassage", Vector3.new(29, 0.3, 6), origin + Vector3.new(-4, 0.2, 15), metal)
 	local target = part(model, "DeliveryPoint", Vector3.new(6, 0.5, 6), origin + Vector3.new(0, 0.25, 15), Color3.fromRGB(93, 176, 147), Enum.Material.Neon)
@@ -104,13 +106,13 @@ local function warehouseRoute(model, origin)
 	local wood = Color3.fromRGB(137, 102, 66)
 	local rust = Color3.fromRGB(178, 92, 65)
 	-- A loading-yard ascent around the warehouse's right wall, ending at a rear upper dock.
-	part(model, "LoadingCrate", Vector3.new(6, 2.5, 6), origin + Vector3.new(16, 1.25, -21), wood, Enum.Material.WoodPlanks)
-	part(model, "PalletStack", Vector3.new(7, 4.5, 6), origin + Vector3.new(16, 2.25, -15), wood, Enum.Material.WoodPlanks)
-	part(model, "FreightContainer", Vector3.new(7, 7.5, 8), origin + Vector3.new(16, 3.75, -8), rust, Enum.Material.Metal)
-	part(model, "StorageShelf", Vector3.new(7, 10.5, 7), origin + Vector3.new(16, 5.25, 0), steel, Enum.Material.Metal)
-	part(model, "MetalCatwalk", Vector3.new(8, 0.6, 8), origin + Vector3.new(16, 13.2, 8), steel, Enum.Material.DiamondPlate)
-	part(model, "CatwalkSupport", Vector3.new(0.7, 12.9, 0.7), origin + Vector3.new(19, 6.45, 8), steel, Enum.Material.Metal)
-	part(model, "UpperLoadingDock", Vector3.new(12, 0.6, 11), origin + Vector3.new(12, 16.2, 15), steel, Enum.Material.DiamondPlate)
+	part(model, "LoadingCrate", Vector3.new(4.2, 2.5, 4.2), origin + Vector3.new(15, 1.25, -22), wood, Enum.Material.WoodPlanks)
+	part(model, "PalletStack", Vector3.new(4.2, 4.5, 4.0), origin + Vector3.new(18, 2.25, -15), wood, Enum.Material.WoodPlanks)
+	part(model, "FreightContainer", Vector3.new(4.5, 7.5, 5.0), origin + Vector3.new(14, 3.75, -8), rust, Enum.Material.Metal)
+	part(model, "StorageShelf", Vector3.new(3.8, 10.5, 4.2), origin + Vector3.new(18, 5.25, -1), steel, Enum.Material.Metal)
+	part(model, "MetalCatwalk", Vector3.new(3.2, 0.6, 6.2), origin + Vector3.new(14, 13.2, 7), steel, Enum.Material.DiamondPlate)
+	part(model, "CatwalkSupport", Vector3.new(0.7, 12.9, 0.7), origin + Vector3.new(14, 6.45, 7), steel, Enum.Material.Metal)
+	part(model, "UpperLoadingDock", Vector3.new(7.5, 0.6, 7.5), origin + Vector3.new(10, 16.2, 15), steel, Enum.Material.DiamondPlate)
 	for _, x in ipairs({7, 17}) do
 		part(model, "DockSupport_" .. x, Vector3.new(0.8, 15.9, 0.8), origin + Vector3.new(x, 7.95, 18), steel, Enum.Material.Metal)
 	end
@@ -124,20 +126,22 @@ local function rooftopGap(model, origin)
 	local roof = Color3.fromRGB(90, 105, 117)
 	local body = part(model, "Body", Vector3.new(18, 9, 16), origin + Vector3.new(0, 4.5, 0), brick, Enum.Material.Brick)
 	part(model, "StartingRoof", Vector3.new(19, 0.6, 17), origin + Vector3.new(0, 9.3, 0), roof, Enum.Material.Slate)
-	part(model, "NeighborBuilding", Vector3.new(18, 9, 16), origin + Vector3.new(26, 4.5, 0), brick, Enum.Material.Brick)
-	part(model, "NeighborRoof", Vector3.new(19, 0.6, 17), origin + Vector3.new(26, 9.3, 0), roof, Enum.Material.Slate)
-	-- A broad exterior stair on the first building. The short horizontal gaps are each 1-2 studs.
+	part(model, "NeighborBuilding", Vector3.new(18, 9, 16), origin + Vector3.new(30, 4.5, 0), brick, Enum.Material.Brick)
+	part(model, "NeighborRoof", Vector3.new(19, 0.6, 17), origin + Vector3.new(30, 9.3, 0), roof, Enum.Material.Slate)
+	-- The climb now has separated treads and a smaller setup landing.
 	for i = 1, 6 do
-		part(model, "FirstRoofStair_" .. i, Vector3.new(6, i * 1.5, 3.2), origin + Vector3.new(-12, i * 0.75, -18 + (i - 1) * 2.1), roof, Enum.Material.Metal)
+		local z = -22 + (i - 1) * 3.0
+		part(model, "FirstRoofStair_" .. i, Vector3.new(4.1, i * 1.5, 2.2), origin + Vector3.new(-12 + (i % 2) * 1.2, i * 0.75, z), roof, Enum.Material.Metal)
 	end
-	part(model, "FirstRoofLanding", Vector3.new(7, 0.6, 7), origin + Vector3.new(-9, 9.3, -6), roof, Enum.Material.Metal)
-	part(model, "BillboardBridge", Vector3.new(5, 0.6, 7), origin + Vector3.new(13, 9.3, 0), Color3.fromRGB(180, 136, 77), Enum.Material.Metal)
-	-- Falling between roofs lands on a catch deck, with steps back to the far roof.
-	part(model, "RecoveryDeck", Vector3.new(10, 0.6, 12), origin + Vector3.new(13, 4.8, 0), roof, Enum.Material.Metal)
-	part(model, "RecoveryStep1", Vector3.new(6, 6, 5), origin + Vector3.new(14, 3, 7), roof, Enum.Material.Metal)
-	part(model, "RecoveryStep2", Vector3.new(6, 8, 5), origin + Vector3.new(17, 4, 11), roof, Enum.Material.Metal)
-	part(model, "RecoveryStep3", Vector3.new(6, 9, 5), origin + Vector3.new(20, 4.5, 11), roof, Enum.Material.Metal)
-	local target = part(model, "DeliveryPoint", Vector3.new(6, 0.5, 6), origin + Vector3.new(29, 9.85, 1), Color3.fromRGB(97, 185, 163), Enum.Material.Neon)
+	part(model, "FirstRoofLanding", Vector3.new(5, 0.6, 4.5), origin + Vector3.new(-9, 9.3, -6), roof, Enum.Material.Metal)
+	-- The center billboard creates two real roof jumps instead of a nearly continuous bridge.
+	part(model, "BillboardBridge", Vector3.new(3.0, 0.6, 4.0), origin + Vector3.new(15, 9.3, 0), Color3.fromRGB(180, 136, 77), Enum.Material.Metal)
+	-- A missed jump can be recovered, but the catch deck is small enough that falling still costs time.
+	part(model, "RecoveryDeck", Vector3.new(6.0, 0.6, 7.0), origin + Vector3.new(15, 4.8, 0), roof, Enum.Material.Metal)
+	part(model, "RecoveryStep1", Vector3.new(3.6, 6, 3.6), origin + Vector3.new(17, 3, 6), roof, Enum.Material.Metal)
+	part(model, "RecoveryStep2", Vector3.new(3.4, 8, 3.4), origin + Vector3.new(21, 4, 9), roof, Enum.Material.Metal)
+	part(model, "RecoveryStep3", Vector3.new(3.4, 9, 3.4), origin + Vector3.new(25, 4.5, 7), roof, Enum.Material.Metal)
+	local target = part(model, "DeliveryPoint", Vector3.new(6, 0.5, 6), origin + Vector3.new(33, 9.85, 1), Color3.fromRGB(97, 185, 163), Enum.Material.Neon)
 	sign(model, origin + Vector3.new(-13, 0, -23), "屋根を横へ渡って配達\n落ちても中央から登り直せる")
 	return body, target, -8.3
 end
@@ -149,19 +153,19 @@ local function apartmentStairs(model, origin)
 	local shortcut = Color3.fromRGB(160, 117, 73)
 	local body = part(model, "Body", Vector3.new(22, 14, 18), origin + Vector3.new(0, 7, 0), concrete, Enum.Material.Concrete)
 
-	-- Broad exterior stairs are the safe route. Each rise is forgiving on mobile.
+	-- The exterior stair remains the lower-risk route, but separated treads require active movement.
 	for i = 1, 8 do
 		local height = i * 1.5
 		part(
 			model,
 			"ApartmentStair_" .. i,
-			Vector3.new(6, height, 3.2),
-			origin + Vector3.new(-14, height / 2, -23 + (i - 1) * 2),
+			Vector3.new(4.4, height, 2.2),
+			origin + Vector3.new(-14 + (i % 2) * 0.8, height / 2, -25 + (i - 1) * 2.7),
 			rail,
 			Enum.Material.Metal
 		)
 	end
-	part(model, "ApartmentTopLanding", Vector3.new(8, 0.6, 7), origin + Vector3.new(-10, 12.3, -9.5), rail, Enum.Material.DiamondPlate)
+	part(model, "ApartmentTopLanding", Vector3.new(5.5, 0.6, 4.5), origin + Vector3.new(-10, 12.3, -9.5), rail, Enum.Material.DiamondPlate)
 	part(model, "ApartmentBalcony", Vector3.new(24, 0.6, 5), origin + Vector3.new(0, 12.3, -10.5), rail, Enum.Material.Metal)
 
 	-- The right-side parcel stacks are shorter but require confident jumps.
@@ -174,7 +178,7 @@ local function apartmentStairs(model, origin)
 		part(
 			model,
 			"ApartmentShortcut_" .. i,
-			Vector3.new(5, step[3], 4.5),
+			Vector3.new(3.6, step[3], 3.6),
 			origin + Vector3.new(step[1], step[3] / 2, step[2]),
 			shortcut,
 			Enum.Material.WoodPlanks
@@ -199,26 +203,26 @@ local function parkingDeck(model, origin)
 	end
 	part(model, "ParkingUpperDeck", Vector3.new(25, 0.7, 22), origin + Vector3.new(0, 9.35, 0), concrete, Enum.Material.Concrete)
 
-	-- A broad stepped ramp is the low-risk route to the upper deck.
+	-- The ramp route is safer than the crate line, but it is no longer a continuous staircase.
 	for i = 1, 6 do
 		local height = i * 1.5
 		part(
 			model,
 			"ParkingRamp_" .. i,
-			Vector3.new(7, height, 4),
-			origin + Vector3.new(-13, height / 2, -22 + (i - 1) * 3),
+			Vector3.new(5.0, height, 2.8),
+			origin + Vector3.new(-13 + (i % 2) * 0.8, height / 2, -25 + (i - 1) * 3.6),
 			concrete,
 			Enum.Material.Concrete
 		)
 	end
-	part(model, "ParkingRampLanding", Vector3.new(9, 0.6, 7), origin + Vector3.new(-9, 9.7, -6), metal, Enum.Material.DiamondPlate)
+	part(model, "ParkingRampLanding", Vector3.new(6, 0.6, 5), origin + Vector3.new(-9, 9.7, -6), metal, Enum.Material.DiamondPlate)
 
 	-- A stack of maintenance crates cuts the corner for faster players.
 	for i, height in ipairs({3, 6, 9}) do
 		part(
 			model,
 			"ParkingShortcut_" .. i,
-			Vector3.new(5, height, 5),
+			Vector3.new(3.5, height, 3.5),
 			origin + Vector3.new(9, height / 2, -16 + (i - 1) * 4),
 			warning,
 			Enum.Material.Metal
@@ -241,14 +245,14 @@ local function factoryCatwalk(model, origin)
 		part(
 			model,
 			"FactorySafeStep_" .. i,
-			Vector3.new(6, height, 3.2),
-			origin + Vector3.new(16, height / 2, -24 + (i - 1) * 2.2),
+			Vector3.new(4.0, height, 2.2),
+			origin + Vector3.new(16 + (i % 2) * 1.0, height / 2, -25 + (i - 1) * 2.8),
 			steel,
 			Enum.Material.Metal
 		)
 	end
-	part(model, "FactorySideCatwalk", Vector3.new(6, 0.6, 24), origin + Vector3.new(16, 12.3, 2), steel, Enum.Material.DiamondPlate)
-	part(model, "FactoryRearBridge", Vector3.new(16, 0.6, 6), origin + Vector3.new(10, 12.3, 14), steel, Enum.Material.DiamondPlate)
+	part(model, "FactorySideCatwalk", Vector3.new(3.2, 0.6, 24), origin + Vector3.new(16, 12.3, 2), steel, Enum.Material.DiamondPlate)
+	part(model, "FactoryRearBridge", Vector3.new(16, 0.6, 3.2), origin + Vector3.new(10, 12.3, 14), steel, Enum.Material.DiamondPlate)
 
 	-- Conveyor-side shortcut: fewer platforms, larger jumps.
 	for i, step in ipairs({
@@ -260,7 +264,7 @@ local function factoryCatwalk(model, origin)
 		part(
 			model,
 			"FactoryShortcut_" .. i,
-			Vector3.new(5, step[3], 5),
+			Vector3.new(3.2, step[3], 3.2),
 			origin + Vector3.new(step[1], step[3] / 2, step[2]),
 			i % 2 == 0 and hazard or crate,
 			i % 2 == 0 and Enum.Material.Metal or Enum.Material.WoodPlanks
@@ -286,13 +290,13 @@ local function japaneseRoofRun(model, origin)
 		part(
 			model,
 			"RoofSafeStep_" .. i,
-			Vector3.new(6, height, 3.2),
-			origin + Vector3.new(-14, height / 2, -20 + (i - 1) * 2.4),
+			Vector3.new(4.2, height, 2.25),
+			origin + Vector3.new(-14 + (i % 2) * 0.8, height / 2, -23 + (i - 1) * 2.9),
 			wood,
 			Enum.Material.WoodPlanks
 		)
 	end
-	part(model, "RoofSafeLanding", Vector3.new(8, 0.6, 7), origin + Vector3.new(-9, 9.7, -7), roof, Enum.Material.Metal)
+	part(model, "RoofSafeLanding", Vector3.new(5.5, 0.6, 4.5), origin + Vector3.new(-9, 9.7, -7), roof, Enum.Material.Metal)
 
 	for i, step in ipairs({
 		{11, -18, 3.0},
@@ -327,17 +331,17 @@ local function westernBalcony(model, origin)
 		part(
 			model,
 			"BalconySafeStep_" .. i,
-			Vector3.new(6, height, 3.2),
-			origin + Vector3.new(-15, height / 2, -22 + (i - 1) * 2.25),
+			Vector3.new(4.2, height, 2.2),
+			origin + Vector3.new(-15 + (i % 2) * 0.8, height / 2, -24 + (i - 1) * 2.7),
 			wood,
 			Enum.Material.WoodPlanks
 		)
 	end
-	part(model, "BalconySafeLanding", Vector3.new(8, 0.6, 7), origin + Vector3.new(-10, 11.4, -8), wood, Enum.Material.WoodPlanks)
+	part(model, "BalconySafeLanding", Vector3.new(5.5, 0.6, 4.5), origin + Vector3.new(-10, 11.4, -8), wood, Enum.Material.WoodPlanks)
 
-	part(model, "GardenBench", Vector3.new(5, 2.8, 4), origin + Vector3.new(11, 1.4, -17), wood, Enum.Material.WoodPlanks)
-	part(model, "PorchAwningShortcut", Vector3.new(6, 5.8, 5), origin + Vector3.new(10, 2.9, -12), roof, Enum.Material.Slate)
-	part(model, "BalconyCrateShortcut", Vector3.new(5, 9, 5), origin + Vector3.new(8, 4.5, -8), Color3.fromRGB(160, 119, 74), Enum.Material.WoodPlanks)
+	part(model, "GardenBench", Vector3.new(3.8, 2.8, 3.2), origin + Vector3.new(11, 1.4, -18), wood, Enum.Material.WoodPlanks)
+	part(model, "PorchAwningShortcut", Vector3.new(3.5, 5.8, 3.5), origin + Vector3.new(8, 2.9, -12), roof, Enum.Material.Slate)
+	part(model, "BalconyCrateShortcut", Vector3.new(3.2, 9, 3.2), origin + Vector3.new(11, 4.5, -7), Color3.fromRGB(160, 119, 74), Enum.Material.WoodPlanks)
 
 	local target = part(model, "DeliveryPoint", Vector3.new(6, 0.5, 4), origin + Vector3.new(2, 11.9, -10.5), Color3.fromRGB(97, 185, 163), Enum.Material.Neon)
 	sign(model, origin + Vector3.new(-16, 0, -24), "洋館2階バルコニーへ\n左の階段か右の庇を使おう")
@@ -362,17 +366,17 @@ local function showaFireEscape(model, origin)
 	end
 	for i = 1, 10 do
 		local height = i * 1.5
-		local z = -19 + (i - 1) * 2.2
+		local z = -23 + (i - 1) * 2.9
 		part(
 			model,
 			"ShowaSafeStep_" .. i,
-			Vector3.new(5.5, height, 2.8),
-			origin + Vector3.new(-14, height / 2, z),
+			Vector3.new(3.8, height, 2.1),
+			origin + Vector3.new(-14 + (i % 2) * 1.0, height / 2, z),
 			metal,
 			Enum.Material.Metal
 		)
 	end
-	part(model, "ShowaTopWalk", Vector3.new(16, 0.6, 5), origin + Vector3.new(-5, 15.5, 8), metal, Enum.Material.DiamondPlate)
+	part(model, "ShowaTopWalk", Vector3.new(14, 0.6, 3.2), origin + Vector3.new(-5, 15.5, 8), metal, Enum.Material.DiamondPlate)
 
 	for i, step in ipairs({
 		{8, -17, 3.5},
@@ -409,12 +413,12 @@ local function luxuryGardenWall(model, origin, frontZ)
 		part(model, "Hedge", Vector3.new(6, 3.2, 12), origin + Vector3.new(x, 1.6, wallZ + 4), hedge, Enum.Material.Grass)
 	end
 
-	part(model, "SafeGardenWalk1", Vector3.new(7, 0.3, 12), origin + Vector3.new(-18, 0.2, wallZ - 1), stone, Enum.Material.Concrete)
-	part(model, "SafeGardenWalk2", Vector3.new(18, 0.3, 6), origin + Vector3.new(-10, 0.2, 14), stone, Enum.Material.Concrete)
+	part(model, "SafeGardenWalk1", Vector3.new(4.5, 0.3, 11), origin + Vector3.new(-18, 0.2, wallZ - 1), stone, Enum.Material.Concrete)
+	part(model, "SafeGardenWalk2", Vector3.new(15, 0.3, 3.8), origin + Vector3.new(-9, 0.2, 14), stone, Enum.Material.Concrete)
 
-	part(model, "FountainBase", Vector3.new(6, 2.5, 6), origin + Vector3.new(1, 1.25, wallZ - 6), stone, Enum.Material.Marble)
-	part(model, "HedgeShortcut", Vector3.new(6, 4.5, 5), origin + Vector3.new(1, 2.25, wallZ), hedge, Enum.Material.Grass)
-	part(model, "GardenLanding", Vector3.new(7, 2.5, 6), origin + Vector3.new(1, 1.25, wallZ + 6), stone, Enum.Material.Marble)
+	part(model, "FountainBase", Vector3.new(4.2, 2.5, 4.2), origin + Vector3.new(0, 1.25, wallZ - 7), stone, Enum.Material.Marble)
+	part(model, "HedgeShortcut", Vector3.new(3.4, 4.5, 3.8), origin + Vector3.new(3, 2.25, wallZ), hedge, Enum.Material.Grass)
+	part(model, "GardenLanding", Vector3.new(4.2, 2.5, 4.2), origin + Vector3.new(-1, 1.25, wallZ + 7), stone, Enum.Material.Marble)
 
 	local target = part(model, "DeliveryPoint", Vector3.new(6, 0.5, 5), origin + Vector3.new(0, 0.25, 14), Color3.fromRGB(97, 185, 163), Enum.Material.Neon)
 	sign(model, origin + Vector3.new(-17, 0, wallZ - 9), "邸宅の裏口へ\n左の庭園路か噴水越えの近道")
@@ -427,15 +431,15 @@ local function harborContainerRun(model, origin)
 	local rust = Color3.fromRGB(151, 78, 61)
 	local yellow = Color3.fromRGB(197, 151, 67)
 
-	part(model, "HarborSafe1", Vector3.new(7, 3, 7), origin + Vector3.new(15, 1.5, -22), blue, Enum.Material.Metal)
-	part(model, "HarborSafe2", Vector3.new(7, 6, 7), origin + Vector3.new(15, 3, -14), rust, Enum.Material.Metal)
-	part(model, "HarborSafe3", Vector3.new(7, 9, 7), origin + Vector3.new(15, 4.5, -6), blue, Enum.Material.Metal)
-	part(model, "HarborSafe4", Vector3.new(7, 12, 7), origin + Vector3.new(15, 6, 2), rust, Enum.Material.Metal)
-	part(model, "HarborCatwalk", Vector3.new(10, 0.6, 14), origin + Vector3.new(12, 12.3, 11), steel, Enum.Material.DiamondPlate)
+	part(model, "HarborSafe1", Vector3.new(5.0, 3, 5.8), origin + Vector3.new(15, 1.5, -22), blue, Enum.Material.Metal)
+	part(model, "HarborSafe2", Vector3.new(5.0, 6, 5.8), origin + Vector3.new(17, 3, -13), rust, Enum.Material.Metal)
+	part(model, "HarborSafe3", Vector3.new(5.0, 9, 5.8), origin + Vector3.new(13, 4.5, -4), blue, Enum.Material.Metal)
+	part(model, "HarborSafe4", Vector3.new(5.0, 12, 5.8), origin + Vector3.new(17, 6, 5), rust, Enum.Material.Metal)
+	part(model, "HarborCatwalk", Vector3.new(5.0, 0.6, 10), origin + Vector3.new(13, 12.3, 13), steel, Enum.Material.DiamondPlate)
 
-	part(model, "HarborShortcut1", Vector3.new(5, 4, 5), origin + Vector3.new(5, 2, -18), yellow, Enum.Material.Metal)
-	part(model, "HarborShortcut2", Vector3.new(5, 8, 5), origin + Vector3.new(7, 4, -10), yellow, Enum.Material.Metal)
-	part(model, "HarborShortcut3", Vector3.new(5, 12, 5), origin + Vector3.new(9, 6, -2), yellow, Enum.Material.Metal)
+	part(model, "HarborShortcut1", Vector3.new(3.2, 4, 3.2), origin + Vector3.new(4, 2, -19), yellow, Enum.Material.Metal)
+	part(model, "HarborShortcut2", Vector3.new(3.0, 8, 3.0), origin + Vector3.new(9, 4, -10), yellow, Enum.Material.Metal)
+	part(model, "HarborShortcut3", Vector3.new(3.0, 12, 3.0), origin + Vector3.new(6, 6, -1), yellow, Enum.Material.Metal)
 
 	local target = part(model, "DeliveryPoint", Vector3.new(6, 0.5, 6), origin + Vector3.new(8, 12.85, 15), Color3.fromRGB(97, 185, 163), Enum.Material.Neon)
 	sign(model, origin + Vector3.new(18, 0, -27), "港の上部コンテナへ\n外周は安全、黄色コンテナは近道")
@@ -453,15 +457,18 @@ local function mountainBridge(model, origin)
 		part(
 			model,
 			"MountainSafeStep_" .. i,
-			Vector3.new(7, height, 5),
+			Vector3.new(4.5, height, 3.6),
 			origin + Vector3.new(-12, height / 2, -20 + (i - 1) * 3),
 			rock,
 			Enum.Material.Rock
 		)
 	end
-	part(model, "MountainStartLedge", Vector3.new(11, 0.7, 10), origin + Vector3.new(-7, 9.4, -3), moss, Enum.Material.Grass)
-	part(model, "MountainBridge", Vector3.new(24, 0.7, 6), origin + Vector3.new(7, 9.4, 3), wood, Enum.Material.WoodPlanks)
-	part(model, "MountainFarLedge", Vector3.new(12, 0.7, 10), origin + Vector3.new(22, 9.4, 7), moss, Enum.Material.Grass)
+	part(model, "MountainStartLedge", Vector3.new(8, 0.7, 7), origin + Vector3.new(-7, 9.4, -3), moss, Enum.Material.Grass)
+	for i, x in ipairs({-1, 5, 11, 17}) do
+		local z = 2 + (i % 2 == 0 and 1.0 or -1.0)
+		part(model, "MountainBridgePlank_" .. i, Vector3.new(3.4, 0.7, 3.2), origin + Vector3.new(x, 9.4, z), wood, Enum.Material.WoodPlanks)
+	end
+	part(model, "MountainFarLedge", Vector3.new(9, 0.7, 7), origin + Vector3.new(22, 9.4, 7), moss, Enum.Material.Grass)
 	part(model, "MountainPorch", Vector3.new(10, 0.7, 6), origin + Vector3.new(22, 9.4, 0), wood, Enum.Material.WoodPlanks)
 
 	for i, step in ipairs({
@@ -473,7 +480,7 @@ local function mountainBridge(model, origin)
 		part(
 			model,
 			"MountainShortcutRock_" .. i,
-			Vector3.new(5.5, step[3], 5.5),
+			Vector3.new(3.4, step[3], 3.4),
 			origin + Vector3.new(step[1], step[3] / 2, step[2]),
 			rock,
 			Enum.Material.Rock
@@ -506,18 +513,18 @@ local function danchiCorridor(model, origin)
 		part(
 			model,
 			"DanchiSafeStep_" .. i,
-			Vector3.new(6, height, 3.2),
-			origin + Vector3.new(-15, height / 2, -22 + (i - 1) * 2.1),
+			Vector3.new(4.0, height, 2.2),
+			origin + Vector3.new(-15 + (i % 2) * 0.9, height / 2, -24 + (i - 1) * 2.5),
 			metal,
 			Enum.Material.Metal
 		)
 	end
-	part(model, "DanchiTopLanding", Vector3.new(8, 0.6, 7), origin + Vector3.new(-10, 11.5, -8), metal, Enum.Material.DiamondPlate)
+	part(model, "DanchiTopLanding", Vector3.new(5.5, 0.6, 4.5), origin + Vector3.new(-10, 11.5, -8), metal, Enum.Material.DiamondPlate)
 
-	part(model, "OutdoorUnit1", Vector3.new(5, 3.0, 4), origin + Vector3.new(11, 1.5, -17), unit, Enum.Material.Metal)
-	part(model, "OutdoorUnit2", Vector3.new(5, 6.0, 4), origin + Vector3.new(11, 3.0, -12), unit, Enum.Material.Metal)
-	part(model, "OutdoorUnit3", Vector3.new(5, 9.0, 4), origin + Vector3.new(9, 4.5, -8), unit, Enum.Material.Metal)
-	part(model, "OutdoorUnit4", Vector3.new(5, 11.0, 4), origin + Vector3.new(6, 5.5, -6), unit, Enum.Material.Metal)
+	part(model, "OutdoorUnit1", Vector3.new(3.4, 3.0, 3.0), origin + Vector3.new(11, 1.5, -18), unit, Enum.Material.Metal)
+	part(model, "OutdoorUnit2", Vector3.new(3.4, 6.0, 3.0), origin + Vector3.new(13, 3.0, -12), unit, Enum.Material.Metal)
+	part(model, "OutdoorUnit3", Vector3.new(3.2, 9.0, 3.0), origin + Vector3.new(9, 4.5, -7), unit, Enum.Material.Metal)
+	part(model, "OutdoorUnit4", Vector3.new(3.0, 11.0, 3.0), origin + Vector3.new(5, 5.5, -5), unit, Enum.Material.Metal)
 
 	local target = part(model, "DeliveryPoint", Vector3.new(6, 0.5, 4), origin + Vector3.new(3, 11.55, -11), Color3.fromRGB(97, 185, 163), Enum.Material.Neon)
 	sign(model, origin + Vector3.new(-17, 0, -24), "団地上階の外廊下へ\n階段は安全、室外機は近道")
