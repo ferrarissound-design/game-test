@@ -148,7 +148,9 @@ if player.Character then
 end
 
 local function setRouteMovementLocked(locked)
-	locked = locked or player:GetAttribute("JobOffersActive") == true
+	locked = locked
+		or player:GetAttribute("JobOffersActive") == true
+		or player:GetAttribute("NightDeliveryRouteSelectionPending") == true
 	local ok, controls = pcall(function()
 		if not playerControls then
 			local playerScripts = player:WaitForChild("PlayerScripts")
@@ -368,6 +370,9 @@ player:GetAttributeChangedSignal("NightDeliveryNextStopPending"):Connect(functio
 	task.defer(recoverCoreRouteChoice)
 end)
 player:GetAttributeChangedSignal("JobOffersActive"):Connect(function()
+	task.defer(recoverCoreRouteChoice)
+end)
+player:GetAttributeChangedSignal("NightDeliveryRouteSelectionPending"):Connect(function()
 	task.defer(recoverCoreRouteChoice)
 end)
 player.CharacterAdded:Connect(function()
