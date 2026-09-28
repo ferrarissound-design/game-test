@@ -178,6 +178,14 @@ if oldWorld then
 	oldWorld:Destroy()
 end
 
+-- Rojo does not own Workspace in this project, so a Studio-created Baseplate can
+-- survive syncs underneath the generated city. The generated Ground used to share
+-- the same Y=0 top surface, which caused classic z-fighting (grass/tile flicker).
+local legacyBaseplate = workspace:FindFirstChild("Baseplate")
+if legacyBaseplate and legacyBaseplate:IsA("BasePart") then
+	legacyBaseplate:Destroy()
+end
+
 local world = Instance.new("Folder")
 world.Name = WORLD_NAME
 world.Parent = workspace
@@ -1112,7 +1120,7 @@ local function createWorld()
 		{size = 32, center = 209}, -- z 193 to 225
 	}) do
 		makePart("Ground", Vector3.new(460, 1, segment.size),
-			Vector3.new(0, -0.5, segment.center),
+			Vector3.new(0, -0.45, segment.center),
 			selectedWorldTheme.groundColor:Lerp(Color3.fromRGB(90, 139, 78), 0.78),
 			world, Enum.Material.Grass)
 	end
@@ -1449,7 +1457,8 @@ local function applyMovementSpeed(player)
 	-- Input disabling is client-side only. Hold the character on the server
 	-- until the authoritative job state allows travel (also covers touch controls).
 	local job = playerJobs[player]
-	local locked = playerJobOffers[player] ~= nil
+	local locked = player:GetAttribute("NightDeliveryRouteSelectionPending") == true
+		or playerJobOffers[player] ~= nil
 		or (job ~= nil and (job.startedAt == nil or job.nextStopOrigin ~= nil))
 	local root = character:FindFirstChild("HumanoidRootPart")
 	if root then
@@ -3041,6 +3050,7 @@ local function startNextStop(player, job, stopIndex)
 		end
 		if #options == 0 then
 			playerJobs[player] = nil
+			player:SetAttribute("NightDeliveryRouteSelectionPending", false)
 			player:SetAttribute("NightDeliveryNextStopPending", false)
 			applyMovementSpeed(player)
 			sendStatus(player, "Message", {text = "追加配達先を読み込めなかったため、この配達バッチを終了したよ。"})
@@ -3054,6 +3064,9 @@ local function startNextStop(player, job, stopIndex)
 	end
 	table.remove(job.extraStops, stopIndex)
 	job.nextStopOrigin = nil
+	-- Next-stop selection hands off directly to route selection. Keep the player
+	-- frozen across that state transition instead of briefly re-enabling movement.
+	player:SetAttribute("NightDeliveryRouteSelectionPending", true)
 	player:SetAttribute("NightDeliveryNextStopPending", false)
 
 	job.jobSerial = (player:GetAttribute("NightDeliveryJobSerial") or 0) + 1
@@ -3647,8 +3660,14 @@ deliveryEvent.OnServerEvent:Connect(function(player, action, payload)
 					return
 				end
 				if not active then player:SetAttribute("NightShiftEquipment", equipmentId) end
+				-- Set this before consuming the offer so there is never an unlocked frame
+				-- between Dispatch Board and the route chooser.
+				player:SetAttribute("NightDeliveryRouteSelectionPending", true)
 				clearJobOffers(player) -- consume before JobAssigned; duplicate clicks cannot start a second job
-				confirmJob(player, offer, offer.neighborhoodCallback)
+				if not confirmJob(player, offer, offer.neighborhoodCallback) then
+					player:SetAttribute("NightDeliveryRouteSelectionPending", false)
+					applyMovementSpeed(player)
+				end
 				return
 			end
 		end
@@ -3881,6 +3900,7 @@ deliveryEvent.OnServerEvent:Connect(function(player, action, payload)
 		job.expiresAt = workspace:GetServerTimeNow() + job.timeLimit
 		player:SetAttribute("NightDeliveryTimeLimit", job.timeLimit)
 		player:SetAttribute("NightDeliveryOrderStartedAt", job.startedAt)
+		player:SetAttribute("NightDeliveryRouteSelectionPending", false)
 		applyMovementSpeed(player)
 		sendStatus(player, "JobRouteChosen", {
 			jobSerial = job.jobSerial,
@@ -3998,6 +4018,7 @@ local function setupPlayer(player)
 	player:SetAttribute("NightDeliveryJobType", nil)
 	player:SetAttribute("NightDeliveryHouseName", nil)
 	player:SetAttribute("NightDeliveryNextStopPending", false)
+	player:SetAttribute("NightDeliveryRouteSelectionPending", false)
 	player:SetAttribute("NightDeliveryBikeBlocked", false)
 	player:SetAttribute(
 		"NightDeliveryNightNavSoft",
