@@ -109,6 +109,7 @@ local function setupBikeAudio(character)
 		return
 	end
 
+	humanoid.AutoJumpEnabled = false
 	bikeAudioCharacter = character
 	bikeAudioHumanoid = humanoid
 	local rollingSound = Instance.new("Sound")
@@ -147,6 +148,7 @@ if player.Character then
 end
 
 local function setRouteMovementLocked(locked)
+	locked = locked or player:GetAttribute("JobOffersActive") == true
 	local ok, controls = pcall(function()
 		if not playerControls then
 			local playerScripts = player:WaitForChild("PlayerScripts")
@@ -156,7 +158,7 @@ local function setRouteMovementLocked(locked)
 		return playerControls
 	end)
 	if not ok or not controls then
-		warn("[NightDelivery] could not access player controls for route chooser")
+		warn("[NightDelivery] could not access player controls for selection UI")
 		return
 	end
 
@@ -363,6 +365,9 @@ player:GetAttributeChangedSignal("NightDeliveryOrderStartedAt"):Connect(function
 	task.defer(recoverCoreRouteChoice)
 end)
 player:GetAttributeChangedSignal("NightDeliveryNextStopPending"):Connect(function()
+	task.defer(recoverCoreRouteChoice)
+end)
+player:GetAttributeChangedSignal("JobOffersActive"):Connect(function()
 	task.defer(recoverCoreRouteChoice)
 end)
 player.CharacterAdded:Connect(function()
