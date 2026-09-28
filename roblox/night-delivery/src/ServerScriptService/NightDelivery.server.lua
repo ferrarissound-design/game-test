@@ -2925,7 +2925,10 @@ local function completeDelivery(player, houseName)
 		oddityBonus = oddityBonus,
 		helperCount = helperCount,
 		shiftBonus = shiftBonus,
-		shiftProgress = playerShiftProgress[player] or 0,
+		-- Keep the final completed delivery visible as 6/6 while the result screen is open.
+		-- playerShiftProgress is reset for the next night as soon as the sixth delivery pays out,
+		-- so the payload must preserve the just-completed value for the client HUD.
+		shiftProgress = shiftBonus > 0 and SHIFT_TARGET or (playerShiftProgress[player] or 0),
 		shiftTarget = SHIFT_TARGET,
 		rankName = getRankName(deliveriesAfter or 0),
 		districtUnlocked = districtUnlocked,

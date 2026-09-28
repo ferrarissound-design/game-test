@@ -947,7 +947,20 @@ local function updateStats()
 	local bikeText = bikeActive and "🚲" or ""
 
 	statsLabel.Text = string.format("%d Coins  •  %d件 %s", coinText, deliveryText, bikeText)
-	shiftLabel.Text = string.format("SHIFT %d/%d", shiftProgress, shiftTarget)
+
+	-- The result screen belongs to the night that just finished, so keep showing 6/6
+	-- until the player actually returns to the depot. NightShiftDeliveries is the
+	-- authoritative replicated count; local shiftProgress is kept as a no-lag fallback.
+	local replicatedShiftProgress = tonumber(player:GetAttribute("NightShiftDeliveries"))
+	local displayedShiftProgress = shiftProgress
+	if player:GetAttribute("NightShiftResultPending") == true then
+		displayedShiftProgress = shiftTarget
+	elseif player:GetAttribute("NightShiftActive") == true and replicatedShiftProgress ~= nil then
+		displayedShiftProgress = math.max(displayedShiftProgress, replicatedShiftProgress)
+	elseif replicatedShiftProgress ~= nil then
+		displayedShiftProgress = replicatedShiftProgress
+	end
+	shiftLabel.Text = string.format("SHIFT %d/%d", math.clamp(displayedShiftProgress, 0, shiftTarget), shiftTarget)
 	local weatherIcon = currentWeatherName == "雨" and "🌧" or (currentWeatherName == "濃霧" and "🌫" or "☀")
 	if currentHouseName and activeJobWeatherName and activeJobWeatherMultiplier then
 		weatherLabel.Text = string.format(
@@ -977,6 +990,15 @@ local function updateStats()
 		progressLabel.Text = "🌉 川沿い / 🟣 特別便 / 🏭 倉庫街 すべて解放済み"
 		progressLabel.TextColor3 = Color3.fromRGB(221, 190, 116)
 	end
+end
+
+for _, attributeName in ipairs({
+	"NightShiftActive", "NightShiftDeliveries", "NightShiftResultPending", "NightShiftTarget",
+}) do
+	player:GetAttributeChangedSignal(attributeName):Connect(function()
+		shiftTarget = tonumber(player:GetAttribute("NightShiftTarget")) or shiftTarget
+		updateStats()
+	end)
 end
 
 local function connectStats()
